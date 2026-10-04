@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { computeCounts, computeList, ListId } from '../src/model/lists';
+import { computeCounts, computeList, type ListId, type ProjectInfo, type Source } from '../src/model/lists';
 import { parse } from '../src/model/parse';
-import { fixture } from './helpers';
 
 const TODAY = '2026-10-04';
-const doc = parse(
+
+const master = parse(
 	[
 		'---',
 		'plainlist: true',
@@ -17,48 +17,63 @@ const doc = parse(
 		'- [x] Inbox done today [date:: 2026-10-04] [done:: 2026-10-04]',
 		'- [x] Inbox done earlier [done:: 2026-10-01]',
 		'# Projects',
-		'## Office',
-		'- [ ] Overdue [date:: 2026-10-02]',
-		'- [ ] Today in project [date:: 2026-10-04]',
-		'- [ ] Tomorrow [date:: 2026-10-05]',
-		'- [ ] Later this month [date:: 2026-10-20]',
-		'- [ ] Undated in project',
-		'- [x] Done long ago [date:: 2026-09-01] [done:: 2026-09-02]',
-		'- [x] Done without date field',
-		'## Garden',
-		'- [ ] Bulbs [date:: 2026-11-10]',
-		'- [ ] Garden undated',
-		'- [ ] Garden someday [date:: someday]',
+		'- [[Office]]',
+		'- [[Garden]]',
 		'# Notes',
 		'- [ ] Loose to-do',
 	].join('\n'),
 );
+const office = parse(
+	[
+		'# Office',
+		'- [ ] Overdue [date:: 2026-10-02]',
+		'- [ ] Today in project [date:: 2026-10-04]',
+		'- [ ] Tomorrow [date:: 2026-10-05]',
+		'    - [ ] Nested later this month [date:: 2026-10-20]',
+		'- [ ] Undated in project',
+		'- [x] Done long ago [date:: 2026-09-01] [done:: 2026-09-02]',
+		'- [x] Done without date field',
+	].join('\n'),
+);
+const garden = parse(['- [ ] Bulbs [date:: 2026-11-10]', '- [ ] Garden undated', '- [ ] Garden someday [date:: someday]'].join('\n'));
 
-const titles = (list: ListId) => computeList(doc, list, TODAY).groups.map((g) => [g.label, g.tasks.map((t) => t.title)]);
+const projects: ProjectInfo[] = [
+	{ path: 'Office.md', name: 'Office', line: 11, text: '- [[Office]]', exists: true },
+	{ path: 'Garden.md', name: 'Garden', line: 12, text: '- [[Garden]]', exists: true },
+];
+const sources: Source[] = [
+	// Deliberately out of sidebar order: lists must not depend on source order.
+	{ path: 'Garden.md', doc: garden, project: projects[1]! },
+	{ path: 'Tasks.md', doc: master, project: null },
+	{ path: 'Office.md', doc: office, project: projects[0]! },
+];
+
+const titles = (list: ListId) =>
+	computeList(sources, projects, list, TODAY).groups.map((g) => [g.label, g.items.map((i) => i.task.title)]);
 
 describe('lists', () => {
-	it('Inbox: open Inbox to-dos (any date) plus loose ones, in file order', () => {
+	it('Inbox: open task-file to-dos (any date), loose ones included', () => {
 		expect(titles({ kind: 'inbox' })).toEqual([
 			['', ['Inbox undated', 'Inbox today', 'Inbox next week', 'Inbox someday', 'Loose to-do']],
 		]);
 	});
 
-	it('Today: overdue first, then file order, plus to-dos completed today', () => {
-		expect(titles({ kind: 'today' })).toEqual([
-			['', ['Overdue', 'Inbox today', 'Inbox done today', 'Today in project']],
-		]);
+	it('Today: overdue first, then task file and projects in sidebar order, plus to-dos completed today', () => {
+		expect(titles({ kind: 'today' })).toEqual([['', ['Overdue', 'Inbox today', 'Inbox done today', 'Today in project']]]);
 	});
 
-	it('Upcoming: grouped by day, then by month', () => {
-		expect(computeList(doc, { kind: 'upcoming' }, TODAY).groups.map((g) => [g.label, g.sublabel, g.tasks.map((t) => t.title)])).toEqual([
+	it('Upcoming: grouped by day, then by month, nested to-dos included', () => {
+		expect(
+			computeList(sources, projects, { kind: 'upcoming' }, TODAY).groups.map((g) => [g.label, g.sublabel, g.items.map((i) => i.task.title)]),
+		).toEqual([
 			['Tomorrow', 'Mon 5 Oct', ['Tomorrow']],
 			['Thursday', '8 Oct', ['Inbox next week']],
-			['Later in October', undefined, ['Later this month']],
+			['Later in October', undefined, ['Nested later this month']],
 			['November', undefined, ['Bulbs']],
 		]);
 	});
 
-	it('No Date: undated project to-dos only, grouped by project', () => {
+	it('No Date: undated project to-dos only, grouped by project in sidebar order', () => {
 		expect(titles({ kind: 'nodate' })).toEqual([
 			['Office', ['Undated in project']],
 			['Garden', ['Garden undated']],
@@ -81,35 +96,28 @@ describe('lists', () => {
 		]);
 	});
 
-	it('Project: open to-dos, with completed ones separate', () => {
-		const view = computeList(doc, { kind: 'project', name: 'Office' }, TODAY);
-		expect(view.groups[0]!.tasks.map((t) => t.title)).toEqual(['Overdue', 'Today in project', 'Tomorrow', 'Later this month', 'Undated in project']);
-		expect(view.completed.map((t) => t.title)).toEqual(['Done long ago', 'Done without date field']);
+	it('Project: open to-dos in note order, completed ones separate', () => {
+		const view = computeList(sources, projects, { kind: 'project', path: 'Office.md' }, TODAY);
+		expect(view.groups[0]!.items.map((i) => i.task.title)).toEqual([
+			'Overdue',
+			'Today in project',
+			'Tomorrow',
+			'Nested later this month',
+			'Undated in project',
+		]);
+		expect(view.completed.map((i) => i.task.title)).toEqual(['Done long ago', 'Done without date field']);
+		expect(view.groups[0]!.items.every((i) => i.path === 'Office.md' && i.project?.name === 'Office')).toBe(true);
 	});
 
-	it('completed to-dos show only in Completed, their project toggle, and Today when done today', () => {
-		const lists: ListId[] = [{ kind: 'inbox' }, { kind: 'upcoming' }, { kind: 'nodate' }, { kind: 'someday' }];
-		for (const list of lists) {
-			for (const g of computeList(doc, list, TODAY).groups) expect(g.tasks.every((t) => !t.done)).toBe(true);
+	it('completed to-dos stay out of the open lists', () => {
+		for (const kind of ['inbox', 'upcoming', 'nodate', 'someday'] as const) {
+			for (const g of computeList(sources, projects, { kind }, TODAY).groups) expect(g.items.every((i) => !i.task.done)).toBe(true);
 		}
-	});
-
-	it('a dated Inbox to-do appears in Inbox and in Today or Upcoming', () => {
-		const inbox = titles({ kind: 'inbox' }).flatMap(([, t]) => t);
-		expect(inbox).toContain('Inbox today');
-		expect(titles({ kind: 'today' }).flatMap(([, t]) => t)).toContain('Inbox today');
-		expect(titles({ kind: 'upcoming' }).flatMap(([, t]) => t)).toContain('Inbox next week');
 	});
 });
 
 describe('counts', () => {
 	it('counts open Inbox, Today and per-project to-dos (undated included)', () => {
-		expect(computeCounts(doc, TODAY)).toEqual({ inbox: 5, today: 3, projects: { Office: 5, Garden: 3 } });
-	});
-
-	it('matches the mockups on the example file', () => {
-		const counts = computeCounts(parse(fixture('example.md')), TODAY);
-		expect(counts.inbox).toBe(2);
-		expect(counts.projects['Renovate home office']).toBe(3);
+		expect(computeCounts(sources, projects, TODAY)).toEqual({ inbox: 5, today: 3, projects: { 'Office.md': 5, 'Garden.md': 3 } });
 	});
 });

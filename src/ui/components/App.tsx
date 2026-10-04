@@ -1,23 +1,20 @@
 import { Keymap, Menu } from 'obsidian';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { headerDate, metaDate, overdueLabel } from '../../dates/format';
-import { computeCounts, computeList, isOverdue, sameList, type ListId } from '../../model/lists';
 import {
-	addProject,
-	deleteProject,
-	deleteTask,
-	refOf,
-	renameProject,
-	restoreLines,
-	setProjectDescription,
-	setTaskDone,
-	type Removed,
-} from '../../model/patch';
-import type { Project, Task } from '../../model/types';
+	computeCounts,
+	computeList,
+	isOverdue,
+	sameList,
+	type Item,
+	type ListId,
+	type ProjectInfo,
+} from '../../model/lists';
+import { deleteTask, refOf, restoreLines, setTaskDone, type Removed } from '../../model/patch';
 import { locateLine, type TrackBox } from '../../store';
-import { useDebounced, useDoc, useEnv, useToday } from '../env';
-import { MarkdownField } from './bits';
-import { LISTS, listLabel, Sidebar, type ProjectActions } from './Sidebar';
+import { useEnv, useToday, useWorkspace } from '../env';
+import { ProjectSuggestModal } from '../ProjectSuggestModal';
+import { LISTS, listLabel, projectMenu, Sidebar, type ProjectActions } from './Sidebar';
 import { TaskEditor, TaskRow, type RowActions } from './TaskRow';
 
 const NARROW = 600;
@@ -29,50 +26,38 @@ const EMPTY: Record<ListId['kind'], string> = {
 	nodate: 'Every project to-do has a date.',
 	someday: 'Nothing for someday.',
 	completed: 'Nothing completed yet.',
-	project: 'No to-dos in this project.',
+	project: 'No to-dos in this note yet.',
 };
 
-function meta(list: ListId, task: Task, today: string): { text: string; cls?: string } {
+function meta(list: ListId, item: Item, today: string): { text: string; cls?: string } {
+	const { task } = item;
 	switch (list.kind) {
 		case 'today':
-			return isOverdue(task, today) ? { text: overdueLabel(task.date ?? today, today), cls: 'is-overdue' } : { text: task.project ?? '' };
+			return isOverdue(task, today) ? { text: overdueLabel(task.date ?? today, today), cls: 'is-overdue' } : { text: item.project?.name ?? '' };
 		case 'upcoming':
 		case 'someday':
 		case 'completed':
-			return { text: task.project ?? '' };
+			return { text: item.project?.name ?? '' };
 		default:
 			return { text: task.date ? metaDate(task.date, today) : '' };
 	}
 }
 
-const sameRef = (box: TrackBox | null, t: Task): boolean => !!box && box.current.line === t.line && box.current.text === t.text;
+const isBoxed = (box: TrackBox | null, item: Item): boolean =>
+	!!box && box.current.path === item.path && box.current.ref.line === item.task.line && box.current.ref.text === item.task.text;
 
-function ProjectHeader({ project, onRename }: { project: Project; onRename: (name: string) => void }) {
-	const { store } = useEnv();
+const itemKey = (item: Item): string => `${item.path}:${item.task.line}:${item.task.text}`;
+
+function ProjectHeader({ project, actions }: { project: ProjectInfo; actions: ProjectActions }) {
 	const [name, setName] = useState(project.name);
-	const [description, setDescription] = useState(project.description);
-	const box = useRef<TrackBox>({ current: refOf(project) });
 	const focused = useRef(false);
-
-	// Follow changes made elsewhere unless the user is typing here.
 	useEffect(() => {
-		box.current.current = refOf(project);
 		if (!focused.current) setName(project.name);
-	}, [project.line, project.text]);
-	useEffect(() => {
-		if (!save.pending()) setDescription(project.description);
-	}, [project.description]);
+	}, [project.name]);
 
-	const save = useDebouncedWithPending(() => {
-		void store.run((doc) => setProjectDescription(doc, box.current.current, latest.current), box.current);
-	}, 400);
-	const latest = useRef(description);
-	latest.current = description;
-	useEffect(() => () => save.flush(), []);
-
-	const commitName = (): void => {
+	const commit = (): void => {
 		const clean = name.trim();
-		if (clean && clean !== project.name) onRename(clean);
+		if (clean && clean !== project.name) actions.rename(project, clean);
 		else setName(project.name);
 	};
 
@@ -83,11 +68,12 @@ function ProjectHeader({ project, onRename }: { project: Project; onRename: (nam
 				type="text"
 				aria-label="Project name"
 				value={name}
+				disabled={!project.exists}
 				onFocus={() => (focused.current = true)}
 				onInput={(e) => setName(e.currentTarget.value)}
 				onBlur={() => {
 					focused.current = false;
-					commitName();
+					commit();
 				}}
 				onKeyDown={(e) => {
 					if (e.isComposing) return;
@@ -98,34 +84,20 @@ function ProjectHeader({ project, onRename }: { project: Project; onRename: (nam
 					}
 				}}
 			/>
-			<MarkdownField
-				class="pl-project-desc"
-				value={description}
-				placeholder="Notes"
-				onInput={(value) => {
-					setDescription(value);
-					save.schedule();
-				}}
-				onBlur={() => save.flush()}
-			/>
+			{project.exists ? (
+				<button type="button" class="pl-open-note" onClick={() => actions.open(project)}>
+					Open note ↗
+				</button>
+			) : (
+				<span class="pl-open-note is-missing">
+					Note not found.{' '}
+					<button type="button" class="pl-inline-action" onClick={() => actions.remove(project)}>
+						Remove from Plainlist
+					</button>
+				</span>
+			)}
 		</>
 	);
-}
-
-function useDebouncedWithPending(fn: () => void, ms: number) {
-	const pending = useRef(false);
-	const d = useDebounced(() => {
-		pending.current = false;
-		fn();
-	}, ms);
-	return {
-		schedule: () => {
-			pending.current = true;
-			d.schedule();
-		},
-		flush: d.flush,
-		pending: () => pending.current,
-	};
 }
 
 interface Toast {
@@ -135,8 +107,8 @@ interface Toast {
 
 export function App({ initialList, onListChange }: { initialList: ListId; onListChange: (list: ListId) => void }) {
 	const env = useEnv();
-	const { store, clock } = env;
-	const doc = useDoc(store);
+	const { workspace, clock, app } = env;
+	const version = useWorkspace(workspace);
 	const today = useToday(clock);
 	const [list, setListState] = useState<ListId>(initialList);
 	const [expanded, setExpanded] = useState<TrackBox | null>(null);
@@ -145,6 +117,10 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 	const [toast, setToast] = useState<Toast | null>(null);
 	const [narrow, setNarrow] = useState(false);
 	const root = useRef<HTMLDivElement>(null);
+
+	const sources = useMemo(() => workspace.sources(), [version]);
+	const projects = workspace.projects;
+	const project = list.kind === 'project' ? projects.find((p) => p.path === list.path) : undefined;
 
 	const setList = (next: ListId): void => {
 		if (sameList(next, list)) return;
@@ -155,23 +131,26 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		onListChange(next);
 	};
 
-	// Follow a project renamed here or in the file (same heading line); if it is gone, go to the Inbox.
+	// Follow a project whose note was renamed: same link line, but a path we haven't seen
+	// before. If it was removed instead, go to the Inbox.
 	const projectLine = useRef<number | null>(null);
+	const knownPaths = useRef(new Set<string>());
 	useEffect(() => {
+		const known = knownPaths.current;
+		knownPaths.current = new Set(projects.map((p) => p.path));
 		if (list.kind !== 'project') return;
-		const current = doc.projects.find((p) => p.name === list.name);
-		if (current) {
-			projectLine.current = current.line;
+		if (project) {
+			projectLine.current = project.line;
 			return;
 		}
-		const renamed = doc.projects.find((p) => p.line === projectLine.current);
-		if (renamed) {
-			setListState({ kind: 'project', name: renamed.name });
-			onListChange({ kind: 'project', name: renamed.name });
+		const moved = projects.find((p) => p.line === projectLine.current && !known.has(p.path));
+		if (moved) {
+			setListState({ kind: 'project', path: moved.path });
+			onListChange({ kind: 'project', path: moved.path });
 		} else {
 			setList({ kind: 'inbox' });
 		}
-	}, [doc, list]);
+	}, [version, list]);
 
 	useLayoutEffect(() => {
 		const el = root.current;
@@ -187,86 +166,97 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		return () => window.clearTimeout(timer);
 	}, [toast]);
 
-	const view = useMemo(() => computeList(doc, list, today), [doc, list, today]);
-	const counts = useMemo(() => computeCounts(doc, today), [doc, today]);
-	const projectNames = doc.projects.map((p) => p.name);
-	const project = list.kind === 'project' ? doc.projects.find((p) => p.name === list.name) : undefined;
+	const view = useMemo(() => computeList(sources, projects, list, today), [sources, list, today]);
+	const counts = useMemo(() => computeCounts(sources, projects, today), [sources, today]);
 
-	// Keep the open row attached to its to-do when the file changes elsewhere.
-	if (expanded && doc.lines[expanded.current.line] !== expanded.current.text) {
-		const line = locateLine(doc, expanded.current);
-		if (line !== null) expanded.current = { line, text: expanded.current.text };
+	// Keep the open row attached to its to-do when its note changes elsewhere.
+	if (expanded) {
+		const doc = workspace.doc(expanded.current.path);
+		const { ref } = expanded.current;
+		if (doc && doc.lines[ref.line] !== ref.text) {
+			const line = locateLine(doc, ref);
+			if (line !== null) expanded.current = { path: expanded.current.path, ref: { line, text: ref.text } };
+		}
 	}
-	const rows = [...view.groups.flatMap((g) => g.tasks), ...(showCompleted ? view.completed : [])];
-	const expandedVisible = !!expanded && rows.some((t) => sameRef(expanded, t));
+	const rows = [...view.groups.flatMap((g) => g.items), ...(showCompleted ? view.completed : [])];
+	const expandedVisible = rows.some((i) => isBoxed(expanded, i));
 	useEffect(() => {
 		if (expanded && !expandedVisible) setExpanded(null);
 	}, [expanded, expandedVisible]);
 
-	const toggle = (task: Task): void => {
-		void store.run((d) => setTaskDone(d, refOf(task), !task.done, today), sameRef(expanded, task) ? (expanded ?? undefined) : undefined);
+	const toggle = (item: Item): void => {
+		const box = isBoxed(expanded, item) ? (expanded ?? undefined) : undefined;
+		void workspace.run(item.path, (d) => setTaskDone(d, box ? box.current.ref : refOf(item.task), !item.task.done, today), box);
 	};
 
-	const remove = async (task: Task): Promise<void> => {
-		let removed: Removed | null = null;
-		if (sameRef(expanded, task)) setExpanded(null);
-		const res = await store.run((d) => {
-			const r = deleteTask(d, refOf(task));
-			removed = r.removed;
+	const remove = async (item: Item): Promise<void> => {
+		const holder: { removed: Removed | null } = { removed: null };
+		if (isBoxed(expanded, item)) setExpanded(null);
+		const res = await workspace.run(item.path, (d) => {
+			const r = deleteTask(d, refOf(item.task));
+			holder.removed = r.removed;
 			return r.edits;
 		});
-		const undo = removed as Removed | null;
-		if (res.ok && undo) {
-			setToast({ message: 'Deleted', undo: () => void store.run((d) => restoreLines(d, undo)) });
+		const removed = holder.removed;
+		if (res.ok && removed) {
+			setToast({ message: 'Deleted', undo: () => void workspace.run(item.path, (d) => restoreLines(d, removed)) });
 		}
 	};
 
 	const rowActions: RowActions = {
 		onToggle: toggle,
-		onExpand: (task) => {
-			setSelected(rows.indexOf(task));
-			setExpanded({ current: refOf(task) });
+		onExpand: (item) => {
+			setSelected(rows.indexOf(item));
+			setExpanded({ current: { path: item.path, ref: refOf(item.task) } });
 		},
-		onMenu: (task, pos) => {
+		onMenu: (item, pos) => {
 			new Menu()
 				.addItem((i) =>
 					i
-						.setTitle(task.done ? 'Mark as open' : 'Complete')
+						.setTitle(item.task.done ? 'Mark as open' : 'Complete')
 						.setIcon('check')
-						.onClick(() => toggle(task)),
+						.onClick(() => toggle(item)),
 				)
 				.addItem((i) =>
 					i
 						.setTitle('Delete')
 						.setIcon('trash')
 						.setWarning(true)
-						.onClick(() => void remove(task)),
+						.onClick(() => void remove(item)),
 				)
 				.showAtPosition(pos);
 		},
 	};
 
 	const projectActions: ProjectActions = {
-		add: (name) => {
-			void store.run((d) => addProject(d, name)).then((res) => {
-				if (res.ok) setList({ kind: 'project', name: name.trim() });
-			});
+		create: (name) => {
+			void workspace.createProject(name).then((p) => p && setList({ kind: 'project', path: p.path }));
+		},
+		import: (file) => {
+			void workspace.importProject(file).then((p) => p && setList({ kind: 'project', path: p.path }));
 		},
 		rename: (p, name) => {
-			void store.run((d) => renameProject(d, refOf(p), name));
+			projectLine.current = p.line;
+			void workspace.renameProject(p, name);
 		},
 		remove: (p) => {
-			const open = p.tasks.filter((t) => !t.done).length;
-			const detail = p.tasks.length
-				? `Its ${p.tasks.length} to-do${p.tasks.length === 1 ? '' : 's'}${open < p.tasks.length ? ` (${open} open)` : ''} will move to the Inbox.`
-				: 'It has no to-dos.';
-			void env.confirm(`Delete “${p.name}”?`, detail, 'Delete').then((ok) => {
-				if (!ok) return;
-				void store.run((d) => deleteProject(d, refOf(p))).then((res) => {
-					if (res.ok && list.kind === 'project' && list.name === p.name) setList({ kind: 'inbox' });
+			void env
+				.confirm(`Remove “${p.name}” from Plainlist?`, 'The note and its checkboxes stay as they are; its to-dos just stop showing here.', 'Remove')
+				.then((ok) => {
+					if (!ok) return;
+					void workspace.removeProject(p).then((res) => {
+						if (res.ok && list.kind === 'project' && list.path === p.path) setList({ kind: 'inbox' });
+					});
 				});
-			});
 		},
+		open: (p) => void app.workspace.openLinkText(p.path, workspace.masterPath, 'tab'),
+	};
+
+	const addProject = (): void => {
+		new ProjectSuggestModal(app, new Set([workspace.masterPath, ...projects.map((p) => p.path)]), (c) => {
+			if (c.kind === 'create') projectActions.create(c.name);
+			else projectActions.import(c.file);
+		}).open();
 	};
 
 	const onKeyDown = (e: KeyboardEvent): void => {
@@ -285,7 +275,7 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		} else if (e.key === 'Enter') {
 			e.preventDefault();
 			if (expanded) setExpanded(null);
-			else if (current) setExpanded({ current: refOf(current) });
+			else if (current) setExpanded({ current: { path: current.path, ref: refOf(current.task) } });
 		} else if (e.key === 'Escape') {
 			if (expanded) {
 				e.preventDefault();
@@ -307,34 +297,35 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 	const collapse = (): void => {
 		setExpanded(null);
 		window.requestAnimationFrame(() => {
-			if (!root.current?.contains(root.current.ownerDocument.activeElement) || root.current.ownerDocument.activeElement === root.current.ownerDocument.body) {
+			const doc = root.current?.ownerDocument;
+			if (doc && (!root.current?.contains(doc.activeElement) || doc.activeElement === doc.body)) {
 				root.current?.focus({ preventScroll: true });
 			}
 		});
 	};
 
-	const renderRow = (task: Task) => {
-		if (sameRef(expanded, task) && expanded) {
+	const renderRow = (item: Item) => {
+		if (expanded && isBoxed(expanded, item)) {
 			return (
 				<TaskEditor
 					key="expanded"
-					task={task}
+					item={item}
 					box={expanded}
-					projects={projectNames}
+					projects={projects}
 					today={today}
 					onCollapse={collapse}
-					onToggle={() => toggle(task)}
+					onToggle={() => toggle(item)}
 				/>
 			);
 		}
-		const m = meta(list, task, today);
+		const m = meta(list, item, today);
 		return (
 			<TaskRow
-				key={`${task.line}:${task.text}`}
-				task={task}
+				key={itemKey(item)}
+				item={item}
 				meta={m.text}
 				metaClass={m.cls}
-				selected={rows[selected] === task}
+				selected={rows[selected] === item}
 				actions={rowActions}
 			/>
 		);
@@ -343,44 +334,53 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 	const pickList = (evt: MouseEvent): void => {
 		const menu = new Menu();
 		for (const { id, label } of LISTS) menu.addItem((i) => i.setTitle(label).setChecked(sameList(id, list)).onClick(() => setList(id)));
-		if (doc.projects.length) menu.addSeparator();
-		for (const p of doc.projects) {
-			const id: ListId = { kind: 'project', name: p.name };
+		if (projects.length) menu.addSeparator();
+		for (const p of projects) {
+			const id: ListId = { kind: 'project', path: p.path };
 			menu.addItem((i) => i.setTitle(p.name).setChecked(sameList(id, list)).onClick(() => setList(id)));
 		}
 		menu.addSeparator();
-		menu.addItem((i) =>
-			i.setTitle('New project').setIcon('plus').onClick(() => {
-				void env.prompt('New project', 'Project name').then((name) => name && projectActions.add(name));
-			}),
-		);
-		if (project) {
-			const p = project;
-			menu.addItem((i) => i.setTitle('Delete project').setIcon('trash').setWarning(true).onClick(() => projectActions.remove(p)));
-		}
+		menu.addItem((i) => i.setTitle('New project').setIcon('plus').onClick(addProject));
 		menu.showAtMouseEvent(evt);
 	};
 
 	const hint = env.hint();
 
 	return (
-		<div
-			ref={root}
-			class={`pl-root${narrow ? ' is-narrow' : ''}`}
-			tabIndex={-1}
-			onKeyDown={onKeyDown}
-		>
+		<div ref={root} class={`pl-root${narrow ? ' is-narrow' : ''}`} tabIndex={-1} onKeyDown={onKeyDown}>
 			{narrow ? (
 				<div class="pl-picker-bar">
 					<button type="button" class="pl-picker" aria-haspopup="menu" onClick={pickList}>
-						{listLabel(list)}
+						{listLabel(list, projects)}
 						<svg viewBox="0 0 16 16" aria-hidden="true">
 							<path d="M4 6l4 4 4-4" />
 						</svg>
 					</button>
+					{project && (
+						<button
+							type="button"
+							class="pl-picker-more"
+							aria-label="Project actions"
+							onClick={(e) => {
+								const p = project;
+								projectMenu(p, projectActions, () => {
+									void env.prompt('Rename project', 'Project name', p.name, 'Rename').then((name) => name && projectActions.rename(p, name));
+								}).showAtMouseEvent(e);
+							}}
+						>
+							•••
+						</button>
+					)}
 				</div>
 			) : (
-				<Sidebar list={list} counts={counts} projects={doc.projects} onSelect={setList} actions={projectActions} />
+				<Sidebar
+					list={list}
+					counts={counts}
+					projects={projects}
+					masterPath={workspace.masterPath}
+					onSelect={setList}
+					actions={projectActions}
+				/>
 			)}
 			<main
 				class="pl-main"
@@ -391,20 +391,18 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 				<div class="pl-content">
 					<header class="pl-header">
 						{project ? (
-							<ProjectHeader
-								key={project.name}
-								project={project}
-								onRename={(name) => projectActions.rename(project, name)}
-							/>
+							<ProjectHeader key={project.path} project={project} actions={projectActions} />
 						) : (
 							<>
-								<h1 class="pl-title">{listLabel(list)}</h1>
+								<h1 class="pl-title">{listLabel(list, projects)}</h1>
 								{list.kind === 'today' && <span class="pl-header-date">{headerDate(today)}</span>}
 							</>
 						)}
 					</header>
 
-					{view.groups.length === 0 && !view.completed.length && <p class="pl-empty">{EMPTY[list.kind]}</p>}
+					{view.groups.length === 0 && !view.completed.length && (!project || project.exists) && (
+						<p class="pl-empty">{EMPTY[list.kind]}</p>
+					)}
 
 					{view.groups.map((g) => (
 						<section class="pl-group" key={g.key}>
@@ -414,7 +412,7 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 									{g.sublabel && <span class="pl-group-sublabel">{g.sublabel}</span>}
 								</h2>
 							)}
-							<div class="pl-rows">{g.tasks.map(renderRow)}</div>
+							<div class="pl-rows">{g.items.map(renderRow)}</div>
 						</section>
 					))}
 

@@ -106,7 +106,7 @@ export default class PlainlistPlugin extends Plugin {
 			file,
 			today,
 			weekStart: this.weekStart(),
-			project: list.kind === 'project' ? list.name : null,
+			project: list.kind === 'project' ? list.path : null,
 			defaultDate: list.kind === 'today' ? today : list.kind === 'someday' ? 'someday' : null,
 		}).open();
 	}

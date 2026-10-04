@@ -1,22 +1,20 @@
 import { createContext } from 'preact';
 import { useContext, useEffect, useRef, useState } from 'preact/hooks';
-import type { App, Component, TFile } from 'obsidian';
+import type { App, Component } from 'obsidian';
 import type { Clock } from '../clock';
 import type { ListId } from '../model/lists';
-import type { Doc } from '../model/types';
-import type { Store } from '../store';
+import type { Workspace } from '../store';
 
 export interface Env {
 	app: App;
-	file: TFile;
-	store: Store;
+	workspace: Workspace;
 	clock: Clock;
 	/** Owner for rendered Markdown children. */
 	component: Component;
 	weekStart: () => 0 | 1;
 	openCapture: (list: ListId) => void;
 	confirm: (title: string, message: string, cta: string) => Promise<boolean>;
-	prompt: (title: string, placeholder: string) => Promise<string | null>;
+	prompt: (title: string, placeholder: string, initial?: string, cta?: string) => Promise<string | null>;
 	/** Desktop: "Press N…" hint; null on mobile. */
 	hint: () => { hotkey: string | null } | null;
 }
@@ -29,14 +27,11 @@ export function useEnv(): Env {
 	return env;
 }
 
-/** Re-renders when the store's document changes. */
-export function useDoc(store: Store): Doc {
-	const [doc, setDoc] = useState(store.doc);
-	useEffect(() => {
-		setDoc(store.doc);
-		return store.subscribe(() => setDoc(store.doc));
-	}, [store]);
-	return doc;
+/** Re-renders whenever the task file or a project note changes. */
+export function useWorkspace(workspace: Workspace): number {
+	const [version, setVersion] = useState(0);
+	useEffect(() => workspace.subscribe(() => setVersion((v) => v + 1)), [workspace]);
+	return version;
 }
 
 export function useToday(clock: Clock): string {

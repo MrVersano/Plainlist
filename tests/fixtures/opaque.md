@@ -13,7 +13,7 @@ Some intro text above everything, with a [[Link]] and **bold**.
 	First paragraph of the description.
 
 	Second paragraph after a blank line, see [[Garden notes|notes]].
-	- [ ] looks like a subtask but is description
+	- [ ] Nested checkbox is its own to-do
 - [ ] Spaces-indented description
     four spaces here
       six spaces here
@@ -37,23 +37,14 @@ Some intro text above everything, with a [[Link]] and **bold**.
 # Projects
 
 Text directly under Projects.
+- [[Renovate home office]]
+- [Garden for spring](Garden%20for%20spring.md)
+- [[Archive/Old project|Old]]
+- not a link item
+- [ ] Stray to-do under Projects
 
-## Renovate home office
-Finish the office unit before winter.
-Plan in [[Office renovation]].
-
-- [ ] Book electrician #errands [date:: 2026-10-04] [effort:: 2h]
-- [x] Order cable trays [done:: 2026-10-02]
-
-Trailing paragraph inside the project.
-
-### Sub-heading inside project
-- [ ] Under a sub-heading [date:: 2026-11-02]
-
-## Empty project
-
-## Garden for spring
-- [ ] Order bulbs for the spring beds [date:: 2026-11-10]
+## Old-style project
+- [ ] Task under old heading [date:: 2026-11-02]
 
 # Archive
 - [ ] Old item under unknown heading

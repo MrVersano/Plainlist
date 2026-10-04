@@ -1,9 +1,10 @@
-// Reading and rewriting a single to-do title line, e.g.
-// `- [x] Order cable trays #errands [date:: 2026-10-04] [done:: 2026-10-02]`.
+// Reading and rewriting a single to-do line, e.g.
+// `  - [x] Order cable trays #errands [date:: 2026-10-04] [done:: 2026-10-02]`.
+// Any indent and list marker (`-`, `*`, `+`, `1.`, `1)`) is accepted and kept.
 
 import type { TaskDate } from './types';
 
-const TASK_RE = /^([-*])[ \t]+\[([ xX])\](?:[ \t]+(.*))?$/;
+const TASK_RE = /^([ \t]*)([-*+]|\d+[.)])[ \t]+\[([ xX])\](?:[ \t]+(.*))?$/;
 const FIELD_RE = /\[(date|done)::[ \t]*([^\]]*?)[ \t]*\]/gi;
 const ISO_RE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 
@@ -16,8 +17,9 @@ export interface FieldMatch {
 
 export interface TaskLine {
 	done: boolean;
-	/** Offset of the text after `- [ ] `. */
-	restStart: number;
+	indent: string;
+	/** Everything before the checkbox: indent, list marker and space, e.g. `  - `. */
+	prefix: string;
 	title: string;
 	date: FieldMatch | null;
 	doneField: FieldMatch | null;
@@ -39,8 +41,9 @@ function normaliseDate(value: string): TaskDate | null {
 export function parseTaskLine(line: string): TaskLine | null {
 	const m = TASK_RE.exec(line);
 	if (!m) return null;
-	const rest = m[3] ?? '';
+	const rest = m[4] ?? '';
 	const restStart = line.length - rest.length;
+	const prefix = line.slice(0, line.indexOf('['));
 	let date: FieldMatch | null = null;
 	let doneField: FieldMatch | null = null;
 
@@ -64,11 +67,17 @@ export function parseTaskLine(line: string): TaskLine | null {
 	}
 	title = title.slice(restStart).trim();
 
-	return { done: m[2] !== ' ', restStart, title, date, doneField };
+	return { done: m[3] !== ' ', indent: m[1] ?? '', prefix, title, date, doneField };
 }
 
-export function formatTaskLine(title: string, done: boolean, date: TaskDate | null, doneDate: string | null): string {
-	let line = `- [${done ? 'x' : ' '}] ${title.trim()}`;
+export function formatTaskLine(
+	title: string,
+	done: boolean,
+	date: TaskDate | null,
+	doneDate: string | null,
+	prefix = '- ',
+): string {
+	let line = `${prefix}[${done ? 'x' : ' '}] ${title.trim()}`;
 	if (date) line += ` [date:: ${date}]`;
 	if (done && doneDate) line += ` [done:: ${doneDate}]`;
 	return line.trimEnd();
@@ -78,7 +87,7 @@ export function formatTaskLine(title: string, done: boolean, date: TaskDate | nu
 export function setDone(line: string, done: boolean, today: string): string {
 	const t = parseTaskLine(line);
 	if (!t || t.done === done) return line;
-	const box = line.indexOf('[', 0);
+	const box = t.prefix.length;
 	let out = line.slice(0, box + 1) + (done ? 'x' : ' ') + line.slice(box + 2);
 	if (done) {
 		if (!t.doneField) out = `${out.trimEnd()} [done:: ${today}]`;
@@ -101,9 +110,9 @@ export function setDate(line: string, date: TaskDate | null): string {
 	return `${line.slice(0, at)} [date:: ${date}]${line.slice(at)}`;
 }
 
-/** Replaces the title, rewriting the line in the canonical format. */
+/** Replaces the title, keeping the line's indent, marker and fields. */
 export function setTitle(line: string, title: string): string {
 	const t = parseTaskLine(line);
 	if (!t || t.title === title.trim()) return line;
-	return formatTaskLine(title, t.done, t.date?.value ?? null, t.doneField?.value ?? null);
+	return formatTaskLine(title, t.done, t.date?.value ?? null, t.doneField?.value ?? null, t.prefix);
 }

@@ -1,14 +1,15 @@
 // Text -> Doc. Line-based and tolerant: every line becomes a node, and anything
-// not understood is an `opaque` node that patches never touch.
+// not understood is an `opaque` node that patches never touch. The same rules read
+// the task file and project notes; only the task file uses `# Inbox` / `# Projects`.
 
-import { parseTaskLine } from './taskLine';
-import type { Doc, LineKind, Project, Section, Task } from './types';
+import { isTaskLine, parseTaskLine } from './taskLine';
+import type { Doc, LineKind, ProjectLink, Section, Task } from './types';
 
 const HEADING_RE = /^(#{1,6})(?:[ \t]+(.*?))?[ \t]*$/;
-const FENCE_RE = /^ {0,3}(`{3,}|~{3,})/;
-const INDENTED_RE = /^(\t| {2,})/;
+const FENCE_RE = /^[ \t]*(`{3,}|~{3,})/;
 const BLANK_RE = /^\s*$/;
 const PLAINLIST_RE = /^plainlist:[ \t]*true[ \t]*$/i;
+const LINK_ITEM_RE = /^[ \t]*[-*+][ \t]+(?:\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]|\[[^\]]*\]\(<?([^)>]+)>?\))[ \t]*$/;
 
 export function splitLines(text: string): { lines: string[]; eols: string[] } {
 	const lines: string[] = [];
@@ -39,39 +40,61 @@ export function isBlank(line: string): boolean {
 	return BLANK_RE.test(line);
 }
 
-function isDescLine(line: string): boolean {
-	return INDENTED_RE.test(line) && !BLANK_RE.test(line);
+/** Width of the leading whitespace, counting a tab as four columns. */
+export function indentWidth(line: string): number {
+	let w = 0;
+	for (const ch of line) {
+		if (ch === ' ') w += 1;
+		else if (ch === '\t') w += 4;
+		else break;
+	}
+	return w;
 }
 
-/** Strips one level of indentation (a tab, or the block's common space indent). */
+/** The link target of a `- [[Note]]` / `- [Note](Note.md)` line, or null. */
+export function projectLinkTarget(line: string): string | null {
+	const m = LINK_ITEM_RE.exec(line);
+	if (!m) return null;
+	if (m[1]) return m[1].trim();
+	try {
+		return decodeURI((m[2] ?? '').trim());
+	} catch {
+		return (m[2] ?? '').trim();
+	}
+}
+
+/** Strips the indentation the description lines share. Blank lines become empty. */
 export function descriptionText(raw: string[]): string {
-	const spaceIndents = raw
-		.filter((l) => !BLANK_RE.test(l) && l.startsWith(' '))
-		.map((l) => (/^ */.exec(l)?.[0].length ?? 0));
-	const spaces = spaceIndents.length ? Math.min(...spaceIndents) : 0;
-	return raw
-		.map((l) => {
-			if (BLANK_RE.test(l)) return '';
-			if (l.startsWith('\t')) return l.slice(1);
-			return l.slice(Math.min(spaces, /^ */.exec(l)?.[0].length ?? 0));
-		})
-		.join('\n');
+	const nonBlank = raw.filter((l) => !BLANK_RE.test(l));
+	let common = /^[ \t]*/.exec(nonBlank[0] ?? '')?.[0] ?? '';
+	for (const l of nonBlank) {
+		while (common && !l.startsWith(common)) common = common.slice(0, -1);
+	}
+	return raw.map((l) => (BLANK_RE.test(l) ? '' : l.slice(common.length))).join('\n');
 }
 
-/** End (exclusive) of the description lines under the task title at `line`. */
-function descriptionEnd(lines: string[], line: number): number {
+/**
+ * End (exclusive) of the lines under `line` that satisfy `belongs`. Blank lines count
+ * only when more such lines follow. Fenced code inside the block is taken whole.
+ */
+function blockEnd(lines: string[], line: number, belongs: (l: string) => boolean): number {
 	let end = line + 1;
 	let j = line + 1;
+	let fence: string | null = null;
 	while (j < lines.length) {
 		const l = lines[j] ?? '';
-		if (isDescLine(l)) {
+		if (fence) {
 			end = ++j;
+			const close = FENCE_RE.exec(l)?.[1];
+			if (close && close[0] === fence[0] && close.length >= fence.length) fence = null;
 		} else if (BLANK_RE.test(l)) {
-			// Blank lines belong to the description only when more description follows.
 			let k = j;
 			while (k < lines.length && BLANK_RE.test(lines[k] ?? '')) k++;
-			if (k < lines.length && isDescLine(lines[k] ?? '')) j = k;
+			if (k < lines.length && belongs(lines[k] ?? '')) j = k;
 			else break;
+		} else if (belongs(l)) {
+			fence = FENCE_RE.exec(l)?.[1] ?? null;
+			end = ++j;
 		} else {
 			break;
 		}
@@ -100,19 +123,17 @@ export function parse(text: string): Doc {
 
 	const headings: { line: number; level: number }[] = [];
 	const tasks: Task[] = [];
-	const projects: Project[] = [];
+	const projectLinks: ProjectLink[] = [];
 	let inbox: Section | null = null;
 	let projectsSection: Section | null = null;
-	let ctx: 'none' | 'inbox' | 'projects' | 'project' | 'other' = 'none';
-	let project: Project | null = null;
+	let ctx: 'none' | 'inbox' | 'projects' | 'other' = 'none';
 	let fence: { ch: string; len: number } | null = null;
 
 	for (let i = fmEnd; i < n; i++) {
 		const line = lines[i] ?? '';
 
 		if (fence) {
-			const close = FENCE_RE.exec(line);
-			const marker = close?.[1] ?? '';
+			const marker = FENCE_RE.exec(line)?.[1] ?? '';
 			if (marker[0] === fence.ch && marker.length >= fence.len && BLANK_RE.test(line.slice(line.indexOf(marker) + marker.length))) {
 				fence = null;
 			}
@@ -128,74 +149,58 @@ export function parse(text: string): Doc {
 		if (h) {
 			headings.push({ line: i, level: h.level });
 			const name = h.name.toLowerCase();
-			if (h.level === 1) {
-				project = null;
-				if (name === 'inbox') {
-					kinds[i] = 'section';
-					inbox ??= { line: i, end: n };
-					ctx = 'inbox';
-				} else if (name === 'projects') {
-					kinds[i] = 'section';
-					projectsSection ??= { line: i, end: n };
-					ctx = 'projects';
-				} else {
-					ctx = 'other';
-				}
-			} else if (h.level === 2 && (ctx === 'projects' || ctx === 'project')) {
-				kinds[i] = 'project';
-				project = { name: h.name, line: i, text: line, description: '', descStart: i + 1, descEnd: i + 1, end: n, tasks: [] };
-				projects.push(project);
-				ctx = 'project';
-			} else if (ctx === 'inbox') {
+			if (h.level === 1 && name === 'inbox') {
+				kinds[i] = 'section';
+				inbox ??= { line: i, end: n };
+				ctx = 'inbox';
+			} else if (h.level === 1 && name === 'projects') {
+				kinds[i] = 'section';
+				projectsSection ??= { line: i, end: n };
+				ctx = 'projects';
+			} else if (h.level === 1 || ctx === 'inbox') {
 				// Any other heading ends the Inbox's own region.
 				ctx = 'other';
 			}
 			continue;
 		}
 
+		if (ctx === 'projects') {
+			const target = projectLinkTarget(line);
+			if (target) {
+				kinds[i] = 'projectLink';
+				projectLinks.push({ line: i, text: line, target });
+				continue;
+			}
+		}
+
 		const t = parseTaskLine(line);
 		if (t) {
-			const end = descriptionEnd(lines, i);
-			const section = ctx === 'inbox' ? 'inbox' : ctx === 'project' ? 'project' : 'other';
-			const task: Task = {
+			const width = indentWidth(line);
+			const end = blockEnd(lines, i, (l) => !isTaskLine(l) && indentWidth(l) >= width + 2);
+			const subtreeEnd = blockEnd(lines, i, (l) => indentWidth(l) > width);
+			tasks.push({
 				line: i,
 				text: line,
+				indent: t.indent,
 				done: t.done,
 				title: t.title,
 				date: t.date?.value ?? null,
 				doneDate: t.doneField?.value ?? null,
 				description: descriptionText(lines.slice(i + 1, end)),
 				end,
-				section,
-				project: section === 'project' && project ? project.name : null,
-			};
+				subtreeEnd,
+				section: ctx === 'inbox' ? 'inbox' : 'other',
+			});
 			kinds[i] = 'task';
 			for (let j = i + 1; j < end; j++) kinds[j] = 'taskDesc';
-			tasks.push(task);
-			if (section === 'project') project?.tasks.push(task);
 			i = end - 1;
 		}
 	}
 
 	const nextHeading = (after: number, maxLevel: number): number =>
 		headings.find((h) => h.line > after && h.level <= maxLevel)?.line ?? n;
-
 	if (inbox) inbox.end = nextHeading(inbox.line, 6);
 	if (projectsSection) projectsSection.end = nextHeading(projectsSection.line, 1);
-
-	for (const p of projects) {
-		p.end = nextHeading(p.line, 2);
-		// Description: lines before the first to-do or sub-heading, blank lines trimmed.
-		let stop = Math.min(p.tasks[0]?.line ?? p.end, nextHeading(p.line, 6));
-		let start = p.line + 1;
-		while (start < stop && BLANK_RE.test(lines[start] ?? '')) start++;
-		while (stop > start && BLANK_RE.test(lines[stop - 1] ?? '')) stop--;
-		if (start === stop) start = stop = p.line + 1;
-		p.descStart = start;
-		p.descEnd = stop;
-		p.description = lines.slice(start, stop).join('\n');
-		for (let j = start; j < stop; j++) kinds[j] = 'projectDesc';
-	}
 
 	return {
 		lines,
@@ -207,7 +212,7 @@ export function parse(text: string): Doc {
 		isPlainlist,
 		inbox,
 		projectsSection,
-		projects,
+		projectLinks,
 		tasks,
 	};
 }

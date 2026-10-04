@@ -7,6 +7,7 @@ import { ProjectPicker } from './popovers';
 export interface CaptureResult {
 	title: string;
 	date: string | null;
+	/** Project note path, or null for the Inbox. */
 	project: string | null;
 }
 
@@ -49,7 +50,7 @@ export function Capture({
 }: {
 	today: string;
 	weekStart: 0 | 1;
-	projects: string[];
+	projects: { name: string; path: string }[];
 	initialProject: string | null;
 	defaultDate: string | null;
 	onSave: (result: CaptureResult) => Promise<boolean>;
@@ -139,7 +140,7 @@ export function Capture({
 						class={`pl-capture-value pl-capture-project-button${project === initialProject ? ' is-muted' : ''}`}
 						onClick={() => setPicking(true)}
 					>
-						{project ?? 'Inbox'}
+						{projects.find((p) => p.path === project)?.name ?? 'Inbox'}
 					</button>
 					<span class="pl-capture-note">Tab to choose</span>
 					{picking && (

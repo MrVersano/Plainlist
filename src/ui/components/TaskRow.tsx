@@ -1,33 +1,34 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { addDays, longDate } from '../../dates/format';
-import { findTask, moveTask, setTaskDate, setTaskDescription, setTaskTitle } from '../../model/patch';
-import type { Task } from '../../model/types';
+import type { Item, ProjectInfo } from '../../model/lists';
+import { findTask, setTaskDate, setTaskDescription, setTaskTitle } from '../../model/patch';
 import type { TrackBox } from '../../store';
 import { useDebounced, useEnv, useLongPress, useOutsideClick } from '../env';
 import { Checkbox, MarkdownField, Title } from './bits';
 import { DatePopover, ProjectPicker } from './popovers';
 
 export interface RowActions {
-	onToggle: (task: Task) => void;
-	onExpand: (task: Task) => void;
-	onMenu: (task: Task, pos: { x: number; y: number }) => void;
+	onToggle: (item: Item) => void;
+	onExpand: (item: Item) => void;
+	onMenu: (item: Item, pos: { x: number; y: number }) => void;
 }
 
 export function TaskRow({
-	task,
+	item,
 	meta,
 	metaClass,
 	selected,
 	actions,
 }: {
-	task: Task;
+	item: Item;
 	meta: string;
 	metaClass?: string;
 	selected: boolean;
 	actions: RowActions;
 }) {
+	const { task } = item;
 	const el = useRef<HTMLDivElement>(null);
-	const longPress = useLongPress((pos) => actions.onMenu(task, pos));
+	const longPress = useLongPress((pos) => actions.onMenu(item, pos));
 	useEffect(() => {
 		if (selected) el.current?.scrollIntoView({ block: 'nearest' });
 	}, [selected]);
@@ -38,12 +39,12 @@ export function TaskRow({
 			class={`pl-row${task.done ? ' is-done' : ''}${selected ? ' is-selected' : ''}`}
 			onContextMenu={(evt) => {
 				evt.preventDefault();
-				actions.onMenu(task, { x: evt.clientX, y: evt.clientY });
+				actions.onMenu(item, { x: evt.clientX, y: evt.clientY });
 			}}
 			{...longPress}
 		>
-			<Checkbox done={task.done} title={task.title} onToggle={() => actions.onToggle(task)} />
-			<button type="button" class="pl-row-title" onClick={() => actions.onExpand(task)}>
+			<Checkbox done={task.done} title={task.title} onToggle={() => actions.onToggle(item)} />
+			<button type="button" class="pl-row-title" onClick={() => actions.onExpand(item)}>
 				{task.title ? <Title text={task.title} /> : <span class="pl-untitled">New to-do</span>}
 			</button>
 			{meta && <span class={`pl-row-meta ${metaClass ?? ''}`}>{meta}</span>}
@@ -59,21 +60,22 @@ function dateLabel(date: string | null, today: string): string {
 }
 
 export function TaskEditor({
-	task,
+	item,
 	box,
 	projects,
 	today,
 	onCollapse,
 	onToggle,
 }: {
-	task: Task;
+	item: Item;
 	box: TrackBox;
-	projects: string[];
+	projects: ProjectInfo[];
 	today: string;
 	onCollapse: () => void;
 	onToggle: () => void;
 }) {
-	const { store, weekStart } = useEnv();
+	const { workspace, weekStart } = useEnv();
+	const { task } = item;
 	const [title, setTitle] = useState(task.title);
 	const [description, setDescription] = useState(task.description);
 	const [popover, setPopover] = useState<'date' | 'project' | null>(null);
@@ -84,13 +86,17 @@ export function TaskEditor({
 
 	const save = useDebounced(() => {
 		const { title: newTitle, description: newDesc } = latest.current;
-		void store.run((doc) => {
-			const t = findTask(doc, box.current);
-			return [
-				...(newTitle.trim() !== t.title ? setTaskTitle(doc, box.current, newTitle) : []),
-				...(newDesc !== t.description ? setTaskDescription(doc, box.current, newDesc) : []),
-			];
-		}, box);
+		void workspace.run(
+			box.current.path,
+			(doc) => {
+				const t = findTask(doc, box.current.ref);
+				return [
+					...(newTitle.trim() !== t.title ? setTaskTitle(doc, box.current.ref, newTitle) : []),
+					...(newDesc !== t.description ? setTaskDescription(doc, box.current.ref, newDesc) : []),
+				];
+			},
+			box,
+		);
 	}, 400);
 
 	// Collapsing unmounts the editor: save whatever is still pending.
@@ -148,6 +154,7 @@ export function TaskEditor({
 				<MarkdownField
 					class="pl-editor-desc"
 					value={description}
+					sourcePath={item.path}
 					placeholder="Description — #tags and [[links]] work here too"
 					onInput={(value) => {
 						setDescription(value);
@@ -172,7 +179,9 @@ export function TaskEditor({
 								today={today}
 								weekStart={weekStart()}
 								onClose={() => setPopover(null)}
-								onPick={(date) => pick(() => void store.run((doc) => setTaskDate(doc, box.current, date), box))}
+								onPick={(date) =>
+									pick(() => void workspace.run(box.current.path, (doc) => setTaskDate(doc, box.current.ref, date), box))
+								}
 							/>
 						)}
 					</div>
@@ -185,14 +194,14 @@ export function TaskEditor({
 							aria-expanded={popover === 'project'}
 							onClick={() => setPopover(popover === 'project' ? null : 'project')}
 						>
-							{task.project ?? 'Inbox'}
+							{item.project?.name ?? 'Inbox'}
 						</button>
 						{popover === 'project' && (
 							<ProjectPicker
-								projects={projects}
-								current={task.project}
+								projects={projects.filter((p) => p.exists)}
+								current={item.project?.path ?? null}
 								onClose={() => setPopover(null)}
-								onPick={(project) => pick(() => void store.run((doc) => moveTask(doc, box.current, project), box))}
+								onPick={(path) => pick(() => void workspace.moveTask(box, path))}
 							/>
 						)}
 					</div>

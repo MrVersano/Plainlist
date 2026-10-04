@@ -1,10 +1,11 @@
 # Plainlist
 
-Plainlist shows one Markdown note as a clean, minimal task manager in Obsidian. The note is the only storage: everything you do in the view is written back as plain Markdown, and anything you type into the note by hand shows up in the view straight away.
+Plainlist turns your notes into a clean, minimal task manager in Obsidian. A task file holds your Inbox and a list of projects, and each project is an ordinary note: any checkbox in it is a to-do. Everything you do in the view is written back as plain Markdown, and anything you type into the notes by hand shows up in the view straight away.
 
 ![Today](assets/today.png)
 
 - **Lists:** Inbox, Today, Upcoming, No Date, Someday and Completed, plus one list per project.
+- **Projects are notes:** create a new project note, or turn an existing note into a project. Its checkboxes, nested ones included, become the project's to-dos.
 - **To-dos:** a title, a description (with `#tags` and `[[links]]`), a date and a project. Click a to-do to edit it in place.
 - **Quick capture:** the **New to-do** command opens a small palette that understands dates as you type: "today", "tonight", "fri", "next tue", "in 3 days", "oct 20", "someday".
 - **Safe editing:** Plainlist only changes the lines it owns. Headings, notes, tables and callouts it does not understand stay exactly as they are.
@@ -19,7 +20,18 @@ Run **Plainlist: Open** from the command palette (or click the ribbon icon). It 
 
 Plainlist does not set a hotkey for you. To capture from anywhere, bind **Plainlist: New to-do** under **Settings → Hotkeys**; `Mod+Shift+N` works well.
 
+## Projects
+
+Click **+ New project** at the bottom of the sidebar and type:
+
+- a new name, then choose **Create “name”** to make a new note (in your **Default location for new notes**), or
+- part of an existing note's name, then pick the note to add it as a project. Plainlist only adds a link to the task file; the note itself is not changed until you edit one of its to-dos.
+
+New to-dos for a project go after the last to-do in its note. Renaming a project renames its note. **Remove from Plainlist** (right-click a project) removes the link only: the note and its checkboxes stay as they are.
+
 ## File format
+
+The task file:
 
 ```markdown
 ---
@@ -31,31 +43,36 @@ plainlist: true
 - [ ] Look into a new backup drive
 
 # Projects
+- [[Renovate home office]]
+- [[Q4 Planning]]
+```
 
-## Renovate home office
-Finish the office unit before winter so it works for full days.
+A project note, `Renovate home office.md`, can contain anything; Plainlist reads its checkboxes:
+
+```markdown
+Finish the office before winter.
 
 - [ ] Book electrician for office outlets #errands [date:: 2026-10-04]
 	Four more outlets on the desk wall and one by the window.
-	Ask about a dedicated circuit for the heater.
-- [ ] Pick shelving for the back wall [date:: someday]
+- [ ] Order standing desk frame [date:: 2026-10-20]
+    - [ ] Measure the desk wall
 - [x] Order cable trays [done:: 2026-10-02]
 
-## Q4 Planning
-- [ ] Prepare sprint review notes [date:: 2026-10-04]
+## Notes
+The electrician is free Thursday mornings.
 ```
 
 | Element | Syntax |
 |---|---|
-| Inbox | To-dos under `# Inbox` |
-| Project | `## Name` under `# Projects`; text between the heading and the first to-do is the project's description |
-| To-do | `- [ ] title` or `- [x] title` at the start of a line |
-| Description | Lines indented with a tab (or two or more spaces) directly under a to-do. Indented lines that look like to-dos are description text, not subtasks |
+| Inbox | To-dos under `# Inbox` in the task file |
+| Project | A link list item (`- [[Note]]` or `- [Note](Note.md)`) under `# Projects` in the task file |
+| To-do | Any checkbox, at any indent: `- [ ] title`, `* [x] title`, `1. [ ] title` |
+| Description | Indented lines directly under a to-do that are not themselves checkboxes |
 | Date | `[date:: YYYY-MM-DD]` or `[date:: someday]` (Dataview inline-field syntax) |
-| Completed | `- [x]` plus `[done:: YYYY-MM-DD]`, added when you complete a to-do |
+| Completed | `[x]` plus `[done:: YYYY-MM-DD]`, added when you complete a to-do |
 | Tags | `#tag` anywhere in a title or description |
 
-To-dos elsewhere in the note (under another heading, say) show up in the Inbox but are never moved. Unknown inline fields such as `[priority:: high]` stay in the title.
+To-dos elsewhere in the task file (under another heading, say) show up in the Inbox but are never moved. Checkboxes inside code blocks and callouts are ignored. Unknown inline fields such as `[priority:: high]` stay in the title. Moving a to-do to another project moves the checkboxes nested under it too.
 
 ## Keyboard
 
@@ -70,11 +87,11 @@ With the Plainlist view focused:
 | `Space` or `Mod+Enter` | Complete or reopen the selected to-do |
 | `Mod+Backspace` | Delete the selected to-do (with undo) |
 
-Right-click (or long-press on mobile) a to-do to complete or delete it, or a project to rename or delete it.
+Right-click (or long-press on mobile) a to-do to complete or delete it, or a project to open, rename or remove it.
 
 ## Settings
 
-- **Tasks file:** the note the **Open** command uses. Default: `Tasks.md`.
+- **Tasks file:** the task file the **Open** command uses. Default: `Tasks.md`.
 - **Open this file in Plainlist view by default:** notes with `plainlist: true` open as a task list. Default: on.
 - **Week starts on:** used for "next week". Default: your locale.
 

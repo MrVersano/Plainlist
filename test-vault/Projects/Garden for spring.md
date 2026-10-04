@@ -1,0 +1,2 @@
+- [ ] Order bulbs for the spring beds [date:: 2026-11-10]
+- [ ] Sketch the new bed layout

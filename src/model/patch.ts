@@ -1,9 +1,9 @@
 // Pure functions: Doc + action -> minimal line edits. They never touch lines the
 // action does not own, and throw PatchConflict rather than guess at a target.
 
-import { descriptionText, headingOf, isBlank } from './parse';
+import { headingOf, isBlank, projectLinkTarget } from './parse';
 import { formatTaskLine, setDate, setDone, setTitle } from './taskLine';
-import type { Doc, LineEdit, Project, Task, TaskDate } from './types';
+import type { Doc, LineEdit, ProjectLink, Task, TaskDate } from './types';
 
 export class PatchConflict extends Error {}
 
@@ -21,6 +21,9 @@ export interface Removed {
 	after: string | null;
 }
 
+/** Where a to-do goes: the task file's Inbox, or the to-do list of a project note. */
+export type Destination = 'inbox' | 'note';
+
 export function refOf(item: { line: number; text: string }): LineRef {
 	return { line: item.line, text: item.text };
 }
@@ -37,14 +40,8 @@ export function findTask(doc: Doc, ref: LineRef): Task {
 	return locate(doc.tasks, ref, 'To-do');
 }
 
-export function findProject(doc: Doc, ref: LineRef): Project {
-	return locate(doc.projects, ref, 'Project');
-}
-
-function projectByName(doc: Doc, name: string): Project {
-	const p = doc.projects.find((x) => x.name === name);
-	if (!p) throw new PatchConflict(`Project not found: ${name}`);
-	return p;
+export function findProjectLink(doc: Doc, ref: LineRef): ProjectLink {
+	return locate(doc.projectLinks, ref, 'Project');
 }
 
 function replaceLine(at: number, oldText: string, newText: string): LineEdit[] {
@@ -68,11 +65,11 @@ function replaceRange(start: number, oldLines: string[], newLines: string[]): Li
 	return del || ins.length ? [{ at: start + head, delete: del, insert: ins }] : [];
 }
 
-/** Pads `content` with blank lines so it sits as its own block at `at`. */
-function block(doc: Doc, at: number, content: string[]): string[] {
+/** Pads `content` with blank lines so it sits as its own block at `at`. Returns the padded lines and the content's offset. */
+function block(doc: Doc, at: number, content: string[]): { lines: string[]; offset: number } {
 	const before = at > 0 && !isBlank(doc.lines[at - 1] ?? '') ? [''] : [];
 	const after = at < doc.lines.length && !isBlank(doc.lines[at] ?? '') ? [''] : [];
-	return [...before, ...content, ...after];
+	return { lines: [...before, ...content, ...after], offset: before.length };
 }
 
 function trimBlankEnds(text: string): string[] {
@@ -88,38 +85,60 @@ function beforeBlanks(doc: Doc, at: number, floor: number): number {
 	return at;
 }
 
-/** Edit that appends `lines` (a to-do and its description) to the end of the Inbox, creating `# Inbox` if needed. */
-function appendToInbox(doc: Doc, lines: string[]): LineEdit {
+/** One indentation step for lines under a to-do with this indent. */
+function indentUnit(indent: string): string {
+	return indent && !indent.includes('\t') ? '    ' : '\t';
+}
+
+/** Description text -> lines indented one step under a to-do. Blank lines inside keep the indent. */
+export function descriptionLines(description: string, taskIndent = ''): string[] {
+	const pad = taskIndent + indentUnit(taskIndent);
+	return trimBlankEnds(description).map((l) => (isBlank(l) ? pad : pad + l));
+}
+
+function reindent(lines: string[], from: string, to: string): string[] {
+	return lines.map((l) => (isBlank(l) ? l : to + (l.startsWith(from) ? l.slice(from.length) : l.trimStart())));
+}
+
+/** An insertion, plus where the to-do's title line lands within the inserted lines. */
+export interface Insertion {
+	edit: LineEdit;
+	/** Index of the title line within `edit.insert`. */
+	offset: number;
+}
+
+/** Appends lines for a to-do (given at indent 0) to the end of the Inbox, creating `# Inbox` if needed. */
+function appendToInbox(doc: Doc, lines: string[]): Insertion {
 	const inbox = doc.inbox;
 	if (!inbox) {
 		let at = doc.frontmatterEnd;
 		while (at < doc.lines.length && isBlank(doc.lines[at] ?? '')) at++;
-		return { at, delete: 0, insert: block(doc, at, ['# Inbox', ...lines]) };
+		const b = block(doc, at, ['# Inbox', ...lines]);
+		return { edit: { at, delete: 0, insert: b.lines }, offset: b.offset + 1 };
 	}
 	const own = doc.tasks.filter((t) => t.section === 'inbox' && t.line > inbox.line && t.line < inbox.end);
 	const last = own[own.length - 1];
-	if (last) return { at: last.end, delete: 0, insert: lines };
+	if (last) return { edit: { at: Math.max(last.end, last.subtreeEnd), delete: 0, insert: lines }, offset: 0 };
 	const at = inbox.line + 1;
 	const next = doc.lines[at];
 	const gap = next !== undefined && !isBlank(next) ? [''] : [];
-	return { at, delete: 0, insert: [...lines, ...gap] };
+	return { edit: { at, delete: 0, insert: [...lines, ...gap] }, offset: 0 };
 }
 
-/** Edit that appends `lines` to the end of project `p`. */
-function appendToProject(doc: Doc, p: Project, lines: string[]): LineEdit {
-	const last = p.tasks[p.tasks.length - 1];
-	if (last) return { at: last.end, delete: 0, insert: lines };
-	if (p.descEnd > p.descStart) return { at: p.descEnd, delete: 0, insert: ['', ...lines] };
-	return { at: p.line + 1, delete: 0, insert: lines };
+/** Appends lines for a to-do after the note's last top-level to-do, or at the end of the note. */
+function appendToNote(doc: Doc, lines: string[]): Insertion {
+	if (!doc.tasks.length) {
+		const at = beforeBlanks(doc, doc.lines.length, doc.frontmatterEnd);
+		const b = block(doc, at, lines);
+		return { edit: { at, delete: 0, insert: b.lines }, offset: b.offset };
+	}
+	const top = Math.min(...doc.tasks.map((t) => t.indent.length));
+	const anchor = [...doc.tasks].reverse().find((t) => t.indent.length === top) ?? doc.tasks[doc.tasks.length - 1]!;
+	return { edit: { at: anchor.subtreeEnd, delete: 0, insert: reindent(lines, '', anchor.indent) }, offset: 0 };
 }
 
-function appendTo(doc: Doc, project: string | null, lines: string[]): LineEdit {
-	return project === null ? appendToInbox(doc, lines) : appendToProject(doc, projectByName(doc, project), lines);
-}
-
-/** Description text -> indented lines. Blank lines inside become a lone tab. */
-export function descriptionLines(description: string): string[] {
-	return trimBlankEnds(description).map((l) => (isBlank(l) ? '\t' : `\t${l}`));
+export function insertTaskLines(doc: Doc, lines: string[], dest: Destination): Insertion {
+	return dest === 'inbox' ? appendToInbox(doc, lines) : appendToNote(doc, lines);
 }
 
 // --- To-dos ---------------------------------------------------------------
@@ -127,14 +146,12 @@ export function descriptionLines(description: string): string[] {
 export interface NewTask {
 	title: string;
 	date: TaskDate | null;
-	/** Project name, or null for the Inbox. */
-	project: string | null;
 	description?: string;
 }
 
-export function addTask(doc: Doc, task: NewTask): LineEdit[] {
+export function addTask(doc: Doc, task: NewTask, dest: Destination): LineEdit[] {
 	const lines = [formatTaskLine(task.title, false, task.date, null), ...descriptionLines(task.description ?? '')];
-	return [appendTo(doc, task.project, lines)];
+	return [insertTaskLines(doc, lines, dest).edit];
 }
 
 export function setTaskDone(doc: Doc, ref: LineRef, done: boolean, today: string): LineEdit[] {
@@ -155,22 +172,26 @@ export function setTaskDate(doc: Doc, ref: LineRef, date: TaskDate | null): Line
 export function setTaskDescription(doc: Doc, ref: LineRef, description: string): LineEdit[] {
 	const t = findTask(doc, ref);
 	const oldRaw = doc.lines.slice(t.line + 1, t.end);
-	const oldText = oldRaw.length ? descriptionText(oldRaw).split('\n') : [];
+	const oldText = oldRaw.length ? t.description.split('\n') : [];
 	const newText = trimBlankEnds(description);
 	// Keep the original raw line wherever its text is unchanged, so its indentation survives.
-	const newRaw = descriptionLines(description).map((raw, i) =>
+	const newRaw = descriptionLines(description, t.indent).map((raw, i) =>
 		i < oldRaw.length && oldText[i] === newText[i] ? (oldRaw[i] ?? raw) : raw,
 	);
 	return replaceRange(t.line + 1, oldRaw, newRaw);
 }
 
-/** Moves a to-do (with its description) to the end of a project, or the Inbox when `project` is null. */
-export function moveTask(doc: Doc, ref: LineRef, project: string | null): LineEdit[] {
+/**
+ * Takes a to-do out of its note for a move: its lines (and everything nested under it),
+ * re-indented to the left margin, and the edit that removes them.
+ */
+export function extractTask(doc: Doc, ref: LineRef): { lines: string[]; edits: LineEdit[] } {
 	const t = findTask(doc, ref);
-	// `other` to-dos already show as Inbox items; they stay where they are.
-	if (project === null ? t.section !== 'project' : t.project === project) return [];
-	const lines = doc.lines.slice(t.line, t.end);
-	return [{ at: t.line, delete: t.end - t.line, insert: [] }, appendTo(doc, project, lines)];
+	const end = Math.max(t.end, t.subtreeEnd);
+	return {
+		lines: reindent(doc.lines.slice(t.line, end), t.indent, ''),
+		edits: [{ at: t.line, delete: end - t.line, insert: [] }],
+	};
 }
 
 export function deleteTask(doc: Doc, ref: LineRef): { edits: LineEdit[]; removed: Removed } {
@@ -197,85 +218,44 @@ export function restoreLines(doc: Doc, removed: Removed): LineEdit[] {
 	throw new PatchConflict('Could not find where the deleted lines were');
 }
 
-// --- Projects -------------------------------------------------------------
+// --- Project links in the task file ---------------------------------------
 
-function cleanName(name: string): string {
-	const clean = name.replace(/[\r\n]+/g, ' ').trim();
-	if (!clean) throw new PatchConflict('Project name is empty');
-	return clean;
-}
-
-export function addProject(doc: Doc, name: string): LineEdit[] {
-	const clean = cleanName(name);
-	if (doc.projects.some((p) => p.name === clean)) throw new PatchConflict(`Project already exists: ${clean}`);
+/** Adds `- <link>` to the end of the project list, creating `# Projects` if needed. */
+export function addProjectLink(doc: Doc, link: string): LineEdit[] {
+	const target = projectLinkTarget(`- ${link}`);
+	if (!target) throw new PatchConflict(`Not a link: ${link}`);
+	if (doc.projectLinks.some((p) => p.target === target)) throw new PatchConflict(`Already a project: ${target}`);
+	const item = `- ${link}`;
 	const section = doc.projectsSection;
 	if (section) {
-		const at = beforeBlanks(doc, section.end, section.line + 1);
-		return [{ at, delete: 0, insert: block(doc, at, [`## ${clean}`]) }];
+		const last = doc.projectLinks.filter((p) => p.line > section.line && p.line < section.end).pop();
+		if (last) return [{ at: last.line + 1, delete: 0, insert: [item] }];
+		const at = section.line + 1;
+		const next = doc.lines[at];
+		const gap = next !== undefined && !isBlank(next) ? [''] : [];
+		return [{ at, delete: 0, insert: [item, ...gap] }];
 	}
 	// No `# Projects` yet: add it after the Inbox (before the next level-1 heading), or at the end.
 	let at = doc.lines.length;
 	if (doc.inbox) {
 		const inboxLine = doc.inbox.line;
 		const next = doc.lines.findIndex(
-			(l, i) => i > inboxLine && doc.nodes[i]?.kind !== 'taskDesc' && headingOf(l)?.level === 1,
+			(l, i) => i > inboxLine && doc.nodes[i]?.kind === 'opaque' && headingOf(l)?.level === 1,
 		);
 		if (next !== -1) at = next;
 		at = beforeBlanks(doc, at, inboxLine + 1);
 	}
-	return [{ at, delete: 0, insert: block(doc, at, ['# Projects', '', `## ${clean}`]) }];
+	return [{ at, delete: 0, insert: block(doc, at, ['# Projects', item]).lines }];
 }
 
-export function renameProject(doc: Doc, ref: LineRef, name: string): LineEdit[] {
-	const p = findProject(doc, ref);
-	const clean = cleanName(name);
-	if (clean !== p.name && doc.projects.some((x) => x.name === clean)) {
-		throw new PatchConflict(`Project already exists: ${clean}`);
-	}
-	return replaceLine(p.line, p.text, `## ${clean}`);
+export function removeProjectLink(doc: Doc, ref: LineRef): LineEdit[] {
+	const p = findProjectLink(doc, ref);
+	return [{ at: p.line, delete: 1, insert: [] }];
 }
 
-export function setProjectDescription(doc: Doc, ref: LineRef, description: string): LineEdit[] {
-	const p = findProject(doc, ref);
-	const newLines = trimBlankEnds(description);
-	if (p.descEnd > p.descStart) {
-		if (!newLines.length) {
-			// Also drop the blank line that separated the description from what follows.
-			const gap = p.descStart === p.line + 1 && isBlank(doc.lines[p.descEnd] ?? 'x') ? 1 : 0;
-			return [{ at: p.descStart, delete: p.descEnd - p.descStart + gap, insert: [] }];
-		}
-		return replaceRange(p.descStart, doc.lines.slice(p.descStart, p.descEnd), newLines);
-	}
-	if (!newLines.length) return [];
-	const next = doc.lines[p.line + 1];
-	const gap = next !== undefined && !isBlank(next) ? [''] : [];
-	return [{ at: p.line + 1, delete: 0, insert: [...newLines, ...gap] }];
-}
-
-/** Moves the project's to-dos to the end of the Inbox, then removes its heading and description. */
-export function deleteProject(doc: Doc, ref: LineRef): LineEdit[] {
-	const p = findProject(doc, ref);
-	const remove = new Set<number>([p.line]);
-	for (let i = p.descStart; i < p.descEnd; i++) remove.add(i);
-	const moved: string[] = [];
-	for (const t of p.tasks) {
-		for (let i = t.line; i < t.end; i++) {
-			remove.add(i);
-			moved.push(doc.lines[i] ?? '');
-		}
-	}
-	// If nothing but blank lines would be left of the project, remove those too.
-	let onlyBlank = true;
-	for (let i = p.line; i < p.end; i++) if (!remove.has(i) && !isBlank(doc.lines[i] ?? '')) onlyBlank = false;
-	if (onlyBlank) for (let i = p.line; i < p.end; i++) remove.add(i);
-
-	const edits: LineEdit[] = [];
-	const sorted = [...remove].sort((a, b) => a - b);
-	for (const i of sorted) {
-		const prev = edits[edits.length - 1];
-		if (prev && prev.at + prev.delete === i) prev.delete++;
-		else edits.push({ at: i, delete: 1, insert: [] });
-	}
-	if (moved.length) edits.push(appendToInbox(doc, moved));
-	return edits;
+/** Rewrites a project link (after its note was renamed), keeping the line's indent and marker. */
+export function replaceProjectLink(doc: Doc, ref: LineRef, link: string): LineEdit[] {
+	const p = findProjectLink(doc, ref);
+	const marker = /^[ \t]*[-*+][ \t]+/.exec(p.text)?.[0] ?? '- ';
+	return replaceLine(p.line, p.text, `${marker}${link}`);
 }

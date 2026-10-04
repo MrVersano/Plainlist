@@ -1,13 +1,6 @@
-// Pure data types for a parsed Tasks file. No Obsidian imports here.
+// Pure data types for parsed notes. No Obsidian imports here.
 
-export type LineKind =
-	| 'frontmatter'
-	| 'section'
-	| 'project'
-	| 'projectDesc'
-	| 'task'
-	| 'taskDesc'
-	| 'opaque';
+export type LineKind = 'frontmatter' | 'section' | 'projectLink' | 'task' | 'taskDesc' | 'opaque';
 
 export interface LineNode {
 	kind: LineKind;
@@ -23,6 +16,8 @@ export interface Task {
 	line: number;
 	/** Original title line text, used to locate the task when patching. */
 	text: string;
+	/** Leading whitespace of the title line. */
+	indent: string;
 	done: boolean;
 	/** Title text with the recognised `date` and `done` fields removed. */
 	title: string;
@@ -32,27 +27,21 @@ export interface Task {
 	description: string;
 	/** Description lines are `[line + 1, end)`. */
 	end: number;
+	/** End of the to-do's block: its description plus everything indented under it, nested to-dos included. */
+	subtreeEnd: number;
 	/**
-	 * `inbox`: directly under `# Inbox`. `project`: under a `## Name` in `# Projects`.
-	 * `other`: anywhere else; shown as an Inbox item but never moved in the file.
+	 * Task file only. `inbox`: directly under `# Inbox`. `other`: anywhere else
+	 * (shown as an Inbox item but never moved). Always `other` in project notes.
 	 */
-	section: 'inbox' | 'project' | 'other';
-	/** Project name when `section` is `project`. */
-	project: string | null;
+	section: 'inbox' | 'other';
 }
 
-export interface Project {
-	name: string;
-	/** Index of the `## Name` line. */
+/** A `- [[Note]]` line under `# Projects` in the task file. */
+export interface ProjectLink {
 	line: number;
 	text: string;
-	description: string;
-	/** Description lines are `[descStart, descEnd)`; empty range when there is none. */
-	descStart: number;
-	descEnd: number;
-	/** First line after the project's region (next level 1–2 heading, or EOF). */
-	end: number;
-	tasks: Task[];
+	/** Link target as written: a wikilink path or a decoded Markdown link URL. */
+	target: string;
 }
 
 export interface Section {
@@ -80,8 +69,8 @@ export interface Doc {
 	isPlainlist: boolean;
 	inbox: Section | null;
 	projectsSection: Section | null;
-	projects: Project[];
-	/** All tasks in file order. */
+	projectLinks: ProjectLink[];
+	/** All to-dos in file order. */
 	tasks: Task[];
 }
 

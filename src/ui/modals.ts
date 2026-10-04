@@ -28,14 +28,14 @@ export function confirmModal(app: App, title: string, message: string, cta: stri
 	});
 }
 
-export function promptModal(app: App, title: string, placeholder: string): Promise<string | null> {
+export function promptModal(app: App, title: string, placeholder: string, initial = '', cta = 'Create'): Promise<string | null> {
 	return new Promise((resolve) => {
-		let value = '';
+		let value = initial;
 		let submitted = false;
 		const modal = new (class extends Modal {
 			onOpen(): void {
 				this.setTitle(title);
-				const input = this.contentEl.createEl('input', { type: 'text', placeholder, cls: 'pl-prompt-input' });
+				const input = this.contentEl.createEl('input', { type: 'text', placeholder, value: initial, cls: 'pl-prompt-input' });
 				input.addEventListener('input', () => (value = input.value));
 				input.addEventListener('keydown', (e) => {
 					if (e.key === 'Enter' && !e.isComposing) {
@@ -45,14 +45,14 @@ export function promptModal(app: App, title: string, placeholder: string): Promi
 				});
 				new Setting(this.contentEl).addButton((b) =>
 					b
-						.setButtonText('Create')
+						.setButtonText(cta)
 						.setCta()
 						.onClick(() => {
 							submitted = true;
 							this.close();
 						}),
 				);
-				window.setTimeout(() => input.focus());
+				window.setTimeout(() => input.select());
 			}
 			onClose(): void {
 				this.contentEl.empty();

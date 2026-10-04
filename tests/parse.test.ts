@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { applyEdits } from '../src/model/apply';
-import { parse } from '../src/model/parse';
+import { parse, projectLinkTarget } from '../src/model/parse';
 import { parseTaskLine } from '../src/model/taskLine';
 import { allFixtures, fixture, variants } from './helpers';
 
@@ -19,7 +19,7 @@ describe('round-trip identity', () => {
 	});
 });
 
-describe('parse: example file', () => {
+describe('parse: task file', () => {
 	const doc = parse(fixture('example.md'));
 
 	it('reads frontmatter and sections', () => {
@@ -30,38 +30,68 @@ describe('parse: example file', () => {
 		expect(doc.eol).toBe('\n');
 	});
 
-	it('reads projects and their descriptions', () => {
-		expect(doc.projects.map((p) => p.name)).toEqual(['Renovate home office', 'Q4 Planning']);
-		const office = doc.projects[0]!;
-		expect(office.description).toBe('Finish the office unit before winter so it works for full days.');
-		expect(office.tasks).toHaveLength(4);
-		expect(doc.projects[1]!.description).toBe('');
+	it('reads project links', () => {
+		expect(doc.projectLinks.map((p) => [p.line, p.target])).toEqual([
+			[9, 'Renovate home office'],
+			[10, 'Q4 Planning'],
+		]);
 	});
 
-	it('reads to-dos', () => {
-		expect(doc.tasks).toHaveLength(7);
-		const [renew, backup, electrician, , shelving, trays] = doc.tasks;
-		expect(renew).toMatchObject({ title: 'Renew domain for side project #admin', date: '2026-10-04', section: 'inbox', project: null });
-		expect(backup).toMatchObject({ date: null, section: 'inbox' });
-		expect(electrician).toMatchObject({
-			title: 'Book electrician for office outlets #errands',
-			project: 'Renovate home office',
-			description: 'Four more outlets on the desk wall and one by the window.\nAsk about a dedicated circuit for the heater.',
-		});
-		expect(electrician!.end - electrician!.line).toBe(3);
-		expect(shelving!.date).toBe('someday');
-		expect(trays).toMatchObject({ done: true, doneDate: '2026-10-02', title: 'Order cable trays' });
+	it('reads Inbox to-dos', () => {
+		expect(doc.tasks.map((t) => [t.title, t.date, t.section])).toEqual([
+			['Renew domain for side project #admin', '2026-10-04', 'inbox'],
+			['Look into a new backup drive', null, 'inbox'],
+		]);
 	});
 
 	it('labels every line', () => {
 		expect(doc.nodes.map((n) => n.kind)).toEqual([
 			'frontmatter', 'frontmatter', 'frontmatter', 'opaque',
 			'section', 'task', 'task', 'opaque',
-			'section', 'opaque',
-			'project', 'projectDesc', 'opaque',
-			'task', 'taskDesc', 'taskDesc', 'task', 'task', 'task', 'opaque',
-			'project', 'task',
+			'section', 'projectLink', 'projectLink',
 		]);
+	});
+});
+
+describe('parse: project note', () => {
+	const doc = parse(fixture('project-note.md'));
+	const byTitle = (prefix: string) => doc.tasks.find((t) => t.title.startsWith(prefix))!;
+
+	it('reads every checkbox, nested ones included, but not fenced ones', () => {
+		expect(doc.tasks.map((t) => t.title)).toEqual([
+			'Book electrician for office outlets #errands',
+			'Order standing desk frame',
+			'Measure desk height',
+			'Pick frame colour',
+			'Pick shelving for the back wall',
+			'Order cable trays',
+		]);
+	});
+
+	it('reads descriptions at any depth', () => {
+		expect(byTitle('Book electrician').description).toBe(
+			'Four more outlets on the desk wall and one by the window.\nAsk about a dedicated circuit for the heater.',
+		);
+		expect(byTitle('Measure desk height')).toMatchObject({ indent: '    ', description: 'Sitting and standing.' });
+		expect(byTitle('Order standing').description).toBe('');
+	});
+
+	it('knows the block nested under a to-do', () => {
+		const frame = byTitle('Order standing');
+		expect(frame.end).toBe(frame.line + 1);
+		expect(doc.lines.slice(frame.line, frame.subtreeEnd)).toEqual([
+			'- [ ] Order standing desk frame [date:: 2026-10-20]',
+			'    - [ ] Measure desk height',
+			'      Sitting and standing.',
+			'    - [x] Pick frame colour [done:: 2026-10-01]',
+		]);
+	});
+
+	it('leaves headings and prose alone', () => {
+		expect(doc.inbox).toBeNull();
+		expect(doc.projectLinks).toEqual([]);
+		expect(doc.nodes[0]!.kind).toBe('opaque');
+		expect(doc.nodes[1]!.kind).toBe('opaque');
 	});
 });
 
@@ -73,7 +103,6 @@ describe('parse: tolerant of unknown content', () => {
 		expect(doc.tasks.some((t) => t.title.includes('fenced'))).toBe(false);
 		expect(doc.tasks.some((t) => t.title.includes('callout'))).toBe(false);
 		expect(doc.tasks.some((t) => t.title.includes('Cancelled'))).toBe(false);
-		// `# Inbox` inside a fence is not a second Inbox.
 		expect(doc.nodes.filter((n) => n.kind === 'section')).toHaveLength(2);
 	});
 
@@ -83,39 +112,32 @@ describe('parse: tolerant of unknown content', () => {
 			title: 'Call the insurance company #admin [priority:: high]',
 			date: '2026-10-08',
 		});
-		expect(byTitle('Book electrician')?.title).toBe('Book electrician #errands [effort:: 2h]');
 	});
 
-	it('keeps blank lines and to-do-like lines inside descriptions', () => {
+	it('keeps blank lines in descriptions, and a nested checkbox is its own to-do', () => {
 		expect(byTitle('Draft garden plan')?.description).toBe(
-			'First paragraph of the description.\n\nSecond paragraph after a blank line, see [[Garden notes|notes]].\n- [ ] looks like a subtask but is description',
+			'First paragraph of the description.\n\nSecond paragraph after a blank line, see [[Garden notes|notes]].',
 		);
-		expect(doc.tasks.some((t) => t.title.startsWith('looks like'))).toBe(false);
+		expect(byTitle('Nested checkbox')).toMatchObject({ indent: '\t', section: 'inbox' });
 	});
 
 	it('strips the common space indent', () => {
 		expect(byTitle('Spaces-indented')?.description).toBe('four spaces here\n  six spaces here');
 	});
 
-	it('treats to-dos outside Inbox and Projects as other', () => {
-		expect(byTitle('To-do under Notes')).toMatchObject({ section: 'other', project: null });
-		expect(byTitle('Old item')).toMatchObject({ section: 'other', project: null });
+	it('treats to-dos outside the Inbox as other', () => {
+		expect(byTitle('To-do under Notes')?.section).toBe('other');
+		expect(byTitle('Old item')?.section).toBe('other');
+		expect(byTitle('Stray to-do')?.section).toBe('other');
+		expect(byTitle('Task under old heading')?.section).toBe('other');
 	});
 
-	it('keeps to-dos under a sub-heading in their project', () => {
-		expect(byTitle('Under a sub-heading')?.project).toBe('Renovate home office');
-	});
-
-	it('reads multi-line project descriptions and empty projects', () => {
-		expect(doc.projects.map((p) => p.name)).toEqual(['Renovate home office', 'Empty project', 'Garden for spring']);
-		expect(doc.projects[0]!.description).toBe('Finish the office unit before winter.\nPlan in [[Office renovation]].');
-		expect(doc.projects[1]!.description).toBe('');
-		expect(doc.projects[1]!.tasks).toHaveLength(0);
+	it('reads wiki and Markdown project links, and nothing else, under # Projects', () => {
+		expect(doc.projectLinks.map((p) => p.target)).toEqual(['Renovate home office', 'Garden for spring.md', 'Archive/Old project']);
 	});
 
 	it('ends the Inbox region at the next heading', () => {
-		const notes = doc.lines.indexOf('## Notes');
-		expect(doc.inbox?.end).toBe(notes);
+		expect(doc.inbox?.end).toBe(doc.lines.indexOf('## Notes'));
 		expect(doc.projectsSection?.end).toBe(doc.lines.indexOf('# Archive'));
 	});
 });
@@ -143,6 +165,11 @@ describe('parse: edge cases', () => {
 		const doc = parse('# Inbox\n#tag on its own line\n- [ ] a\n');
 		expect(doc.tasks[0]!.section).toBe('inbox');
 	});
+
+	it('takes fenced code inside a description whole', () => {
+		const doc = parse('- [ ] a\n\t```\n\t- [ ] not a to-do\n\t```\n- [ ] b\n');
+		expect(doc.tasks.map((t) => t.title)).toEqual(['a', 'b']);
+	});
 });
 
 describe('parseTaskLine', () => {
@@ -161,7 +188,26 @@ describe('parseTaskLine', () => {
 		expect(parseTaskLine('- [ ]title')).toBeNull();
 	});
 
-	it('accepts upper-case X', () => {
+	it('accepts any indent and list marker', () => {
 		expect(parseTaskLine('- [X] a')!.done).toBe(true);
+		expect(parseTaskLine('    + [ ] b')).toMatchObject({ indent: '    ', prefix: '    + ', title: 'b' });
+		expect(parseTaskLine('2. [ ] c')).toMatchObject({ prefix: '2. ', title: 'c' });
+		expect(parseTaskLine('> - [ ] quoted')).toBeNull();
+	});
+});
+
+describe('projectLinkTarget', () => {
+	it.each([
+		['- [[Note]]', 'Note'],
+		['* [[Folder/Note|Alias]]', 'Folder/Note'],
+		['- [[Note#Heading]]', 'Note'],
+		['- [Note](Folder/My%20Note.md)', 'Folder/My Note.md'],
+		['- [Note](<Folder/My Note.md>)', 'Folder/My Note.md'],
+	])('%s → %s', (line, target) => {
+		expect(projectLinkTarget(line)).toBe(target);
+	});
+
+	it.each(['- [[Note]] and text', '- plain', '[[Note]]', '- [ ] [[Note]]'])('%s → null', (line) => {
+		expect(projectLinkTarget(line)).toBeNull();
 	});
 });

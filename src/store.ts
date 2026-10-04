@@ -1,18 +1,35 @@
-import { App, Notice, TFile } from 'obsidian';
+import { App, Notice, TAbstractFile, TFile } from 'obsidian';
 import { applyEdits, mapLine } from './model/apply';
+import type { ProjectInfo, Source } from './model/lists';
 import { parse } from './model/parse';
-import { PatchConflict, type LineRef } from './model/patch';
+import {
+	addProjectLink,
+	addTask,
+	extractTask,
+	insertTaskLines,
+	PatchConflict,
+	refOf,
+	removeProjectLink,
+	replaceProjectLink,
+	type LineRef,
+	type NewTask,
+} from './model/patch';
 import type { Doc, LineEdit } from './model/types';
+import { notePath, projectNameError, resolveProjects } from './projects';
+
+/** A to-do's location: the note it is in and its line there. */
+export interface TaskRef {
+	path: string;
+	ref: LineRef;
+}
+
+/** A to-do location that `run` reads when the action executes and updates once it is applied. */
+export interface TrackBox {
+	current: TaskRef;
+}
 
 export interface RunResult {
 	ok: boolean;
-	/** The tracked line after the change, or null if it is gone. */
-	tracked: LineRef | null;
-}
-
-/** A line reference that `run` reads when the action executes and updates once it is applied. */
-export interface TrackBox {
-	current: LineRef;
 }
 
 /** Finds a line by index and exact text, or by exact text alone when it is unique. */
@@ -23,30 +40,54 @@ export function locateLine(doc: Doc, ref: LineRef): number | null {
 	return first;
 }
 
-/**
- * Holds the parsed file. The file text is the single source of truth: every action goes
- * through `vault.process`, and changes made elsewhere arrive through the vault's `modify` event.
- */
-export class Store {
+interface FileState {
+	file: TFile;
+	text: string;
 	doc: Doc;
-	private text = '';
+}
+
+/**
+ * The task file plus the project notes it links to. Each note's text is the source of
+ * truth: every action goes through `vault.process`, and changes made elsewhere arrive
+ * through vault events.
+ */
+export class Workspace {
+	master: FileState;
+	projects: ProjectInfo[] = [];
+	private notes = new Map<string, FileState>();
 	private listeners = new Set<() => void>();
 	private queue: Promise<unknown> = Promise.resolve();
 	private disposers: (() => void)[] = [];
+	private resolving: Promise<void> | null = null;
+	private resolveAgain = false;
 
 	constructor(
 		private app: App,
-		public file: TFile,
+		masterFile: TFile,
 	) {
-		this.doc = parse('');
-		const ref = app.vault.on('modify', (f) => {
-			if (f === this.file) void this.reload();
+		this.master = { file: masterFile, text: '', doc: parse('') };
+		const { vault, metadataCache } = app;
+		const vaultRefs = [
+			vault.on('modify', (f) => void this.onModify(f)),
+			vault.on('create', () => this.scheduleResolve()),
+			vault.on('delete', () => this.scheduleResolve()),
+			vault.on('rename', () => this.scheduleResolve()),
+		];
+		const cacheRef = metadataCache.on('resolved', () => this.scheduleResolve());
+		this.disposers.push(() => {
+			for (const r of vaultRefs) vault.offref(r);
+			metadataCache.offref(cacheRef);
 		});
-		this.disposers.push(() => app.vault.offref(ref));
+	}
+
+	get masterPath(): string {
+		return this.master.file.path;
 	}
 
 	async load(): Promise<void> {
-		this.setText(await this.app.vault.read(this.file));
+		const text = await this.app.vault.read(this.master.file);
+		this.master = { ...this.master, text, doc: parse(text) };
+		await this.resolve();
 	}
 
 	dispose(): void {
@@ -59,61 +100,239 @@ export class Store {
 		return () => this.listeners.delete(fn);
 	}
 
+	/** The task file first, then each project note that exists. */
+	sources(): Source[] {
+		const out: Source[] = [{ path: this.masterPath, doc: this.master.doc, project: null }];
+		for (const p of this.projects) {
+			const note = this.notes.get(p.path);
+			if (note) out.push({ path: p.path, doc: note.doc, project: p });
+		}
+		return out;
+	}
+
+	doc(path: string): Doc | null {
+		return path === this.masterPath ? this.master.doc : (this.notes.get(path)?.doc ?? null);
+	}
+
 	/**
-	 * Applies an action atomically against the latest file content. Actions run one at a time.
-	 * `box` follows a line (the to-do being edited, say) to where it ends up, and is updated
-	 * before listeners hear about the change, so the UI keeps its place.
+	 * Applies an action atomically against the latest content of one note. Actions run one
+	 * at a time. When `box` points into this note it follows the to-do to where it ends up,
+	 * and is updated before listeners hear about the change, so the UI keeps its place.
 	 */
-	run(makeEdits: (doc: Doc) => LineEdit[], box?: TrackBox): Promise<RunResult> {
+	run(path: string, makeEdits: (doc: Doc) => LineEdit[], box?: TrackBox): Promise<RunResult> {
+		const job = this.queue.then(() => this.apply(path, makeEdits, box));
+		this.queue = job;
+		return job;
+	}
+
+	/** Adds a to-do to the Inbox (project null) or to the end of a project note's to-dos. */
+	addTask(projectPath: string | null, task: NewTask): Promise<RunResult> {
+		if (projectPath === null) return this.run(this.masterPath, (d) => addTask(d, task, 'inbox'));
+		return this.run(projectPath, (d) => addTask(d, task, 'note'));
+	}
+
+	/**
+	 * Moves a to-do (and anything nested under it) to a project note, or to the Inbox when
+	 * `projectPath` is null. Given a TrackBox, it reads the to-do's location when the move
+	 * runs and points the box at the moved to-do afterwards.
+	 */
+	moveTask(source: TaskRef | TrackBox, projectPath: string | null): Promise<RunResult> {
+		const box = 'current' in source ? source : undefined;
 		const job = this.queue.then(async () => {
-			const track = box?.current;
-			let tracked: LineRef | null = null;
+			const from = box ? box.current : (source as TaskRef);
+			const to = projectPath ?? this.masterPath;
+			// To-dos elsewhere in the task file already count as Inbox items; they stay where they are.
+			if (to === from.path) return { ok: true };
+			const fromDoc = this.doc(from.path);
+			if (!fromDoc) return { ok: false };
+			let lines: string[];
 			try {
-				const out = await this.app.vault.process(this.file, (text) => {
-					const doc = parse(text);
-					const edits = makeEdits(doc);
-					if (!edits.length) return text;
-					const next = applyEdits(doc, edits);
-					if (track) {
-						const at = locateLine(doc, track);
-						const line = at === null ? null : mapLine(doc, edits, at);
-						const lines = parse(next).lines;
-						if (line !== null && lines[line] !== undefined) tracked = { line, text: lines[line] };
-					}
-					return next;
-				});
-				const doc = parse(out);
-				if (track && !tracked) {
-					// Moved rather than edited in place: find it again by its text.
-					const line = locateLine(doc, track);
-					tracked = line === null ? null : { line, text: track.text };
-				}
-				if (box && tracked) box.current = tracked;
-				this.setText(out, doc);
-				return { ok: true, tracked };
+				lines = extractTask(fromDoc, from.ref).lines;
 			} catch (e) {
-				if (e instanceof PatchConflict) {
-					new Notice(`${this.file.name} changed — please try again`);
-				} else {
-					console.error('Plainlist', e);
-					new Notice(`Plainlist could not save: ${e instanceof Error ? e.message : String(e)}`);
-				}
-				return { ok: false, tracked: null };
+				this.report(from.path, e);
+				return { ok: false };
 			}
+			// Write the copy first, so a failure can only leave a duplicate, never lose the to-do.
+			const landed: { at: TaskRef | null } = { at: null };
+			const added = await this.apply(to, (d) => {
+				const ins = insertTaskLines(d, lines, to === this.masterPath ? 'inbox' : 'note');
+				landed.at = { path: to, ref: { line: ins.edit.at + ins.offset, text: ins.edit.insert[ins.offset] ?? '' } };
+				return [ins.edit];
+			});
+			if (!added.ok) return added;
+			const removed = await this.apply(from.path, (d) => extractTask(d, from.ref).edits);
+			if (box && landed.at) box.current = landed.at;
+			this.notify();
+			return removed;
 		});
 		this.queue = job;
 		return job;
 	}
 
-	private async reload(): Promise<void> {
-		const text = await this.app.vault.read(this.file);
-		// Our own writes are already applied; only re-render for changes made elsewhere.
-		if (text !== this.text) this.setText(text);
+	// --- Projects -----------------------------------------------------------
+
+	async createProject(name: string): Promise<ProjectInfo | null> {
+		const error = projectNameError(name);
+		if (error) {
+			new Notice(error);
+			return null;
+		}
+		const folder = this.app.fileManager.getNewFileParent(this.masterPath);
+		const path = notePath(folder.path, name);
+		if (this.app.vault.getAbstractFileByPath(path)) {
+			new Notice(`${path} already exists. Pick it from the list to add it as a project.`);
+			return null;
+		}
+		const file = await this.app.vault.create(path, '');
+		return this.importProject(file);
 	}
 
-	private setText(text: string, doc = parse(text)): void {
-		this.text = text;
-		this.doc = doc;
+	async importProject(file: TFile): Promise<ProjectInfo | null> {
+		const link = this.app.fileManager.generateMarkdownLink(file, this.masterPath);
+		const res = await this.run(this.masterPath, (d) => addProjectLink(d, link));
+		if (!res.ok) return null;
+		await this.resolve();
+		return this.projects.find((p) => p.path === file.path) ?? null;
+	}
+
+	/** Removes the project from Plainlist. The note itself is left alone. */
+	removeProject(project: ProjectInfo): Promise<RunResult> {
+		return this.run(this.masterPath, (d) => removeProjectLink(d, refOf(project)));
+	}
+
+	/** Renames the project's note. Obsidian updates links if the user allows it; otherwise we fix ours. */
+	async renameProject(project: ProjectInfo, name: string): Promise<boolean> {
+		const error = projectNameError(name);
+		const file = this.app.vault.getAbstractFileByPath(project.path);
+		if (error || !(file instanceof TFile)) {
+			new Notice(error ?? 'The project note was not found.');
+			return false;
+		}
+		const path = notePath(file.parent?.path ?? '/', name);
+		if (path === file.path) return true;
+		if (this.app.vault.getAbstractFileByPath(path)) {
+			new Notice(`${path} already exists.`);
+			return false;
+		}
+		await this.app.fileManager.renameFile(file, path);
+		const text = await this.app.vault.read(this.master.file);
+		if (locateLine(parse(text), refOf(project)) !== null) {
+			const link = this.app.fileManager.generateMarkdownLink(file, this.masterPath);
+			await this.run(this.masterPath, (d) => replaceProjectLink(d, refOf(project), link));
+		}
+		await this.resolve();
+		return true;
+	}
+
+	// --- Internals ----------------------------------------------------------
+
+	private state(path: string): FileState | null {
+		return path === this.masterPath ? this.master : (this.notes.get(path) ?? null);
+	}
+
+	private async apply(path: string, makeEdits: (doc: Doc) => LineEdit[], box?: TrackBox): Promise<RunResult> {
+		const state = this.state(path);
+		if (!state) {
+			new Notice('Plainlist: that note is no longer available.');
+			return { ok: false };
+		}
+		const track = box?.current.path === path ? box.current.ref : undefined;
+		let tracked: LineRef | null = null;
+		try {
+			const out = await this.app.vault.process(state.file, (text) => {
+				const doc = parse(text);
+				const edits = makeEdits(doc);
+				if (!edits.length) return text;
+				const next = applyEdits(doc, edits);
+				if (track) {
+					const at = locateLine(doc, track);
+					const line = at === null ? null : mapLine(doc, edits, at);
+					const lines = parse(next).lines;
+					if (line !== null && lines[line] !== undefined) tracked = { line, text: lines[line] };
+				}
+				return next;
+			});
+			const doc = parse(out);
+			if (track && !tracked) {
+				const line = locateLine(doc, track);
+				tracked = line === null ? null : { line, text: track.text };
+			}
+			if (box && tracked) box.current = { path, ref: tracked };
+			state.text = out;
+			state.doc = doc;
+			if (state === this.master) await this.resolve();
+			else this.notify();
+			return { ok: true };
+		} catch (e) {
+			this.report(path, e);
+			return { ok: false };
+		}
+	}
+
+	private report(path: string, e: unknown): void {
+		if (e instanceof PatchConflict) {
+			new Notice(`${path.split('/').pop() ?? path} changed — please try again`);
+		} else {
+			console.error('Plainlist', e);
+			new Notice(`Plainlist could not save: ${e instanceof Error ? e.message : String(e)}`);
+		}
+	}
+
+	private async onModify(f: TAbstractFile): Promise<void> {
+		if (!(f instanceof TFile)) return;
+		const state = this.state(f.path);
+		if (!state) return;
+		const text = await this.app.vault.read(f);
+		// Our own writes are already applied; only re-render for changes made elsewhere.
+		if (text === state.text) return;
+		state.text = text;
+		state.doc = parse(text);
+		if (state === this.master) await this.resolve();
+		else this.notify();
+	}
+
+	private scheduleResolve(): void {
+		window.setTimeout(() => void this.resolve(), 0);
+	}
+
+	/** Re-reads which notes are projects, loading any newly linked ones. Calls made meanwhile re-run it. */
+	private resolve(): Promise<void> {
+		if (this.resolving) {
+			this.resolveAgain = true;
+			return this.resolving;
+		}
+		this.resolving = (async () => {
+			try {
+				do {
+					this.resolveAgain = false;
+					await this.resolveOnce();
+				} while (this.resolveAgain);
+			} finally {
+				this.resolving = null;
+			}
+		})();
+		return this.resolving;
+	}
+
+	private async resolveOnce(): Promise<void> {
+		const resolved = resolveProjects(this.app, this.master.file, this.master.doc);
+		const next = new Map<string, FileState>();
+		for (const p of resolved) {
+			if (!p.file) continue;
+			const existing = this.notes.get(p.path);
+			if (existing && existing.file === p.file) {
+				next.set(p.path, existing);
+			} else {
+				const text = await this.app.vault.read(p.file);
+				next.set(p.path, { file: p.file, text, doc: parse(text) });
+			}
+		}
+		this.notes = next;
+		this.projects = resolved.map(({ file: _file, ...info }) => info);
+		this.notify();
+	}
+
+	private notify(): void {
 		for (const fn of this.listeners) fn();
 	}
 }

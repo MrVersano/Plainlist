@@ -3,7 +3,7 @@ import { h, render } from 'preact';
 import { NEW_TODO_COMMAND, VIEW_ICON, VIEW_TYPE } from '../constants';
 import type { ListId } from '../model/lists';
 import type PlainlistPlugin from '../main';
-import { Store } from '../store';
+import { Workspace } from '../store';
 import { App } from './components/App';
 import { EnvContext, type Env } from './env';
 import { confirmModal, promptModal } from './modals';
@@ -13,12 +13,12 @@ const LIST_KINDS = new Set(['inbox', 'today', 'upcoming', 'nodate', 'someday', '
 
 function isListId(value: unknown): value is ListId {
 	if (!value || typeof value !== 'object') return false;
-	const v = value as { kind?: unknown; name?: unknown };
-	return typeof v.kind === 'string' && LIST_KINDS.has(v.kind) && (v.kind !== 'project' || typeof v.name === 'string');
+	const v = value as { kind?: unknown; path?: unknown };
+	return typeof v.kind === 'string' && LIST_KINDS.has(v.kind) && (v.kind !== 'project' || typeof v.path === 'string');
 }
 
 export class PlainlistView extends FileView {
-	store: Store | null = null;
+	workspace: Workspace | null = null;
 	list: ListId = { kind: 'today' };
 	private root: HTMLElement | null = null;
 
@@ -62,21 +62,21 @@ export class PlainlistView extends FileView {
 	}
 
 	async onLoadFile(file: TFile): Promise<void> {
-		this.store = new Store(this.app, file);
-		await this.store.load();
-		this.mount(file, this.store);
+		this.workspace = new Workspace(this.app, file);
+		await this.workspace.load();
+		this.mount(this.workspace);
 	}
 
 	async onUnloadFile(): Promise<void> {
 		this.unmount();
-		this.store?.dispose();
-		this.store = null;
+		this.workspace?.dispose();
+		this.workspace = null;
 	}
 
 	async onClose(): Promise<void> {
 		this.unmount();
-		this.store?.dispose();
-		this.store = null;
+		this.workspace?.dispose();
+		this.workspace = null;
 	}
 
 	getState(): Record<string, unknown> {
@@ -88,7 +88,7 @@ export class PlainlistView extends FileView {
 		if (isListId(list) && JSON.stringify(list) !== JSON.stringify(this.list)) {
 			this.list = list;
 			// Re-mount so the UI starts on the restored list.
-			if (this.store && this.file) this.mount(this.file, this.store);
+			if (this.workspace) this.mount(this.workspace);
 		}
 		await super.setState(state, result);
 	}
@@ -98,19 +98,18 @@ export class PlainlistView extends FileView {
 		this.plugin.openCapture(this.file, list);
 	}
 
-	private mount(file: TFile, store: Store): void {
+	private mount(workspace: Workspace): void {
 		this.unmount();
 		this.root = this.contentEl.createDiv({ cls: 'pl-host' });
 		const env: Env = {
 			app: this.app,
-			file,
-			store,
+			workspace,
 			clock: this.plugin.clock,
 			component: this,
 			weekStart: () => this.plugin.weekStart(),
 			openCapture: (list) => this.openCapture(list),
 			confirm: (title, message, cta) => confirmModal(this.app, title, message, cta),
-			prompt: (title, placeholder) => promptModal(this.app, title, placeholder),
+			prompt: (title, placeholder, initial, cta) => promptModal(this.app, title, placeholder, initial, cta),
 			hint: () => (Platform.isMobile ? null : { hotkey: hotkeyLabel(this.app, NEW_TODO_COMMAND) }),
 		};
 		render(

@@ -56,8 +56,18 @@ export function Checkbox({ done, title, onToggle }: { done: boolean; title: stri
 }
 
 /** Markdown rendered by Obsidian, so links, tags and embeds behave natively. */
-export function Markdown({ text, class: cls, onClick }: { text: string; class?: string; onClick?: () => void }) {
-	const { app, file } = useEnv();
+export function Markdown({
+	text,
+	sourcePath,
+	class: cls,
+	onClick,
+}: {
+	text: string;
+	sourcePath: string;
+	class?: string;
+	onClick?: () => void;
+}) {
+	const { app } = useEnv();
 	const el = useRef<HTMLDivElement>(null);
 	useEffect(() => {
 		const target = el.current;
@@ -65,15 +75,15 @@ export function Markdown({ text, class: cls, onClick }: { text: string; class?: 
 		const owner = new ObsidianComponent();
 		owner.load();
 		target.empty();
-		void MarkdownRenderer.render(app, text, target, file.path, owner);
+		void MarkdownRenderer.render(app, text, target, sourcePath, owner);
 		return () => owner.unload();
-	}, [text, file.path]);
+	}, [text, sourcePath]);
 	return (
 		<div
 			ref={el}
 			class={`pl-markdown markdown-rendered ${cls ?? ''}`}
 			onClick={(evt) => {
-				if (!handleRenderedClick(app, evt, file.path)) onClick?.();
+				if (!handleRenderedClick(app, evt, sourcePath)) onClick?.();
 			}}
 		/>
 	);
@@ -104,12 +114,14 @@ export function AutoTextarea(props: TextareaHTMLAttributes<HTMLTextAreaElement> 
  */
 export function MarkdownField({
 	value,
+	sourcePath,
 	placeholder,
 	onInput,
 	onBlur,
 	class: cls,
 }: {
 	value: string;
+	sourcePath: string;
 	placeholder: string;
 	onInput: (value: string) => void;
 	onBlur?: () => void;
@@ -117,7 +129,7 @@ export function MarkdownField({
 }) {
 	const [editing, setEditing] = useState(false);
 	if (!editing && value.trim()) {
-		return <Markdown text={value} class={`pl-markdown-field ${cls ?? ''}`} onClick={() => setEditing(true)} />;
+		return <Markdown text={value} sourcePath={sourcePath} class={`pl-markdown-field ${cls ?? ''}`} onClick={() => setEditing(true)} />;
 	}
 	return (
 		<AutoTextarea

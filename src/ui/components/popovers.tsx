@@ -78,9 +78,10 @@ export function ProjectPicker({
 	onPick,
 	onClose,
 }: {
-	projects: string[];
+	/** Projects in sidebar order; values are note paths. */
+	projects: { name: string; path: string }[];
 	current: string | null;
-	onPick: (project: string | null) => void;
+	onPick: (projectPath: string | null) => void;
 	onClose: () => void;
 }) {
 	const [filter, setFilter] = useState('');
@@ -89,7 +90,7 @@ export function ProjectPicker({
 	const input = useAutoFocus<HTMLInputElement>();
 	useOutsideClick(wrap, onClose);
 
-	const all: Choice[] = [{ label: 'Inbox', value: null }, ...projects.map((p) => ({ label: p, value: p }))];
+	const all: Choice[] = [{ label: 'Inbox', value: null }, ...projects.map((p) => ({ label: p.name, value: p.path }))];
 	const q = filter.trim().toLowerCase();
 	const choices = q ? all.filter((c) => c.label.toLowerCase().includes(q)) : all;
 	const index = Math.min(active, Math.max(choices.length - 1, 0));
@@ -131,7 +132,7 @@ export function ProjectPicker({
 						type="button"
 						role="option"
 						aria-selected={i === index}
-						key={c.label}
+						key={c.value ?? 'inbox'}
 						class={`pl-project-option${i === index ? ' is-active' : ''}${c.value === current ? ' is-current' : ''}`}
 						onMouseEnter={() => setActive(i)}
 						onClick={() => onPick(c.value)}
