@@ -1,7 +1,7 @@
 {
 	"name": "plainlist",
-	"version": "0.1.0",
-	"description": "Show one Markdown note as a clean, minimal task manager.",
+	"version": "1.0.0",
+	"description": "Turn your notes into a minimal task manager, with an Inbox, Today and Upcoming lists, and projects that are ordinary notes.",
 	"main": "main.js",
 	"type": "module",
 	"private": true,
@@ -15,7 +15,7 @@
 		"lint": "eslint ."
 	},
 	"keywords": [],
-	"license": "0-BSD",
+	"license": "MIT",
 	"devDependencies": {
 		"@eslint/js": "^9.39.5",
 		"@types/node": "^22.20.5",

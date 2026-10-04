@@ -14,6 +14,18 @@ Plainlist turns your notes into a clean, minimal task manager in Obsidian. A tas
 |---|---|
 | ![Upcoming](assets/upcoming.png) | ![Project](assets/project.png) |
 
+Quick capture recognises dates as you type and takes them out of the title:
+
+![Quick capture](assets/capture.png)
+
+## Installing
+
+In Obsidian, open **Settings → Community plugins → Browse**, search for **Plainlist**, then install and enable it.
+
+To install by hand, download `main.js`, `manifest.json` and `styles.css` from the [latest release](https://github.com/MrVersano/Plainlist/releases/latest) into `<your vault>/.obsidian/plugins/plainlist/`, then enable Plainlist under **Settings → Community plugins**.
+
+Plainlist needs Obsidian 1.13 or later, and works on desktop and mobile.
+
 ## Getting started
 
 Run **Plainlist: Open** from the command palette (or click the ribbon icon). It opens `Tasks.md`, creating it if needed. Any note with `plainlist: true` in its properties opens in the Plainlist view; use the header button or **Plainlist: Switch between task list and Markdown** to see the raw Markdown.
@@ -117,4 +129,4 @@ The file model (`src/model/`) and date parsing (`src/dates/`) have no Obsidian i
 ## Releasing
 
 1. `npm version patch` (or `minor` / `major`) updates `manifest.json`, `package.json` and `versions.json`.
-2. Push the tag (`git push --follow-tags`). The release workflow builds the plugin and creates a draft GitHub release with `main.js`, `manifest.json` and `styles.css`.
+2. Push the commit and tag (`git push --follow-tags`). The release workflow builds the plugin and publishes a GitHub release with `main.js`, `manifest.json` and `styles.css`.

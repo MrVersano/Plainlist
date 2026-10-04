@@ -1,9 +1,10 @@
 {
 	"id": "plainlist",
 	"name": "Plainlist",
-	"version": "0.1.0",
+	"version": "1.0.0",
 	"minAppVersion": "1.13.0",
-	"description": "Show one Markdown note as a clean, minimal task manager.",
+	"description": "Turn your notes into a minimal task manager, with an Inbox, Today and Upcoming lists, and projects that are ordinary notes.",
 	"author": "Kobi Versano",
+	"authorUrl": "https://github.com/MrVersano",
 	"isDesktopOnly": false
 }
