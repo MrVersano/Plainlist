@@ -11,8 +11,9 @@ if you want to view the source, please visit the github repository of this plugi
 
 const prod = process.argv[2] === 'production';
 
-// Dev builds go straight into the test vault so Hot Reload picks them up.
-const outdir = prod ? '.' : 'test-vault/.obsidian/plugins/plainlist';
+// Dev builds go straight into a vault (test-vault/ unless PLAINLIST_VAULT is set) so Hot Reload picks them up.
+const vault = process.env.PLAINLIST_VAULT || 'test-vault';
+const outdir = prod ? '.' : `${vault}/.obsidian/plugins/plainlist`;
 
 const copyManifest = {
 	name: 'copy-manifest',

@@ -13,7 +13,9 @@
 		"skipLibCheck": true,
 		"forceConsistentCasingInFileNames": true,
 		"allowSyntheticDefaultImports": true,
-		"lib": ["ES2021", "DOM"]
+		"lib": ["ES2021", "DOM"],
+		"jsx": "react-jsx",
+		"jsxImportSource": "preact"
 	},
-	"include": ["src/**/*.ts", "tests/**/*.ts"]
+	"include": ["src/**/*.ts", "src/**/*.tsx", "tests/**/*.ts"]
 }

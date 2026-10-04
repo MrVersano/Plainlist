@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyEdits, patchText } from '../src/model/apply';
+import { applyEdits, mapLine, patchText } from '../src/model/apply';
 import { parse } from '../src/model/parse';
 import {
 	addProject,
@@ -338,4 +338,29 @@ describe('preservation under random actions', () => {
 			}
 		});
 	}
+});
+
+describe('mapLine', () => {
+	it('follows a line through inserts, deletes and replacements', () => {
+		const doc = parse('a\nb\nc\nd\n');
+		const edits: LineEdit[] = [
+			{ at: 0, delete: 0, insert: ['x', 'y'] },
+			{ at: 1, delete: 1, insert: ['B'] },
+			{ at: 2, delete: 1, insert: [] },
+		];
+		expect(applyEdits(doc, edits)).toBe('x\ny\na\nB\nd\n');
+		expect(mapLine(doc, edits, 0)).toBe(2);
+		expect(mapLine(doc, edits, 1)).toBe(3);
+		expect(mapLine(doc, edits, 2)).toBeNull();
+		expect(mapLine(doc, edits, 3)).toBe(4);
+	});
+
+	it('tracks a to-do through a title edit plus description edit', () => {
+		const doc = parse(example);
+		const t = task(doc, 'Book electrician');
+		const edits = [...setTaskTitle(doc, refOf(t), 'Book an electrician'), ...setTaskDescription(doc, refOf(t), 'Short.')];
+		const out = parse(applyEdits(doc, edits));
+		const line = mapLine(doc, edits, t.line)!;
+		expect(out.lines[line]).toBe('- [ ] Book an electrician [date:: 2026-10-04]');
+	});
 });

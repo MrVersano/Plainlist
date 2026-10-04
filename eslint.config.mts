@@ -36,7 +36,7 @@ export default defineConfig(
 	...obsidianmd.configs.recommended,
 	{
 		rules: {
-			'obsidianmd/ui/sentence-case': ['warn', { brands: ['Plainlist'] }],
+			'obsidianmd/ui/sentence-case': ['warn', { brands: ['Plainlist', 'Markdown'] }],
 		},
 	},
 	{

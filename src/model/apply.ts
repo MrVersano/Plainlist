@@ -40,3 +40,24 @@ export function patchText(text: string, makeEdits: (doc: Doc) => LineEdit[]): st
 	const doc = parse(text);
 	return applyEdits(doc, makeEdits(doc));
 }
+
+/**
+ * Where line `line` of the original document ends up after `edits`, or null if it was removed.
+ * A line replaced one-for-one by a single new line maps to that new line.
+ */
+export function mapLine(doc: Doc, edits: LineEdit[], line: number): number | null {
+	const replacedBy = edits.find((e) => e.at === line && e.delete === 1 && e.insert.length === 1);
+	let out = 0;
+	for (let i = 0; i <= doc.lines.length; i++) {
+		const before = edits.filter((e) => e.at === i);
+		for (const e of before) {
+			if (i === line && e === replacedBy) return out;
+			out += e.insert.length;
+		}
+		if (i === line) {
+			return edits.some((e) => i >= e.at && i < e.at + e.delete) ? null : out;
+		}
+		if (i < doc.lines.length && !edits.some((e) => i >= e.at && i < e.at + e.delete)) out++;
+	}
+	return null;
+}
