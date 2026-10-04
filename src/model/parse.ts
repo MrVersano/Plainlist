@@ -9,7 +9,8 @@ const HEADING_RE = /^(#{1,6})(?:[ \t]+(.*?))?[ \t]*$/;
 const FENCE_RE = /^[ \t]*(`{3,}|~{3,})/;
 const BLANK_RE = /^\s*$/;
 const PLAINLIST_RE = /^plainlist:[ \t]*true[ \t]*$/i;
-const LINK_ITEM_RE = /^[ \t]*[-*+][ \t]+(?:\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]|\[[^\]]*\]\(<?([^)>]+)>?\))[ \t]*$/;
+const LINK_ITEM_RE =
+	/^[ \t]*[-*+][ \t]+(?:\[([ xX])\][ \t]+)?(\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]|\[[^\]]*\]\(<?([^)>]+)>?\))(?:[ \t]+\[done::[ \t]*(\d{4}-\d{2}-\d{2})[ \t]*\])?[ \t]*$/;
 
 export function splitLines(text: string): { lines: string[]; eols: string[] } {
 	const lines: string[] = [];
@@ -51,16 +52,32 @@ export function indentWidth(line: string): number {
 	return w;
 }
 
-/** The link target of a `- [[Note]]` / `- [Note](Note.md)` line, or null. */
-export function projectLinkTarget(line: string): string | null {
+export interface ParsedProjectLink {
+	target: string;
+	link: string;
+	done: boolean;
+	doneDate: string | null;
+}
+
+/** Reads a `- [[Note]]` / `- [Note](Note.md)` line, optionally `- [x] [[Note]] [done:: …]`; null if it is not one. */
+export function parseProjectLink(line: string): ParsedProjectLink | null {
 	const m = LINK_ITEM_RE.exec(line);
 	if (!m) return null;
-	if (m[1]) return m[1].trim();
-	try {
-		return decodeURI((m[2] ?? '').trim());
-	} catch {
-		return (m[2] ?? '').trim();
+	let target = (m[3] ?? '').trim();
+	if (!target) {
+		try {
+			target = decodeURI((m[4] ?? '').trim());
+		} catch {
+			target = (m[4] ?? '').trim();
+		}
 	}
+	const done = !!m[1] && m[1] !== ' ';
+	return { target, link: m[2] ?? '', done, doneDate: done ? (m[5] ?? null) : null };
+}
+
+/** The link target of a project link line, or null. */
+export function projectLinkTarget(line: string): string | null {
+	return parseProjectLink(line)?.target ?? null;
 }
 
 /** Strips the indentation the description lines share. Blank lines become empty. */
@@ -165,10 +182,10 @@ export function parse(text: string): Doc {
 		}
 
 		if (ctx === 'projects') {
-			const target = projectLinkTarget(line);
-			if (target) {
+			const link = parseProjectLink(line);
+			if (link) {
 				kinds[i] = 'projectLink';
-				projectLinks.push({ line: i, text: line, target });
+				projectLinks.push({ line: i, text: line, ...link });
 				continue;
 			}
 		}

@@ -19,6 +19,8 @@ export interface ProjectActions {
 	rename: (project: ProjectInfo, name: string) => void;
 	remove: (project: ProjectInfo) => void;
 	open: (project: ProjectInfo) => void;
+	complete: (project: ProjectInfo) => void;
+	reopen: (project: ProjectInfo) => void;
 }
 
 export function listLabel(list: ListId, projects: ProjectInfo[]): string {
@@ -28,6 +30,11 @@ export function listLabel(list: ListId, projects: ProjectInfo[]): string {
 
 export function projectMenu(project: ProjectInfo, actions: ProjectActions, onRename: () => void): Menu {
 	const menu = new Menu();
+	menu.addItem((i) =>
+		project.done
+			? i.setTitle('Reopen project').setIcon('rotate-ccw').onClick(() => actions.reopen(project))
+			: i.setTitle('Complete project').setIcon('check').onClick(() => actions.complete(project)),
+	);
 	if (project.exists) {
 		menu.addItem((i) => i.setTitle('Open note').setIcon('file-text').onClick(() => actions.open(project)));
 		menu.addItem((i) => i.setTitle('Rename').setIcon('pencil').onClick(onRename));
@@ -214,7 +221,7 @@ function ProjectItem({
 	return (
 		<button
 			type="button"
-			class={`pl-nav-item${selected ? ' is-active' : ''}${project.exists ? '' : ' is-missing'}`}
+			class={`pl-nav-item${selected ? ' is-active' : ''}${project.exists ? '' : ' is-missing'}${project.done ? ' is-done' : ''}`}
 			aria-current={selected ? 'page' : undefined}
 			title={project.exists ? project.path : `Note not found: ${project.path}`}
 			onClick={onSelect}
@@ -246,6 +253,14 @@ export function Sidebar({
 	actions: ProjectActions;
 }) {
 	const [adding, setAdding] = useState(false);
+	const open = projects.filter((p) => !p.done);
+	const done = projects.filter((p) => p.done);
+	const [showDone, setShowDone] = useState(false);
+	// Viewing a completed project: keep it visible in the sidebar.
+	const viewingDone = list.kind === 'project' && done.some((p) => p.path === list.path);
+	useEffect(() => {
+		if (viewingDone) setShowDone(true);
+	}, [viewingDone]);
 	const countOf = (id: ListId): number => (id.kind === 'inbox' ? counts.inbox : id.kind === 'today' ? counts.today : 0);
 
 	return (
@@ -267,7 +282,7 @@ export function Sidebar({
 				);
 			})}
 			<div class="pl-nav-header">Projects</div>
-			{projects.map((p) => (
+			{open.map((p) => (
 				<ProjectItem
 					key={p.path}
 					project={p}
@@ -288,6 +303,22 @@ export function Sidebar({
 					+ New project
 				</button>
 			)}
+			{done.length > 0 && (
+				<button type="button" class="pl-nav-completed" aria-expanded={showDone} onClick={() => setShowDone(!showDone)}>
+					{showDone ? 'Hide completed' : `${done.length} completed`}
+				</button>
+			)}
+			{showDone &&
+				done.map((p) => (
+					<ProjectItem
+						key={p.path}
+						project={p}
+						count={0}
+						selected={list.kind === 'project' && list.path === p.path}
+						onSelect={() => onSelect({ kind: 'project', path: p.path })}
+						actions={actions}
+					/>
+				))}
 		</nav>
 	);
 }

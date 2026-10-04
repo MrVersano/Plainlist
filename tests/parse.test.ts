@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { applyEdits } from '../src/model/apply';
-import { parse, projectLinkTarget } from '../src/model/parse';
+import { parse, parseProjectLink, projectLinkTarget } from '../src/model/parse';
 import { parseTaskLine } from '../src/model/taskLine';
 import { allFixtures, fixture, variants } from './helpers';
 
@@ -207,7 +207,18 @@ describe('projectLinkTarget', () => {
 		expect(projectLinkTarget(line)).toBe(target);
 	});
 
-	it.each(['- [[Note]] and text', '- plain', '[[Note]]', '- [ ] [[Note]]'])('%s → null', (line) => {
+	it.each(['- [[Note]] and text', '- plain', '[[Note]]', '- [ ] [[Note]] and text', '- [x] [[Note]] [date:: 2026-10-04]'])('%s → null', (line) => {
 		expect(projectLinkTarget(line)).toBeNull();
+	});
+
+	it('reads completed and explicitly open project links', () => {
+		expect(parseProjectLink('- [x] [[Shed|The shed]] [done:: 2026-10-03]')).toEqual({
+			target: 'Shed',
+			link: '[[Shed|The shed]]',
+			done: true,
+			doneDate: '2026-10-03',
+		});
+		expect(parseProjectLink('- [X] [Shed](Shed.md)')).toMatchObject({ target: 'Shed.md', done: true, doneDate: null });
+		expect(parseProjectLink('- [ ] [[Shed]]')).toMatchObject({ done: false, doneDate: null });
 	});
 });

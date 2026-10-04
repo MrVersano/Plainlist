@@ -13,7 +13,9 @@ import {
 import { deleteTask, refOf, restoreLines, setTaskDone, type Removed } from '../../model/patch';
 import { locateLine, type TrackBox } from '../../store';
 import { useEnv, useToday, useWorkspace } from '../env';
+import { themeCheckboxRadius } from '../obsidian';
 import { ProjectSuggestModal } from '../ProjectSuggestModal';
+import { Checkbox } from './bits';
 import { LISTS, listLabel, projectMenu, Sidebar, type ProjectActions } from './Sidebar';
 import { TaskEditor, TaskRow, type RowActions } from './TaskRow';
 
@@ -63,27 +65,34 @@ function ProjectHeader({ project, actions }: { project: ProjectInfo; actions: Pr
 
 	return (
 		<>
-			<input
-				class="pl-title pl-title-input"
-				type="text"
-				aria-label="Project name"
-				value={name}
-				disabled={!project.exists}
-				onFocus={() => (focused.current = true)}
-				onInput={(e) => setName(e.currentTarget.value)}
-				onBlur={() => {
-					focused.current = false;
-					commit();
-				}}
-				onKeyDown={(e) => {
-					if (e.isComposing) return;
-					if (e.key === 'Enter') e.currentTarget.blur();
-					if (e.key === 'Escape') {
-						setName(project.name);
-						e.currentTarget.blur();
-					}
-				}}
-			/>
+			<div class="pl-title-row">
+				<Checkbox
+					done={project.done}
+					title={project.name}
+					onToggle={() => (project.done ? actions.reopen(project) : actions.complete(project))}
+				/>
+				<input
+					class="pl-title pl-title-input"
+					type="text"
+					aria-label="Project name"
+					value={name}
+					disabled={!project.exists}
+					onFocus={() => (focused.current = true)}
+					onInput={(e) => setName(e.currentTarget.value)}
+					onBlur={() => {
+						focused.current = false;
+						commit();
+					}}
+					onKeyDown={(e) => {
+						if (e.isComposing) return;
+						if (e.key === 'Enter') e.currentTarget.blur();
+						if (e.key === 'Escape') {
+							setName(project.name);
+							e.currentTarget.blur();
+						}
+					}}
+				/>
+			</div>
 			{project.exists ? (
 				<button type="button" class="pl-open-note" onClick={() => actions.open(project)}>
 					Open note ↗
@@ -158,6 +167,17 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		const observer = new ResizeObserver(() => setNarrow(el.clientWidth < NARROW));
 		observer.observe(el);
 		return () => observer.disconnect();
+	}, []);
+
+	// Match the theme's checkbox shape (round, or square with its corner radius).
+	useEffect(() => {
+		const apply = (): void => {
+			const el = root.current;
+			if (el) el.setCssProps({ '--pl-check-radius': themeCheckboxRadius(el.ownerDocument) });
+		};
+		apply();
+		const ref = app.workspace.on('css-change', apply);
+		return () => app.workspace.offref(ref);
 	}, []);
 
 	useEffect(() => {
@@ -250,6 +270,17 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 				});
 		},
 		open: (p) => void app.workspace.openLinkText(p.path, workspace.masterPath, 'tab'),
+		complete: (p) => {
+			const open = workspace.openTaskCount(p);
+			const go = (): void => {
+				void workspace.completeProject(p, today).then((undo) => undo && setToast({ message: 'Completed', undo }));
+			};
+			if (!open) return go();
+			void env
+				.confirm(`Complete “${p.name}”?`, `Its ${open} open to-do${open === 1 ? '' : 's'} will be marked as done too.`, 'Complete', false)
+				.then((ok) => ok && go());
+		},
+		reopen: (p) => void workspace.reopenProject(p),
 	};
 
 	const addProject = (): void => {
@@ -311,7 +342,7 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 					key="expanded"
 					item={item}
 					box={expanded}
-					projects={projects}
+					projects={projects.filter((p) => !p.done)}
 					today={today}
 					onCollapse={collapse}
 					onToggle={() => toggle(item)}
@@ -335,9 +366,14 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		const menu = new Menu();
 		for (const { id, label } of LISTS) menu.addItem((i) => i.setTitle(label).setChecked(sameList(id, list)).onClick(() => setList(id)));
 		if (projects.length) menu.addSeparator();
-		for (const p of projects) {
+		for (const p of [...projects.filter((x) => !x.done), ...projects.filter((x) => x.done)]) {
 			const id: ListId = { kind: 'project', path: p.path };
-			menu.addItem((i) => i.setTitle(p.name).setChecked(sameList(id, list)).onClick(() => setList(id)));
+			menu.addItem((i) =>
+				i
+					.setTitle(p.done ? `${p.name} (completed)` : p.name)
+					.setChecked(sameList(id, list))
+					.onClick(() => setList(id)),
+			);
 		}
 		menu.addSeparator();
 		menu.addItem((i) => i.setTitle('New project').setIcon('plus').onClick(addProject));
@@ -412,7 +448,18 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 									{g.sublabel && <span class="pl-group-sublabel">{g.sublabel}</span>}
 								</h2>
 							)}
-							<div class="pl-rows">{g.items.map(renderRow)}</div>
+							<div class="pl-rows">
+								{g.projects?.map((p) => (
+									<div class="pl-row is-done pl-project-row" key={`project:${p.path}`}>
+										<Checkbox done title={p.name} onToggle={() => projectActions.reopen(p)} />
+										<button type="button" class="pl-row-title" onClick={() => setList({ kind: 'project', path: p.path })}>
+											{p.name}
+										</button>
+										<span class="pl-row-meta">Project</span>
+									</div>
+								))}
+								{g.items.map(renderRow)}
+							</div>
 						</section>
 					))}
 

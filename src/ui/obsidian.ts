@@ -53,3 +53,24 @@ export function hotkeyLabel(app: App, commandId: string): string | null {
 	if (Platform.isMacOS) return hotkey.modifiers.map((m) => MAC_SYMBOLS[m] ?? m).join('') + key;
 	return [...hotkey.modifiers.map((m) => (m === 'Mod' ? 'Ctrl' : m)), key].join('+');
 }
+
+/**
+ * The corner radius the current theme gives task checkboxes, scaled to `size` pixels.
+ * Read from a real (hidden) checkbox so themes that style it with their own selectors count too.
+ */
+export function themeCheckboxRadius(doc: Document, size = 18): string {
+	const host = doc.body.createDiv({ cls: 'markdown-rendered markdown-preview-view pl-probe' });
+	const input = host
+		.createEl('ul', { cls: 'contains-task-list' })
+		.createEl('li', { cls: 'task-list-item', attr: { 'data-task': ' ' } })
+		.createEl('input', { type: 'checkbox', cls: 'task-list-item-checkbox' });
+	const style = getComputedStyle(input);
+	const radius = style.borderTopLeftRadius;
+	const width = parseFloat(style.width);
+	host.remove();
+	if (radius.endsWith('%')) return radius;
+	const px = parseFloat(radius);
+	if (!Number.isFinite(px) || !width) return 'var(--checkbox-radius, 50%)';
+	if (px >= width / 2) return '50%';
+	return `${Math.round(((px * size) / width) * 10) / 10}px`;
+}

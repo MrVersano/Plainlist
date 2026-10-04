@@ -31,7 +31,7 @@ export class CaptureModal extends Modal {
 		this.modalEl.addClass('pl-capture-modal');
 		this.containerEl.addClass('pl-capture-container');
 		const doc = parse(await this.app.vault.read(this.options.file));
-		const projects = resolveProjects(this.app, this.options.file, doc).filter((p) => p.file);
+		const projects = resolveProjects(this.app, this.options.file, doc).filter((p) => p.file && !p.done);
 		for (const p of projects) if (p.file) this.notes.set(p.path, p.file);
 		const { today, weekStart, defaultDate } = this.options;
 		const initial = this.options.project !== null && this.notes.has(this.options.project) ? this.options.project : null;

@@ -259,3 +259,39 @@ export function replaceProjectLink(doc: Doc, ref: LineRef, link: string): LineEd
 	const marker = /^[ \t]*[-*+][ \t]+/.exec(p.text)?.[0] ?? '- ';
 	return replaceLine(p.line, p.text, `${marker}${link}`);
 }
+
+/** Marks a project complete (`- [x] [[Note]] [done:: today]`) or open again (`- [[Note]]`). */
+export function setProjectDone(doc: Doc, ref: LineRef, done: boolean, today: string): LineEdit[] {
+	const p = findProjectLink(doc, ref);
+	if (p.done === done) return [];
+	const marker = /^[ \t]*[-*+][ \t]+/.exec(p.text)?.[0] ?? '- ';
+	return replaceLine(p.line, p.text, done ? `${marker}[x] ${p.link} [done:: ${today}]` : `${marker}${p.link}`);
+}
+
+/** Completes every open to-do in a note. Returns the edits and the completed lines, for undo. */
+export function completeOpenTasks(doc: Doc, today: string): { edits: LineEdit[]; completed: LineRef[] } {
+	const edits: LineEdit[] = [];
+	const completed: LineRef[] = [];
+	for (const t of doc.tasks) {
+		if (t.done) continue;
+		const text = setDone(t.text, true, today);
+		edits.push({ at: t.line, delete: 1, insert: [text] });
+		completed.push({ line: t.line, text });
+	}
+	return { edits, completed };
+}
+
+/** Reopens the given to-dos, skipping any that changed or disappeared since. */
+export function reopenTasks(doc: Doc, refs: LineRef[]): LineEdit[] {
+	const edits: LineEdit[] = [];
+	for (const ref of refs) {
+		let t: Task;
+		try {
+			t = findTask(doc, ref);
+		} catch {
+			continue;
+		}
+		if (!edits.some((e) => e.at === t.line)) edits.push(...replaceLine(t.line, t.text, setDone(t.text, false, '')));
+	}
+	return edits;
+}

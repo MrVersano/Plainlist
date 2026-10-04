@@ -9,8 +9,11 @@ import {
 	insertTaskLines,
 	PatchConflict,
 	refOf,
+	completeOpenTasks,
 	removeProjectLink,
+	reopenTasks,
 	replaceProjectLink,
+	setProjectDone,
 	restoreLines,
 	setTaskDate,
 	setTaskDescription,
@@ -271,6 +274,33 @@ describe('project links', () => {
 	});
 });
 
+describe('completing projects', () => {
+	it('checks and unchecks the link line, keeping the link as written', () => {
+		const text = '# Projects\n* [[Shed|The shed]]\n';
+		const done = run(text, (d) => setProjectDone(d, refOf(d.projectLinks[0]!), true, TODAY));
+		expect(done).toBe('# Projects\n* [x] [[Shed|The shed]] [done:: 2026-10-04]\n');
+		expect(parse(done).projectLinks[0]).toMatchObject({ done: true, doneDate: '2026-10-04', target: 'Shed' });
+		expect(run(done, (d) => setProjectDone(d, refOf(d.projectLinks[0]!), false, TODAY))).toBe(text);
+	});
+
+	it("completes a note's open to-dos and reopens exactly those", () => {
+		const doc = parse(note);
+		const { edits, completed } = completeOpenTasks(doc, TODAY);
+		const out = applyEdits(doc, edits);
+		expect(parse(out).tasks.every((t) => t.done)).toBe(true);
+		expect(out).toContain('- [x] Order cable trays [done:: 2026-10-02]\n');
+		expect(completed).toHaveLength(4);
+		expect(run(out, (d) => reopenTasks(d, completed))).toBe(note);
+	});
+
+	it('reopening skips to-dos that changed since', () => {
+		const doc = parse('- [ ] a\n- [ ] b\n');
+		const { edits, completed } = completeOpenTasks(doc, TODAY);
+		const changed = applyEdits(doc, edits).replace('- [x] a [done:: 2026-10-04]', '- [x] a, edited');
+		expect(run(changed, (d) => reopenTasks(d, completed))).toBe('- [x] a, edited\n- [ ] b\n');
+	});
+});
+
 describe('preservation under random actions', () => {
 	const text = fixture('opaque.md');
 	const original = parse(text);
@@ -301,6 +331,8 @@ describe('preservation under random actions', () => {
 					(d) => addProjectLink(d, `[[Project ${seed}-${++counter}]]`),
 					(d) => (p ? replaceProjectLink(d, refOf(p), `[[Renamed ${seed}-${++counter}]]`) : []),
 					(d) => (p && random() < 0.3 ? removeProjectLink(d, refOf(p)) : []),
+					(d) => (p ? setProjectDone(d, refOf(p), !p.done, TODAY) : []),
+					(d) => completeOpenTasks(d, TODAY).edits,
 				];
 				current = patchText(current, pick(actions)!);
 				const after = parse(current);

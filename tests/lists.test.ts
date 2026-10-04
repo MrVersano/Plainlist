@@ -37,10 +37,17 @@ const office = parse(
 );
 const garden = parse(['- [ ] Bulbs [date:: 2026-11-10]', '- [ ] Garden undated', '- [ ] Garden someday [date:: someday]'].join('\n'));
 
-const projects: ProjectInfo[] = [
-	{ path: 'Office.md', name: 'Office', line: 11, text: '- [[Office]]', exists: true },
-	{ path: 'Garden.md', name: 'Garden', line: 12, text: '- [[Garden]]', exists: true },
-];
+const project = (path: string, line: number, extra: Partial<ProjectInfo> = {}): ProjectInfo => ({
+	path,
+	name: path.replace('.md', ''),
+	line,
+	text: `- [[${path.replace('.md', '')}]]`,
+	exists: true,
+	done: false,
+	doneDate: null,
+	...extra,
+});
+const projects: ProjectInfo[] = [project('Office.md', 11), project('Garden.md', 12)];
 const sources: Source[] = [
 	// Deliberately out of sidebar order: lists must not depend on source order.
 	{ path: 'Garden.md', doc: garden, project: projects[1]! },
@@ -119,5 +126,42 @@ describe('lists', () => {
 describe('counts', () => {
 	it('counts open Inbox, Today and per-project to-dos (undated included)', () => {
 		expect(computeCounts(sources, projects, TODAY)).toEqual({ inbox: 5, today: 3, projects: { 'Office.md': 5, 'Garden.md': 3 } });
+	});
+});
+
+describe('completed projects', () => {
+	const shed = parse(['- [x] Paint the shed [done:: 2026-10-03]', '- [ ] Added to the note later [date:: 2026-10-04]'].join('\n'));
+	const shedProject = project('Shed.md', 13, { done: true, doneDate: '2026-10-03' });
+	const old = project('Old.md', 14, { done: true, doneDate: null });
+	const all = [...projects, shedProject, old];
+	const withShed: Source[] = [...sources, { path: 'Shed.md', doc: shed, project: shedProject }, { path: 'Old.md', doc: parse(''), project: old }];
+	const names = (list: ListId) => computeList(withShed, all, list, TODAY).groups.flatMap((g) => g.items.map((i) => i.task.title));
+
+	it("keeps a completed project's open to-dos out of the open lists and counts", () => {
+		for (const kind of ['inbox', 'today', 'upcoming', 'nodate', 'someday'] as const) expect(names({ kind })).not.toContain('Added to the note later');
+		expect(computeCounts(withShed, all, TODAY).today).toBe(3);
+	});
+
+	it('still shows them in the project view', () => {
+		expect(computeList(withShed, all, { kind: 'project', path: 'Shed.md' }, TODAY).groups[0]!.items.map((i) => i.task.title)).toEqual([
+			'Added to the note later',
+		]);
+	});
+
+	it('lists completed projects in Completed, in their day group, before its to-dos', () => {
+		const groups = computeList(withShed, all, { kind: 'completed' }, TODAY).groups;
+		expect(groups.map((g) => [g.label, (g.projects ?? []).map((p) => p.name), g.items.map((i) => i.task.title)])).toEqual([
+			['Today', [], ['Inbox done today']],
+			['Yesterday', ['Shed'], ['Paint the shed']],
+			['Thursday', [], ['Inbox done earlier']],
+			['September', [], ['Done long ago']],
+			['Earlier', ['Old'], ['Done without date field']],
+		]);
+	});
+
+	it('adds a day group for a project completed on a day with no to-dos', () => {
+		const lone = project('Lone.md', 15, { done: true, doneDate: '2026-10-02' });
+		const groups = computeList([...sources, { path: 'Lone.md', doc: parse(''), project: lone }], [...projects, lone], { kind: 'completed' }, TODAY).groups;
+		expect(groups.map((g) => g.label)).toEqual(['Today', 'Friday', 'Thursday', 'September', 'Earlier']);
 	});
 });

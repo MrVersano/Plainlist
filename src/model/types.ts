@@ -36,12 +36,16 @@ export interface Task {
 	section: 'inbox' | 'other';
 }
 
-/** A `- [[Note]]` line under `# Projects` in the task file. */
+/** A `- [[Note]]` line under `# Projects` in the task file; `- [x] [[Note]] [done:: …]` when completed. */
 export interface ProjectLink {
 	line: number;
 	text: string;
 	/** Link target as written: a wikilink path or a decoded Markdown link URL. */
 	target: string;
+	/** The link itself, e.g. `[[Note]]`, as it appears in the line. */
+	link: string;
+	done: boolean;
+	doneDate: string | null;
 }
 
 export interface Section {

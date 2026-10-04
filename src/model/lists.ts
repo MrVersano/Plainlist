@@ -13,6 +13,8 @@ export interface ProjectInfo {
 	text: string;
 	/** False when the link does not resolve to a note. */
 	exists: boolean;
+	done: boolean;
+	doneDate: string | null;
 }
 
 /** A note Plainlist reads: the task file (project null) or a project note. */
@@ -44,6 +46,8 @@ export interface Group {
 	label: string;
 	sublabel?: string;
 	items: Item[];
+	/** Completed list only: projects completed on this group's day, shown before its to-dos. */
+	projects?: ProjectInfo[];
 }
 
 export interface ListView {
@@ -106,13 +110,15 @@ export function computeList(sources: Source[], projects: ProjectInfo[], list: Li
 	const items = allItems(sources);
 	const rank = sourceOrder(projects);
 	const byFile = (a: Item, b: Item): number => rank(a) - rank(b) || a.task.line - b.task.line;
-	const open = items.filter((i) => !i.task.done).sort(byFile);
+	// A completed project's to-dos stay out of the open lists, even ones added to its note later.
+	const open = items.filter((i) => !i.task.done && !i.project?.done).sort(byFile);
+	const active = projects.filter((p) => !p.done);
 
 	switch (list.kind) {
 		case 'inbox':
 			return flat(open.filter((i) => !i.project));
 		case 'today': {
-			const all = items.filter((i) => isInToday(i.task, today)).sort(byFile);
+			const all = items.filter((i) => isInToday(i.task, today) && (!i.project?.done || i.task.done)).sort(byFile);
 			return flat([...all.filter((i) => isOverdue(i.task, today)), ...all.filter((i) => !isOverdue(i.task, today))]);
 		}
 		case 'upcoming': {
@@ -122,9 +128,9 @@ export function computeList(sources: Source[], projects: ProjectInfo[], list: Li
 			return { groups: grouped(future, (i) => upcomingGroup(i.task.date ?? today, today)), completed: [] };
 		}
 		case 'nodate':
-			return { groups: byProject(projects, open.filter((i) => !i.task.date && i.project)), completed: [] };
+			return { groups: byProject(active, open.filter((i) => !i.task.date && i.project)), completed: [] };
 		case 'someday':
-			return { groups: byProject(projects, open.filter((i) => i.task.date === 'someday')), completed: [] };
+			return { groups: byProject(active, open.filter((i) => i.task.date === 'someday')), completed: [] };
 		case 'completed': {
 			const done = items.filter((i) => i.task.done);
 			const dated = done
@@ -133,6 +139,17 @@ export function computeList(sources: Source[], projects: ProjectInfo[], list: Li
 			const groups = grouped(dated, (i) => completedGroup(i.task.doneDate ?? today, today));
 			const undated = done.filter((i) => !i.task.doneDate).sort(byFile);
 			if (undated.length) groups.push({ key: 'earlier', label: 'Earlier', items: undated });
+			// Completed projects join the group for their day (or Earlier), ahead of its to-dos.
+			for (const p of projects.filter((x) => x.done)) {
+				const g = p.doneDate ? completedGroup(p.doneDate, today) : { key: 'earlier', label: 'Earlier' };
+				let group = groups.find((x) => x.key === g.key);
+				if (!group) {
+					group = { ...g, items: [] };
+					const at = groups.findIndex((x) => x.key === 'earlier' || (p.doneDate !== null && x.key < g.key));
+					groups.splice(at === -1 ? groups.length : at, 0, group);
+				}
+				(group.projects ??= []).push(p);
+			}
 			return { groups, completed: [] };
 		}
 		case 'project': {
@@ -150,7 +167,7 @@ export interface Counts {
 }
 
 export function computeCounts(sources: Source[], projects: ProjectInfo[], today: string): Counts {
-	const open = allItems(sources).filter((i) => !i.task.done);
+	const open = allItems(sources).filter((i) => !i.task.done && !i.project?.done);
 	const counts: Record<string, number> = {};
 	for (const p of projects) counts[p.path] = 0;
 	for (const i of open) if (i.project) counts[i.project.path] = (counts[i.project.path] ?? 0) + 1;

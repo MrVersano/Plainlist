@@ -108,7 +108,7 @@ export class PlainlistView extends FileView {
 			component: this,
 			weekStart: () => this.plugin.weekStart(),
 			openCapture: (list) => this.openCapture(list),
-			confirm: (title, message, cta) => confirmModal(this.app, title, message, cta),
+			confirm: (title, message, cta, destructive) => confirmModal(this.app, title, message, cta, destructive),
 			prompt: (title, placeholder, initial, cta) => promptModal(this.app, title, placeholder, initial, cta),
 			hint: () => (Platform.isMobile ? null : { hotkey: hotkeyLabel(this.app, NEW_TODO_COMMAND) }),
 		};

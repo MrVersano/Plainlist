@@ -5,6 +5,9 @@ import { parse } from './model/parse';
 import {
 	addProjectLink,
 	addTask,
+	completeOpenTasks,
+	reopenTasks,
+	setProjectDone,
 	extractTask,
 	insertTaskLines,
 	PatchConflict,
@@ -193,6 +196,39 @@ export class Workspace {
 		if (!res.ok) return null;
 		await this.resolve();
 		return this.projects.find((p) => p.path === file.path) ?? null;
+	}
+
+	/** Open to-dos in a project's note. */
+	openTaskCount(project: ProjectInfo): number {
+		return this.doc(project.path)?.tasks.filter((t) => !t.done).length ?? 0;
+	}
+
+	/**
+	 * Completes a project: its note's open to-dos first, then its link in the task file.
+	 * Returns an undo that reopens the project and exactly the to-dos it completed.
+	 */
+	async completeProject(project: ProjectInfo, today: string): Promise<(() => void) | null> {
+		let completed: LineRef[] = [];
+		if (project.exists && this.openTaskCount(project) > 0) {
+			const res = await this.run(project.path, (d) => {
+				const r = completeOpenTasks(d, today);
+				completed = r.completed;
+				return r.edits;
+			});
+			if (!res.ok) return null;
+		}
+		const res = await this.run(this.masterPath, (d) => setProjectDone(d, refOf(project), true, today));
+		if (!res.ok) return null;
+		const done = { ...project, text: this.master.doc.projectLinks.find((l) => l.line === project.line)?.text ?? project.text };
+		return () => {
+			void this.reopenProject(done);
+			if (completed.length) void this.run(project.path, (d) => reopenTasks(d, completed));
+		};
+	}
+
+	/** Reopens a project. Its to-dos stay as they are. */
+	reopenProject(project: ProjectInfo): Promise<RunResult> {
+		return this.run(this.masterPath, (d) => setProjectDone(d, refOf(project), false, ''));
 	}
 
 	/** Removes the project from Plainlist. The note itself is left alone. */

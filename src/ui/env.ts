@@ -13,7 +13,7 @@ export interface Env {
 	component: Component;
 	weekStart: () => 0 | 1;
 	openCapture: (list: ListId) => void;
-	confirm: (title: string, message: string, cta: string) => Promise<boolean>;
+	confirm: (title: string, message: string, cta: string, destructive?: boolean) => Promise<boolean>;
 	prompt: (title: string, placeholder: string, initial?: string, cta?: string) => Promise<string | null>;
 	/** Desktop: "Press N…" hint; null on mobile. */
 	hint: () => { hotkey: string | null } | null;

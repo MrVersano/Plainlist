@@ -13,7 +13,7 @@ export function resolveProjects(app: App, master: TFile, doc: Doc): (ProjectInfo
 		if (seen.has(path)) continue;
 		seen.add(path);
 		const name = file?.basename ?? link.target.split('/').pop()?.replace(/\.md$/i, '') ?? link.target;
-		out.push({ path, name, line: link.line, text: link.text, exists: !!file, file });
+		out.push({ path, name, line: link.line, text: link.text, exists: !!file, done: link.done, doneDate: link.doneDate, file });
 	}
 	return out;
 }

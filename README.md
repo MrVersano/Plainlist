@@ -29,6 +29,8 @@ Click **+ New project** at the bottom of the sidebar and type:
 
 New to-dos for a project go after the last to-do in its note. Renaming a project renames its note. **Remove from Plainlist** (right-click a project) removes the link only: the note and its checkboxes stay as they are.
 
+To finish a project, tick the checkbox next to its title (or right-click it and choose **Complete project**). Any open to-dos in its note are marked done too, after you confirm, and you can undo for a few seconds. Completed projects move under a quiet "N completed" toggle at the bottom of the sidebar and appear in the Completed list; right-click one to reopen it.
+
 ## File format
 
 The task file:
@@ -45,6 +47,7 @@ plainlist: true
 # Projects
 - [[Renovate home office]]
 - [[Q4 Planning]]
+- [x] [[Garden for spring]] [done:: 2026-10-03]
 ```
 
 A project note, `Renovate home office.md`, can contain anything; Plainlist reads its checkboxes:
@@ -66,6 +69,7 @@ The electrician is free Thursday mornings.
 |---|---|
 | Inbox | To-dos under `# Inbox` in the task file |
 | Project | A link list item (`- [[Note]]` or `- [Note](Note.md)`) under `# Projects` in the task file |
+| Completed project | `- [x] [[Note]] [done:: YYYY-MM-DD]` |
 | To-do | Any checkbox, at any indent: `- [ ] title`, `* [x] title`, `1. [ ] title` |
 | Description | Indented lines directly under a to-do that are not themselves checkboxes |
 | Date | `[date:: YYYY-MM-DD]` or `[date:: someday]` (Dataview inline-field syntax) |

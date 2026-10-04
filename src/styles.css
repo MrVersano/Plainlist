@@ -112,6 +112,26 @@
 	border-radius: var(--pl-radius);
 }
 
+.pl-root button.pl-nav-completed {
+	display: flex;
+	align-items: center;
+	min-height: 32px;
+	margin-top: 6px;
+	padding: 0 10px;
+	font-size: 13px;
+	color: var(--pl-faint);
+	border-radius: var(--pl-radius);
+}
+
+.pl-root button.pl-nav-completed:hover {
+	color: var(--pl-muted);
+}
+
+.pl-root button.pl-nav-item.is-done .pl-nav-label {
+	color: var(--pl-muted);
+	text-decoration: line-through;
+}
+
 .pl-root button.pl-nav-add:hover {
 	color: var(--pl-muted);
 }
@@ -257,8 +277,17 @@
 	color: var(--text-normal);
 }
 
-.pl-root .pl-title-input {
+.pl-title-row {
 	flex: 1 0 100%;
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	min-width: 0;
+}
+
+.pl-root .pl-title-input {
+	flex: 1;
+	min-width: 0;
 	width: 100%;
 	padding: 0;
 	height: auto;
@@ -404,7 +433,8 @@
 	min-width: 18px;
 	height: 18px;
 	min-height: 18px;
-	border-radius: 50%;
+	/* Set from the theme's own task checkbox; round until measured. */
+	border-radius: var(--pl-check-radius, 50%);
 	border: 1.5px solid var(--pl-faint);
 	display: inline-flex;
 	align-items: center;
@@ -917,4 +947,13 @@
 	.pl-row.is-expanded {
 		animation: none;
 	}
+}
+
+/* Hidden checkbox used to read the theme's checkbox shape. */
+.pl-probe {
+	position: absolute;
+	left: -9999px;
+	top: 0;
+	visibility: hidden;
+	pointer-events: none;
 }
