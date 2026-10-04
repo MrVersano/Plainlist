@@ -22,9 +22,10 @@ const DAYS: Record<string, number> = {
 	sat: 6, saturday: 6,
 };
 
-// Word boundaries that also exclude `#tag` and word-internal matches.
-const W = '(?<![\\p{L}\\p{N}_#/-])';
-const E = '(?![\\p{L}\\p{N}_])';
+// Group 1 is the character before the phrase (no lookbehind: iOS < 16.4 lacks it), so
+// `#tag` and word-internal text never match. Group 2 is the phrase itself.
+const W = '(^|[^\\p{L}\\p{N}_#/-])(';
+const E = ')(?![\\p{L}\\p{N}_])';
 
 interface Custom {
 	re: RegExp;
@@ -46,7 +47,7 @@ const CUSTOM: Custom[] = [
 	{
 		re: new RegExp(`${W}next\\s+(${Object.keys(DAYS).join('|')})${E}`, 'giu'),
 		resolve: (m, today) => {
-			const target = DAYS[(m[1] ?? '').toLowerCase()] ?? 0;
+			const target = DAYS[(m[3] ?? '').toLowerCase()] ?? 0;
 			return addDays(today, ((target - weekday(today) + 7) % 7) || 7);
 		},
 	},
@@ -76,10 +77,10 @@ export function findDate(text: string, today: string, weekStart: 0 | 1 = 1): Dat
 	const matches: DateMatch[] = [];
 
 	for (const c of CUSTOM) {
-		c.re.lastIndex = 0;
 		for (const m of masked.matchAll(c.re)) {
-			const index = m.index ?? 0;
-			matches.push({ date: c.resolve(m, today, weekStart), text: m[0], index, end: index + m[0].length });
+			const phrase = m[2] ?? '';
+			const index = (m.index ?? 0) + (m[1] ?? '').length;
+			matches.push({ date: c.resolve(m, today, weekStart), text: phrase, index, end: index + phrase.length });
 		}
 	}
 	masked = blank(masked, matches.map((m) => [m.index, m.end]));
