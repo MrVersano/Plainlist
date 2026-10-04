@@ -1,0 +1,26 @@
+docs/
+
+# vscode
+.vscode
+
+# Intellij
+*.iml
+.idea
+
+# npm
+node_modules
+
+# Build output: main.js and styles.css are release assets, not committed
+/main.js
+/styles.css
+*.map
+
+# obsidian
+data.json
+
+# Test vault: keep the notes and plugin list, not the installed plugins or UI state
+test-vault/.obsidian/*
+!test-vault/.obsidian/community-plugins.json
+
+# macOS
+.DS_Store

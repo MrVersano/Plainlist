@@ -1,0 +1,9 @@
+{
+	"id": "plainlist",
+	"name": "Plainlist",
+	"version": "0.1.0",
+	"minAppVersion": "1.13.0",
+	"description": "Show one Markdown note as a clean, minimal task manager.",
+	"author": "Kobi Versano",
+	"isDesktopOnly": false
+}
