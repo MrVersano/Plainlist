@@ -788,6 +788,8 @@
 	max-width: calc(100vw - 32px);
 	margin-top: 14vh;
 	padding: 0;
+	/* Fixed size: pickers float out past the edge instead of scrolling the palette. */
+	overflow: visible;
 }
 
 .pl-capture-modal .modal-close-button,
@@ -798,6 +800,7 @@
 
 .pl-capture-modal .modal-content {
 	padding: 0;
+	overflow: visible;
 }
 
 .pl-capture {
@@ -842,7 +845,10 @@
 	caret-color: var(--text-normal);
 }
 
+/* Obsidian fills inputs on hover, which would cover the highlighted text behind. */
+.pl-capture .pl-capture-input:hover,
 .pl-capture .pl-capture-input:focus {
+	background: transparent;
 	box-shadow: none;
 }
 
@@ -850,7 +856,8 @@
 	color: var(--text-faint);
 }
 
-.pl-capture-date {
+.pl-capture-date,
+.pl-capture-mention {
 	border-radius: 4px;
 	background: hsla(var(--interactive-accent-hsl), 0.14);
 	box-shadow: 0 0 0 3px hsla(var(--interactive-accent-hsl), 0.14);
@@ -901,6 +908,10 @@
 
 .pl-capture-project .pl-popover {
 	left: 112px;
+}
+
+.pl-capture-field .pl-mention-popover {
+	top: calc(100% - 12px);
 }
 
 .pl-capture-footer {

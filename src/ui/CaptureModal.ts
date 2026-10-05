@@ -1,4 +1,4 @@
-import { App, Modal, Notice, TFile } from 'obsidian';
+import { App, Modal, Notice, Scope, TFile } from 'obsidian';
 import { h, render } from 'preact';
 import { patchText } from '../model/apply';
 import { parse } from '../model/parse';
@@ -19,12 +19,21 @@ export interface CaptureOptions {
 /** The "New to-do" palette. Writes straight to the notes, so it works with the view closed. */
 export class CaptureModal extends Modal {
 	private notes = new Map<string, TFile>();
+	/** Set by the palette: closes an open project list, returning false when none was open. */
+	private closeList: { current: (() => boolean) | null } = { current: null };
 
 	constructor(
 		app: App,
 		private options: CaptureOptions,
 	) {
 		super(app);
+		// Obsidian handles Escape before the palette sees it. Replace its handler so that,
+		// with a project list open, Escape closes the list and not the palette.
+		this.scope = new Scope();
+		this.scope.register([], 'Escape', () => {
+			if (!this.closeList.current?.()) this.close();
+			return false;
+		});
 	}
 
 	async onOpen(): Promise<void> {
@@ -42,6 +51,7 @@ export class CaptureModal extends Modal {
 				projects: projects.map((p) => ({ name: p.name, path: p.path })),
 				initialProject: initial,
 				defaultDate,
+				closeList: this.closeList,
 				onSave: (result) => this.save(result),
 				onClose: () => this.close(),
 			}),
