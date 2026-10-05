@@ -12,6 +12,7 @@ import {
 	completeOpenTasks,
 	removeProjectLink,
 	reopenTasks,
+	rollOverdueTasks,
 	replaceProjectLink,
 	setProjectDone,
 	restoreLines,
@@ -364,5 +365,30 @@ describe('mapLine', () => {
 		const edits = [...setTaskTitle(doc, refOf(t), 'Book an electrician'), ...setTaskDescription(doc, refOf(t), 'Short.')];
 		const out = parse(applyEdits(doc, edits));
 		expect(out.lines[mapLine(doc, edits, t.line)!]).toBe('- [ ] Book an electrician [date:: 2026-10-04]');
+	});
+});
+
+describe('rollOverdueTasks', () => {
+	it('moves open past-dated to-dos to today and leaves the rest alone', () => {
+		const doc = parse(
+			[
+				'- [ ] Late [date:: 2026-10-01]',
+				'- [x] Done late [date:: 2026-10-01] [done:: 2026-10-02]',
+				'- [ ] Now [date:: 2026-10-04]',
+				'- [ ] Later [date:: 2026-10-09]',
+				'- [ ] Someday [date:: someday]',
+				'- [ ] Undated',
+				'  - [ ] Nested late [date:: 2026-09-30]',
+			].join('\n'),
+		);
+		const out = applyEdits(doc, rollOverdueTasks(doc, TODAY)).split('\n');
+		expect(out[0]).toBe('- [ ] Late [date:: 2026-10-04]');
+		expect(out[1]).toBe('- [x] Done late [date:: 2026-10-01] [done:: 2026-10-02]');
+		expect(out.slice(2, 6)).toEqual(doc.lines.slice(2, 6));
+		expect(out[6]).toBe('  - [ ] Nested late [date:: 2026-10-04]');
+	});
+
+	it('does nothing when no to-do is overdue', () => {
+		expect(rollOverdueTasks(parse('- [ ] Now [date:: 2026-10-04]'), TODAY)).toEqual([]);
 	});
 });

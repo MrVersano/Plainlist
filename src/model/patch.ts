@@ -281,6 +281,16 @@ export function completeOpenTasks(doc: Doc, today: string): { edits: LineEdit[];
 	return { edits, completed };
 }
 
+/** Moves every open to-do dated before today to today. */
+export function rollOverdueTasks(doc: Doc, today: string): LineEdit[] {
+	const edits: LineEdit[] = [];
+	for (const t of doc.tasks) {
+		if (t.done || !t.date || t.date === 'someday' || t.date >= today) continue;
+		edits.push({ at: t.line, delete: 1, insert: [setDate(t.text, today)] });
+	}
+	return edits;
+}
+
 /** Reopens the given to-dos, skipping any that changed or disappeared since. */
 export function reopenTasks(doc: Doc, refs: LineRef[]): LineEdit[] {
 	const edits: LineEdit[] = [];

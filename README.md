@@ -4,7 +4,7 @@ Plainlist turns your notes into a clean, minimal task manager in Obsidian. A tas
 
 ![Today](assets/today.png)
 
-- **Lists:** Inbox, Today, Upcoming, No Date, Someday and Completed, plus one list per project.
+- **Lists:** Inbox, Today, Upcoming, No Date, Someday and Completed, plus one list per project. Open to-dos from past days move to today.
 - **Projects are notes:** create a new project note, or turn an existing note into a project. Its checkboxes, nested ones included, become the project's to-dos.
 - **To-dos:** a title, a description, a date and a project. `#tags` and `[[links]]` work in both the title and the description, and typing `[[` suggests notes. Click a to-do to edit it in place; dates and `@project` typed into its title work as in quick capture.
 - **Quick capture:** the **New to-do** command opens a small palette that understands dates as you type: "today", "tonight", "fri", "next tue", "in 3 days", "oct 20", "someday". Type `@` to pick a project, e.g. `@House Renovation 2026`.

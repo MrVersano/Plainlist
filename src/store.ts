@@ -7,6 +7,7 @@ import {
 	addTask,
 	completeOpenTasks,
 	reopenTasks,
+	rollOverdueTasks,
 	setProjectDone,
 	extractTask,
 	insertTaskLines,
@@ -170,6 +171,13 @@ export class Workspace {
 		});
 		this.queue = job;
 		return job;
+	}
+
+	/** Moves overdue to-dos in every note to today, so the date in the note matches where they show. */
+	rollOverdue(today: string): void {
+		for (const s of this.sources()) {
+			if (rollOverdueTasks(s.doc, today).length) void this.run(s.path, (d) => rollOverdueTasks(d, today));
+		}
 	}
 
 	// --- Projects -----------------------------------------------------------
