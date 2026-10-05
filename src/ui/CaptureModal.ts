@@ -2,6 +2,7 @@ import { App, Modal, Scope } from 'obsidian';
 import { h, render } from 'preact';
 import { type CaptureOptions, startCapture } from '../capture';
 import { Capture } from './components/Capture';
+import { noteLinks } from './obsidian';
 
 /** The "New to-do" palette. Writes straight to the notes, so it works with the view closed. */
 export class CaptureModal extends Modal {
@@ -34,6 +35,7 @@ export class CaptureModal extends Modal {
 				projects: session.projects,
 				initialProject: session.initialProject,
 				defaultDate,
+				links: noteLinks(this.app, this.options.file.path),
 				closeList: this.closeList,
 				onSave: session.save,
 				onClose: () => this.close(),

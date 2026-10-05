@@ -1,35 +1,63 @@
 import { Component as ObsidianComponent, MarkdownRenderer } from 'obsidian';
-import type { JSX, TextareaHTMLAttributes } from 'preact';
+import type { JSX, RefObject, TextareaHTMLAttributes } from 'preact';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { useEnv } from '../env';
-import { handleRenderedClick, openTagSearch } from '../obsidian';
+import { findLinks } from '../../links';
+import { handleRenderedClick, linkResolves, openLink, openTagSearch } from '../obsidian';
+import { type LinkSource, useSuggest } from './suggest';
 
 const TAG_RE = /(^|[\s(])(#[^\s#.,;:!?()[\]{}"'`]+)/gu;
 
-/** Title text with `#tags` in the accent colour. Clicking a tag opens Obsidian search. */
-export function Title({ text }: { text: string }) {
+/**
+ * Title text with `#tags` in the accent colour and `[[links]]` shown as links.
+ * Clicking a tag opens Obsidian search; clicking a link opens its note.
+ */
+export function Title({ text, sourcePath }: { text: string; sourcePath: string }) {
 	const { app } = useEnv();
-	const parts: (string | JSX.Element)[] = [];
-	let last = 0;
+	const links = findLinks(text);
+	const pieces: { start: number; end: number; el: JSX.Element }[] = links.map((l) => ({
+		start: l.index,
+		end: l.end,
+		el: (
+			<span
+				class={`pl-link${linkResolves(app, l.target, sourcePath) ? '' : ' is-unresolved'}`}
+				key={l.index}
+				onClick={(evt) => {
+					evt.stopPropagation();
+					openLink(app, evt, l.target, sourcePath);
+				}}
+			>
+				{l.label}
+			</span>
+		),
+	}));
 	for (const m of text.matchAll(TAG_RE)) {
 		const start = (m.index ?? 0) + (m[1] ?? '').length;
 		const tag = m[2] ?? '';
 		// A tag needs at least one non-digit character, as in Obsidian.
-		if (/^#\d+$/.test(tag)) continue;
-		parts.push(text.slice(last, start));
-		parts.push(
-			<span
-				class="pl-tag"
-				key={start}
-				onClick={(evt) => {
-					evt.stopPropagation();
-					openTagSearch(app, tag);
-				}}
-			>
-				{tag}
-			</span>,
-		);
-		last = start + tag.length;
+		if (/^#\d+$/.test(tag) || links.some((l) => start < l.end && l.index < start + tag.length)) continue;
+		pieces.push({
+			start,
+			end: start + tag.length,
+			el: (
+				<span
+					class="pl-tag"
+					key={start}
+					onClick={(evt) => {
+						evt.stopPropagation();
+						openTagSearch(app, tag);
+					}}
+				>
+					{tag}
+				</span>
+			),
+		});
+	}
+	const parts: (string | JSX.Element)[] = [];
+	let last = 0;
+	for (const p of pieces.sort((a, b) => a.start - b.start)) {
+		parts.push(text.slice(last, p.start), p.el);
+		last = p.end;
 	}
 	parts.push(text.slice(last));
 	return <>{parts}</>;
@@ -90,9 +118,16 @@ export function Markdown({
 }
 
 /** A textarea that grows with its content. */
-export function AutoTextarea(props: TextareaHTMLAttributes<HTMLTextAreaElement> & { value: string; autoFocusEnd?: boolean }) {
-	const { autoFocusEnd, ...rest } = props;
-	const el = useRef<HTMLTextAreaElement>(null);
+export function AutoTextarea(
+	props: TextareaHTMLAttributes<HTMLTextAreaElement> & {
+		value: string;
+		autoFocusEnd?: boolean;
+		inputRef?: RefObject<HTMLTextAreaElement | null>;
+	},
+) {
+	const { autoFocusEnd, inputRef, ...rest } = props;
+	const own = useRef<HTMLTextAreaElement>(null);
+	const el = inputRef ?? own;
 	useLayoutEffect(() => {
 		const t = el.current;
 		if (!t) return;
@@ -116,6 +151,7 @@ export function MarkdownField({
 	value,
 	sourcePath,
 	placeholder,
+	links,
 	onInput,
 	onBlur,
 	class: cls,
@@ -123,29 +159,44 @@ export function MarkdownField({
 	value: string;
 	sourcePath: string;
 	placeholder: string;
+	/** Notes to suggest after `[[`. */
+	links?: LinkSource;
 	onInput: (value: string) => void;
 	onBlur?: () => void;
 	class?: string;
 }) {
 	const [editing, setEditing] = useState(false);
+	const input = useRef<HTMLTextAreaElement>(null);
+	const suggest = useSuggest({ input, value, onChange: onInput, links });
 	if (!editing && value.trim()) {
 		return <Markdown text={value} sourcePath={sourcePath} class={`pl-markdown-field ${cls ?? ''}`} onClick={() => setEditing(true)} />;
 	}
 	return (
-		<AutoTextarea
-			class={`pl-textarea ${cls ?? ''}`}
-			value={value}
-			placeholder={placeholder}
-			autoFocusEnd={editing}
-			onInput={(e) => onInput(e.currentTarget.value)}
-			onFocus={() => setEditing(true)}
-			onKeyDown={(e) => {
-				if (e.key === 'Escape') e.currentTarget.blur();
-			}}
-			onBlur={() => {
-				setEditing(false);
-				onBlur?.();
-			}}
-		/>
+		<div class="pl-suggest-anchor">
+			<AutoTextarea
+				inputRef={input}
+				class={`pl-textarea ${cls ?? ''}`}
+				value={value}
+				placeholder={placeholder}
+				autoFocusEnd={editing}
+				onInput={(e) => {
+					onInput(e.currentTarget.value);
+					suggest.onInput();
+				}}
+				onKeyUp={suggest.sync}
+				onClick={suggest.sync}
+				onFocus={() => setEditing(true)}
+				onKeyDown={(e) => {
+					if (suggest.onKeyDown(e)) return;
+					if (e.key === 'Escape') e.currentTarget.blur();
+				}}
+				onBlur={() => {
+					suggest.onBlur();
+					setEditing(false);
+					onBlur?.();
+				}}
+			/>
+			{suggest.list}
+		</div>
 	);
 }

@@ -2,7 +2,8 @@
 // undocumented internals (global search, hotkey manager) guarded so a change
 // in Obsidian degrades gracefully instead of throwing.
 
-import { App, Keymap, Platform } from 'obsidian';
+import { App, Keymap, Platform, prepareFuzzySearch, type TFile } from 'obsidian';
+import type { LinkSource } from './components/suggest';
 
 interface SearchPlugin {
 	instance?: { openGlobalSearch?: (query: string) => void };
@@ -38,6 +39,45 @@ export function handleRenderedClick(app: App, evt: MouseEvent, sourcePath: strin
 		if (href) window.open(href, '_blank');
 	}
 	return true;
+}
+
+/** Opens the note a `[[link]]` points to; ⌘/Ctrl-click opens it in a new tab. */
+export function openLink(app: App, evt: MouseEvent, target: string, sourcePath: string): void {
+	void app.workspace.openLinkText(target, sourcePath, Keymap.isModEvent(evt));
+}
+
+/** Whether a `[[link]]` target resolves to a file. */
+export function linkResolves(app: App, target: string, sourcePath: string): boolean {
+	const path = target.split(/[#^]/)[0] ?? '';
+	return !path || app.metadataCache.getFirstLinkpathDest(path, sourcePath) !== null;
+}
+
+/** Vault files for `[[` suggestions, as Obsidian would link them from `sourcePath`. */
+export function noteLinks(app: App, sourcePath: string, limit = 20): LinkSource {
+	return (query) => {
+		const q = query.trim();
+		const files = app.vault.getFiles();
+		let ranked: TFile[];
+		if (q) {
+			const match = prepareFuzzySearch(q);
+			const scored: { file: TFile; score: number }[] = [];
+			// Match the note name; the folder only counts once the query has a `/` in it.
+			const byPath = q.includes('/');
+			for (const file of files) {
+				const hit = match(byPath ? file.path.slice(0, file.path.length - file.extension.length - 1) : file.basename);
+				if (hit) scored.push({ file, score: hit.score });
+			}
+			ranked = scored.sort((a, b) => b.score - a.score).map((s) => s.file);
+		} else {
+			ranked = [...files].sort((a, b) => b.stat.mtime - a.stat.mtime);
+		}
+		return ranked.slice(0, limit).map((file) => ({
+			key: file.path,
+			label: file.extension === 'md' ? file.basename : file.name,
+			detail: file.parent && !file.parent.isRoot() ? file.parent.path : undefined,
+			link: app.metadataCache.fileToLinktext(file, sourcePath, true),
+		}));
+	};
 }
 
 const MAC_SYMBOLS: Record<string, string> = { Mod: '⌘', Ctrl: '⌃', Meta: '⌘', Alt: '⌥', Shift: '⇧' };

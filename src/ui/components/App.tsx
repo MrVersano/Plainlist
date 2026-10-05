@@ -21,6 +21,21 @@ import { TaskEditor, TaskRow, type RowActions } from './TaskRow';
 
 const NARROW = 600;
 
+/**
+ * One key per expansion. The editor keeps its key while its to-do is edited (and its line
+ * changes), but opening another to-do mounts a fresh editor instead of reusing the old state.
+ */
+const expansionIds = new WeakMap<TrackBox, number>();
+let nextExpansionId = 0;
+function expansionKey(box: TrackBox): string {
+	let id = expansionIds.get(box);
+	if (id === undefined) {
+		id = nextExpansionId++;
+		expansionIds.set(box, id);
+	}
+	return `expanded-${id}`;
+}
+
 const EMPTY: Record<ListId['kind'], string> = {
 	inbox: 'Inbox is empty.',
 	today: 'Nothing for today.',
@@ -339,7 +354,7 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		if (expanded && isBoxed(expanded, item)) {
 			return (
 				<TaskEditor
-					key="expanded"
+					key={expansionKey(expanded)}
 					item={item}
 					box={expanded}
 					projects={projects.filter((p) => !p.done)}

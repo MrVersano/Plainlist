@@ -14,6 +14,7 @@ import { formatAccelerator } from '../accelerator';
 import { startCapture } from '../capture';
 import type PlainlistPlugin from '../main';
 import { Capture } from '../ui/components/Capture';
+import { noteLinks } from '../ui/obsidian';
 
 // The few Electron APIs used here, typed locally (the project doesn't depend on electron).
 interface Rect {
@@ -224,6 +225,7 @@ class QuickEntryWindow {
 					projects: session.projects,
 					initialProject: session.initialProject,
 					defaultDate: options.defaultDate,
+					links: noteLinks(this.plugin.app, options.file.path),
 					closeList: this.closeList,
 					onSave: session.save,
 					onClose: () => this.hide(),

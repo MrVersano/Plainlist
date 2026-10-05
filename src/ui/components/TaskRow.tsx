@@ -1,11 +1,15 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { addDays, longDate } from '../../dates/format';
 import type { Item, ProjectInfo } from '../../model/lists';
+import { stripRanges } from '../../mentions';
 import { findTask, setTaskDate, setTaskDescription, setTaskTitle } from '../../model/patch';
+import { recogniseEdit } from '../../recognise';
 import type { TrackBox } from '../../store';
 import { useDebounced, useEnv, useLongPress, useOutsideClick } from '../env';
+import { noteLinks } from '../obsidian';
 import { Checkbox, MarkdownField, Title } from './bits';
 import { DatePopover, ProjectPicker } from './popovers';
+import { highlighted, type Mark, useSuggest } from './suggest';
 
 export interface RowActions {
 	onToggle: (item: Item) => void;
@@ -45,7 +49,7 @@ export function TaskRow({
 		>
 			<Checkbox done={task.done} title={task.title} onToggle={() => actions.onToggle(item)} />
 			<button type="button" class="pl-row-title" onClick={() => actions.onExpand(item)}>
-				{task.title ? <Title text={task.title} /> : <span class="pl-untitled">New to-do</span>}
+				{task.title ? <Title text={task.title} sourcePath={item.path} /> : <span class="pl-untitled">New to-do</span>}
 			</button>
 			{meta && <span class={`pl-row-meta ${metaClass ?? ''}`}>{meta}</span>}
 		</div>
@@ -74,15 +78,29 @@ export function TaskEditor({
 	onCollapse: () => void;
 	onToggle: () => void;
 }) {
-	const { workspace, weekStart } = useEnv();
+	const { app, workspace, weekStart } = useEnv();
 	const { task } = item;
 	const [title, setTitle] = useState(task.title);
 	const [description, setDescription] = useState(task.description);
 	const [popover, setPopover] = useState<'date' | 'project' | null>(null);
 	const wrap = useRef<HTMLDivElement>(null);
 	const titleInput = useRef<HTMLInputElement>(null);
+	const backdrop = useRef<HTMLDivElement>(null);
+	/** The title as the editor opened: dates and @projects already in it are plain text. */
+	const original = useRef(task.title);
 	const latest = useRef({ title, description });
 	latest.current = { title, description };
+	const open = projects.filter((p) => p.exists);
+	const names = open.map((p) => p.name);
+	const links = noteLinks(app, item.path);
+
+	const onTitle = (value: string): void => {
+		setTitle(value);
+		save.schedule();
+	};
+	const suggest = useSuggest({ input: titleInput, value: title, onChange: onTitle, projects: open, links });
+	const recognised = (text: string) => recogniseEdit(text, original.current, names, today, weekStart());
+	const { match, mention } = recognised(title);
 
 	const save = useDebounced(() => {
 		const { title: newTitle, description: newDesc } = latest.current;
@@ -99,16 +117,47 @@ export function TaskEditor({
 		);
 	}, 400);
 
+	/** Saves what's pending, then applies a date or @project typed into the title, as capture does. */
+	const finish = useRef(() => {});
+	finish.current = () => {
+		save.flush();
+		const typed = latest.current.title;
+		const found = recognised(typed);
+		const rest = stripRanges(typed, [found.match, found.mention].filter((r) => r !== null));
+		if (!rest || rest === typed.trim()) return;
+		void workspace.run(box.current.path, (doc) => setTaskTitle(doc, box.current.ref, rest), box);
+		const date = found.match?.date;
+		if (date) void workspace.run(box.current.path, (doc) => setTaskDate(doc, box.current.ref, date), box);
+		if (found.mention) void workspace.moveTask(box, open[found.mention.project]?.path ?? null);
+	};
+
 	// Collapsing unmounts the editor: save whatever is still pending.
-	useEffect(() => () => save.flush(), []);
+	useEffect(() => () => finish.current(), []);
 	useEffect(() => titleInput.current?.focus(), []);
 	useOutsideClick(wrap, onCollapse, popover === null);
+	const syncScroll = (): void => {
+		if (backdrop.current && titleInput.current) backdrop.current.scrollLeft = titleInput.current.scrollLeft;
+	};
+	useEffect(syncScroll, [title]);
+
+	/** Removes a typed date or @project from the title, so a choice made in a popover wins. */
+	const drop = (r: { index: number; end: number } | null): void => {
+		if (r) onTitle(stripRanges(title, [r]));
+	};
 
 	const pick = (fn: () => void): void => {
 		save.flush();
 		setPopover(null);
 		fn();
+		// The popover took focus with it; keep Esc and Enter working in the editor.
+		titleInput.current?.focus();
 	};
+
+	const marks: Mark[] = [];
+	if (match) marks.push({ start: match.index, end: match.end, cls: 'pl-capture-date' });
+	if (mention) marks.push({ start: mention.index, end: mention.end, cls: 'pl-capture-mention' });
+	const dateText = match ? dateLabel(match.date, today) : dateLabel(task.date, today);
+	const projectName = mention ? open[mention.project]?.name : item.project?.name;
 
 	return (
 		<div
@@ -131,30 +180,50 @@ export function TaskEditor({
 						onToggle();
 					}}
 				/>
-				<input
-					ref={titleInput}
-					class="pl-editor-title"
-					type="text"
-					aria-label="Title"
-					placeholder="New to-do"
-					value={title}
-					onInput={(e) => {
-						setTitle(e.currentTarget.value);
-						save.schedule();
-					}}
-					onKeyDown={(e) => {
-						if (e.key === 'Enter' && !e.isComposing) {
-							e.preventDefault();
-							onCollapse();
-						}
-					}}
-				/>
+				<div class="pl-editor-title-field">
+					<div ref={backdrop} class="pl-editor-title-backdrop" aria-hidden="true">
+						{highlighted(title, marks)}
+						{'\u200b'}
+					</div>
+					<input
+						ref={titleInput}
+						class="pl-editor-title"
+						type="text"
+						aria-label="Title"
+						placeholder="New to-do"
+						spellcheck={false}
+						role="combobox"
+						aria-expanded={suggest.open}
+						aria-autocomplete="list"
+						value={title}
+						onInput={(e) => {
+							onTitle(e.currentTarget.value);
+							suggest.onInput();
+						}}
+						onScroll={syncScroll}
+						onKeyUp={() => {
+							syncScroll();
+							suggest.sync();
+						}}
+						onClick={suggest.sync}
+						onBlur={suggest.onBlur}
+						onKeyDown={(e) => {
+							if (suggest.onKeyDown(e)) return;
+							if (e.key === 'Enter' && !e.isComposing) {
+								e.preventDefault();
+								onCollapse();
+							}
+						}}
+					/>
+					{suggest.list}
+				</div>
 			</div>
 			<div class="pl-editor-body">
 				<MarkdownField
 					class="pl-editor-desc"
 					value={description}
 					sourcePath={item.path}
+					links={links}
 					placeholder="Description — #tags and [[links]] work here too"
 					onInput={(value) => {
 						setDescription(value);
@@ -164,15 +233,15 @@ export function TaskEditor({
 				/>
 				<div class="pl-editor-fields">
 					<div class="pl-field">
-						<span class="pl-field-label">Date</span>
+						<span class="pl-field-label">Date{match && <span class="pl-field-note"> · from “{match.text}”</span>}</span>
 						<button
 							type="button"
-							class={`pl-field-button${task.date ? '' : ' is-empty'}`}
+							class={`pl-field-button${dateText ? '' : ' is-empty'}`}
 							aria-haspopup="dialog"
 							aria-expanded={popover === 'date'}
 							onClick={() => setPopover(popover === 'date' ? null : 'date')}
 						>
-							{dateLabel(task.date, today) || 'No date'}
+							{dateText || 'No date'}
 						</button>
 						{popover === 'date' && (
 							<DatePopover
@@ -180,13 +249,18 @@ export function TaskEditor({
 								weekStart={weekStart()}
 								onClose={() => setPopover(null)}
 								onPick={(date) =>
-									pick(() => void workspace.run(box.current.path, (doc) => setTaskDate(doc, box.current.ref, date), box))
+									pick(() => {
+										drop(match);
+										void workspace.run(box.current.path, (doc) => setTaskDate(doc, box.current.ref, date), box);
+									})
 								}
 							/>
 						)}
 					</div>
 					<div class="pl-field pl-field-wide">
-						<span class="pl-field-label">Project</span>
+						<span class="pl-field-label">
+							Project{mention && <span class="pl-field-note"> · from “{mention.text}”</span>}
+						</span>
 						<button
 							type="button"
 							class="pl-field-button"
@@ -194,14 +268,19 @@ export function TaskEditor({
 							aria-expanded={popover === 'project'}
 							onClick={() => setPopover(popover === 'project' ? null : 'project')}
 						>
-							{item.project?.name ?? 'Inbox'}
+							{projectName ?? 'Inbox'}
 						</button>
 						{popover === 'project' && (
 							<ProjectPicker
-								projects={projects.filter((p) => p.exists)}
+								projects={open}
 								current={item.project?.path ?? null}
 								onClose={() => setPopover(null)}
-								onPick={(path) => pick(() => void workspace.moveTask(box, path))}
+								onPick={(path) =>
+									pick(() => {
+										drop(mention);
+										void workspace.moveTask(box, path);
+									})
+								}
 							/>
 						)}
 					</div>
