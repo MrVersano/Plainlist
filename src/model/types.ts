@@ -34,6 +34,21 @@ export interface Task {
 	 * (shown as an Inbox item but never moved). Always `other` in project notes.
 	 */
 	section: 'inbox' | 'other';
+	/** The heading the to-do sits under, or null (before any heading, or under `# Inbox` / `# Projects`). */
+	heading: Heading | null;
+}
+
+/**
+ * A heading that groups to-dos. A note's title (its only level-1 heading, when it comes
+ * first) is not one, and neither are the task file's `# Inbox` and `# Projects`.
+ */
+export interface Heading {
+	line: number;
+	text: string;
+	level: number;
+	name: string;
+	/** The next heading of any level, or the end of the note. */
+	end: number;
 }
 
 /** A `- [[Note]]` line under `# Projects` in the task file; `- [x] [[Note]] [done:: …]` when completed. */
@@ -76,6 +91,8 @@ export interface Doc {
 	projectLinks: ProjectLink[];
 	/** All to-dos in file order. */
 	tasks: Task[];
+	/** Headings that group to-dos, in file order. */
+	headings: Heading[];
 }
 
 /**

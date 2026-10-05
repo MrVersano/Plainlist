@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeCounts, computeList, type ListId, type ProjectInfo, type Source } from '../src/model/lists';
+import { computeCounts, computeList, placeLabel, type ListId, type ProjectInfo, type Source } from '../src/model/lists';
 import { parse } from '../src/model/parse';
 
 const TODAY = '2026-10-04';
@@ -163,5 +163,26 @@ describe('completed projects', () => {
 		const lone = project('Lone.md', 15, { done: true, doneDate: '2026-10-02' });
 		const groups = computeList([...sources, { path: 'Lone.md', doc: parse(''), project: lone }], [...projects, lone], { kind: 'completed' }, TODAY).groups;
 		expect(groups.map((g) => g.label)).toEqual(['Today', 'Friday', 'Thursday', 'September', 'Earlier']);
+	});
+});
+
+describe('headings in a project', () => {
+	const sectioned = parse(['- [ ] Loose', '## Walls', '- [ ] Paint', '- [x] Sand [done:: 2026-10-01]', '## Floor', '- [ ] Tiles [date:: 2026-10-04]'].join('\n'));
+	const p = project('Office.md', 11);
+	const sources: Source[] = [{ path: 'Tasks.md', doc: master, project: null }, { path: 'Office.md', doc: sectioned, project: p }];
+
+	it('groups the project view by heading, with to-dos before any heading first', () => {
+		const view = computeList(sources, [p], { kind: 'project', path: 'Office.md' }, TODAY);
+		expect(view.groups.map((g) => [g.label, g.items.map((i) => i.task.title)])).toEqual([
+			['', ['Loose']],
+			['Walls', ['Paint']],
+			['Floor', ['Tiles']],
+		]);
+		expect(view.completed.map((i) => i.task.title)).toEqual(['Sand']);
+	});
+
+	it('labels a to-do with its project and heading', () => {
+		const item = computeList(sources, [p], { kind: 'today' }, TODAY).groups[0]!.items.find((i) => i.task.title === 'Tiles')!;
+		expect(placeLabel(item)).toBe('Office › Floor');
 	});
 });

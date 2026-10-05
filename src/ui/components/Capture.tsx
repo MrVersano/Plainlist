@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { longDate } from '../../dates/format';
-import { type Mention, stripRanges } from '../../mentions';
+import { type Mention, mentionTargets, stripRanges, targetName } from '../../mentions';
 import { recognise } from '../../recognise';
-import { ProjectPicker } from './popovers';
+import type { LineRef } from '../../model/patch';
+import { type PickerProject, ProjectPicker } from './popovers';
 import { highlighted, type LinkSource, type Mark, useSuggest } from './suggest';
 
 export interface CaptureResult {
@@ -10,6 +11,8 @@ export interface CaptureResult {
 	date: string | null;
 	/** Project note path, or null for the Inbox. */
 	project: string | null;
+	/** A heading in the project note to add the to-do under. */
+	heading: LineRef | null;
 }
 
 export function Capture({
@@ -25,7 +28,7 @@ export function Capture({
 }: {
 	today: string;
 	weekStart: 0 | 1;
-	projects: { name: string; path: string }[];
+	projects: PickerProject[];
 	initialProject: string | null;
 	defaultDate: string | null;
 	/** Notes to suggest after `[[`. */
@@ -37,12 +40,14 @@ export function Capture({
 }) {
 	const [text, setText] = useState('');
 	const [project, setProject] = useState(initialProject);
+	const [heading, setHeading] = useState<LineRef | null>(null);
 	const [picking, setPicking] = useState(false);
 	const input = useRef<HTMLInputElement>(null);
 	const backdrop = useRef<HTMLDivElement>(null);
 	const busy = useRef(false);
-	const names = projects.map((p) => p.name);
-	const suggest = useSuggest({ input, value: text, onChange: setText, projects, links, enabled: !picking });
+	const targets = mentionTargets(projects);
+	const names = targets.map((t) => t.label);
+	const suggest = useSuggest({ input, value: text, onChange: setText, projects: targets, links, enabled: !picking });
 
 	useEffect(() => input.current?.focus(), []);
 	const syncScroll = (): void => {
@@ -52,7 +57,11 @@ export function Capture({
 
 	const { mention, match } = recognise(text, names, today, weekStart);
 	const date = match?.date ?? defaultDate;
-	const chosen = mention ? (projects[mention.project]?.path ?? null) : project;
+	const mentioned = mention ? targets[mention.project] : undefined;
+	const chosen = mention ? (mentioned?.path ?? null) : project;
+	const chosenHeading = mention ? (mentioned?.heading ?? null) : heading;
+	const chosenProject = projects.find((p) => p.path === chosen);
+	const headingName = chosenProject?.headings?.find((h) => h.line === chosenHeading?.line)?.name;
 
 	closeList.current = () => {
 		if (picking) {
@@ -77,10 +86,17 @@ export function Capture({
 		const found = recognise(typed, names, today, weekStart);
 		const title = stripRanges(typed, [found.match, found.mention].filter((r) => r !== null));
 		const date = found.match?.date ?? defaultDate;
-		const target = found.mention ? (projects[found.mention.project]?.path ?? null) : project;
+		const typedTarget = found.mention ? targets[found.mention.project] : undefined;
+		const target = found.mention ? (typedTarget?.path ?? null) : project;
+		const targetHeading = found.mention ? (typedTarget?.heading ?? null) : heading;
 		if (!title || busy.current) return;
 		busy.current = true;
-		const ok = await onSave({ title, date, project: target });
+		const ok = await onSave({
+			title,
+			date,
+			project: target,
+			heading: targetHeading && { line: targetHeading.line, text: targetHeading.text },
+		});
 		busy.current = false;
 		if (!ok) return;
 		if (keepOpen) {
@@ -156,19 +172,21 @@ export function Capture({
 					<span class="pl-capture-label">Project</span>
 					<button
 						type="button"
-						class={`pl-capture-value pl-capture-project-button${!mention && chosen === initialProject ? ' is-muted' : ''}`}
+						class={`pl-capture-value pl-capture-project-button${!mention && chosen === initialProject && !chosenHeading ? ' is-muted' : ''}`}
 						onClick={() => setPicking(true)}
 					>
-						{projects.find((p) => p.path === chosen)?.name ?? 'Inbox'}
+						{mentioned ? targetName(mentioned) : chosenProject ? (headingName ? `${chosenProject.name} › ${headingName}` : chosenProject.name) : 'Inbox'}
 					</button>
 					<span class="pl-capture-note">{mention ? `from “${mention.text}”` : 'Tab or @ to choose'}</span>
 					{picking && (
 						<ProjectPicker
 							projects={projects}
 							current={chosen}
-							onPick={(p) => {
+							currentHeading={chosenHeading?.line ?? null}
+							onPick={(p, h) => {
 								dropMention(mention);
 								setProject(p);
+								setHeading(h);
 								setPicking(false);
 								input.current?.focus();
 							}}

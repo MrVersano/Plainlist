@@ -1,7 +1,34 @@
-// Finds "@Project name" mentions in capture text.
+// Finds "@Project name" and "@Project name/Heading" mentions in capture text.
+
+/** Something an `@` can name: a project, or a heading in its note. */
+export interface MentionTarget {
+	/** What is typed after the `@`: `Project` or `Project/Heading`. */
+	label: string;
+	/** Project note path. */
+	path: string;
+	projectName: string;
+	heading: { name: string; line: number; text: string } | null;
+}
+
+/** Each project followed by its headings. Note names cannot contain `/`, so it separates the two. */
+export function mentionTargets(
+	projects: { name: string; path: string; headings?: { name: string; line: number; text: string }[] }[],
+): MentionTarget[] {
+	return projects.flatMap((p) => [
+		{ label: p.name, path: p.path, projectName: p.name, heading: null },
+		...(p.headings ?? [])
+			.filter((h) => h.name)
+			.map((h) => ({ label: `${p.name}/${h.name}`, path: p.path, projectName: p.name, heading: { name: h.name, line: h.line, text: h.text } })),
+	]);
+}
+
+/** How a target reads in the UI: `Project › Heading`. */
+export function targetName(t: MentionTarget): string {
+	return t.heading ? `${t.projectName} › ${t.heading.name}` : t.projectName;
+}
 
 export interface Mention {
-	/** Index into the project list. */
+	/** Index into the names (or targets) list. */
 	project: number;
 	/** The mention as typed, including the `@`. */
 	text: string;

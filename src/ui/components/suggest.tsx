@@ -1,11 +1,11 @@
-// Inline suggestions while typing: `@` lists projects, `[[` lists notes. Shared by the
+// Inline suggestions while typing: `@` lists projects and their headings, `[[` lists notes. Shared by the
 // capture palette, the to-do title and the description. Also draws the highlighted text
 // behind a transparent input.
 
 import type { JSX, RefObject } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { findLinks, linkQuery } from '../../links';
-import { mentionQuery } from '../../mentions';
+import { type MentionTarget, mentionQuery, targetName } from '../../mentions';
 
 /** Notes for a `[[query`, best first. `link` is the text that goes between the brackets. */
 export type LinkSource = (query: string) => { key: string; label: string; detail?: string; link: string }[];
@@ -15,16 +15,41 @@ interface Suggestion {
 	label: string;
 	detail?: string;
 	insert: string;
+	cls?: string;
 }
 
-/** Projects for an `@query`: names starting with it first, then names containing it. */
-function projectSuggestions(projects: { name: string; path: string }[], query: string) {
+/**
+ * Projects and headings for an `@query`, each project followed by its matching headings.
+ * Projects with a match starting with the query come first, then those containing it.
+ */
+function targetSuggestions(targets: MentionTarget[], query: string): Suggestion[] {
 	const q = query.toLowerCase();
-	const starts = projects.filter((p) => p.name.toLowerCase().startsWith(q));
-	const contains = projects.filter((p) => !p.name.toLowerCase().startsWith(q) && p.name.toLowerCase().includes(q));
-	const all = [...starts, ...contains];
+	const slash = q.indexOf('/');
+	const rank = (t: MentionTarget): number => {
+		const label = t.label.toLowerCase();
+		if (label.startsWith(q)) return 0;
+		if (label.includes(q)) return 1;
+		// `@reno/furn`: part of the project name, then part of the heading.
+		if (slash < 0 || !t.heading) return 2;
+		const project = t.projectName.toLowerCase();
+		const p = q.slice(0, slash);
+		return project.includes(p) && t.heading.name.toLowerCase().includes(q.slice(slash + 1)) ? (project.startsWith(p) ? 0 : 1) : 2;
+	};
+	const groups = new Map<string, MentionTarget[]>();
+	for (const t of targets) if (rank(t) < 2) groups.set(t.path, [...(groups.get(t.path) ?? []), t]);
+	const ordered = [...groups.values()].sort((a, b) => Math.min(...a.map(rank)) - Math.min(...b.map(rank))).flat();
 	// A name typed out in full needs no list; Enter should save.
-	return all.length === 1 && all[0]?.name.toLowerCase() === q ? [] : all;
+	if (ordered.length === 1 && ordered[0]?.label.toLowerCase() === q) return [];
+	return ordered.map((t) => {
+		// Under its project's row a heading shows on its own; without it, it says which project.
+		const underProject = !!t.heading && ordered.some((x) => x.path === t.path && !x.heading);
+		return {
+			key: t.heading ? `${t.path}#${t.heading.line}` : t.path,
+			label: underProject ? (t.heading?.name ?? '') : targetName(t),
+			insert: `@${t.label} `,
+			cls: underProject ? 'is-heading' : undefined,
+		};
+	});
 }
 
 /**
@@ -42,8 +67,8 @@ export function useSuggest({
 	input: RefObject<HTMLInputElement | HTMLTextAreaElement | null>;
 	value: string;
 	onChange: (value: string) => void;
-	/** Offer `@project` suggestions from these. */
-	projects?: { name: string; path: string }[];
+	/** Offer `@project` and `@project/heading` suggestions from these. */
+	projects?: MentionTarget[];
 	/** Offer `[[note` suggestions from this. */
 	links?: LinkSource;
 	enabled?: boolean;
@@ -72,11 +97,7 @@ export function useSuggest({
 		options =
 			link && links
 				? links(link.query).map((n) => ({ key: n.key, label: n.label, detail: n.detail, insert: `[[${n.link}]]` }))
-				: projectSuggestions(projects ?? [], mention?.query ?? '').map((p) => ({
-						key: p.path,
-						label: p.name,
-						insert: `@${p.name} `,
-					}));
+				: targetSuggestions(projects ?? [], mention?.query ?? '');
 	}
 	const index = Math.min(active, Math.max(options.length - 1, 0));
 
@@ -146,7 +167,7 @@ export function useSuggest({
 							role="option"
 							aria-selected={i === index}
 							key={s.key}
-							class={`pl-project-option${i === index ? ' is-active' : ''}`}
+							class={`pl-project-option${s.cls ? ` ${s.cls}` : ''}${i === index ? ' is-active' : ''}`}
 							// Keep focus (and the caret) in the field.
 							onMouseDown={(e) => e.preventDefault()}
 							onMouseEnter={() => setActive(i)}

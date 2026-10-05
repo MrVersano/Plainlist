@@ -41,7 +41,11 @@ Click **+ New project** at the bottom of the sidebar and type:
 - a new name, then choose **Create “name”** to make a new note (in your **Default location for new notes**), or
 - part of an existing note's name, then pick the note to add it as a project. Plainlist only adds a link to the task file; the note itself is not changed until you edit one of its to-dos.
 
-New to-dos for a project go after the last to-do in its note. Renaming a project renames its note. **Remove from Plainlist** (right-click a project) removes the link only: the note and its checkboxes stay as they are.
+New to-dos for a project go after the last to-do in its note, or above its first heading if it has headings.
+
+Headings in a project note group its to-dos: the project view shows each heading above the to-dos under it, and other lists show the to-do's place as "Project › Heading". The note's title (a single `#` heading at the top) doesn't count. In the project picker and the `@` list, each project lists its headings; pick one to add or move a to-do under it. You can also type `@Project/Heading`.
+
+Renaming a project renames its note. **Remove from Plainlist** (right-click a project) removes the link only: the note and its checkboxes stay as they are.
 
 To finish a project, tick the checkbox next to its title (or right-click it and choose **Complete project**). Any open to-dos in its note are marked done too, after you confirm, and you can undo for a few seconds. Completed projects move under a quiet "N completed" toggle at the bottom of the sidebar and appear in the Completed list; right-click one to reopen it.
 

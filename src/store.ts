@@ -11,6 +11,7 @@ import {
 	setProjectDone,
 	extractTask,
 	insertTaskLines,
+	moveTaskToHeading,
 	PatchConflict,
 	refOf,
 	removeProjectLink,
@@ -129,24 +130,38 @@ export class Workspace {
 		return job;
 	}
 
-	/** Adds a to-do to the Inbox (project null) or to the end of a project note's to-dos. */
-	addTask(projectPath: string | null, task: NewTask): Promise<RunResult> {
+	/**
+	 * Adds a to-do to the Inbox (project null), to the end of a project note's to-dos, or
+	 * under one of its headings.
+	 */
+	addTask(projectPath: string | null, task: NewTask, heading: LineRef | null = null): Promise<RunResult> {
 		if (projectPath === null) return this.run(this.masterPath, (d) => addTask(d, task, 'inbox'));
-		return this.run(projectPath, (d) => addTask(d, task, 'note'));
+		return this.run(projectPath, (d) => addTask(d, task, heading ? { heading } : 'note'));
 	}
 
 	/**
-	 * Moves a to-do (and anything nested under it) to a project note, or to the Inbox when
-	 * `projectPath` is null. Given a TrackBox, it reads the to-do's location when the move
-	 * runs and points the box at the moved to-do afterwards.
+	 * Moves a to-do (and anything nested under it) to a project note, under one of its
+	 * headings if given, or to the Inbox when `projectPath` is null. Given a TrackBox, it
+	 * reads the to-do's location when the move runs and points the box at the moved to-do afterwards.
 	 */
-	moveTask(source: TaskRef | TrackBox, projectPath: string | null): Promise<RunResult> {
+	moveTask(source: TaskRef | TrackBox, projectPath: string | null, heading: LineRef | null = null): Promise<RunResult> {
 		const box = 'current' in source ? source : undefined;
 		const job = this.queue.then(async () => {
 			const from = box ? box.current : (source as TaskRef);
 			const to = projectPath ?? this.masterPath;
-			// To-dos elsewhere in the task file already count as Inbox items; they stay where they are.
-			if (to === from.path) return { ok: true };
+			if (to === from.path) {
+				// To-dos elsewhere in the task file already count as Inbox items; they stay where they are.
+				if (to === this.masterPath) return { ok: true };
+				const landed: { at: LineRef | null } = { at: null };
+				const res = await this.apply(to, (d) => {
+					const r = moveTaskToHeading(d, from.ref, heading);
+					landed.at = r.landed;
+					return r.edits;
+				});
+				if (box && landed.at) box.current = { path: to, ref: landed.at };
+				this.notify();
+				return res;
+			}
 			const fromDoc = this.doc(from.path);
 			if (!fromDoc) return { ok: false };
 			let lines: string[];
@@ -159,7 +174,7 @@ export class Workspace {
 			// Write the copy first, so a failure can only leave a duplicate, never lose the to-do.
 			const landed: { at: TaskRef | null } = { at: null };
 			const added = await this.apply(to, (d) => {
-				const ins = insertTaskLines(d, lines, to === this.masterPath ? 'inbox' : 'note');
+				const ins = insertTaskLines(d, lines, to === this.masterPath ? 'inbox' : heading ? { heading } : 'note');
 				landed.at = { path: to, ref: { line: ins.edit.at + ins.offset, text: ins.edit.insert[ins.offset] ?? '' } };
 				return [ins.edit];
 			});

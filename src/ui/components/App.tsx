@@ -5,6 +5,7 @@ import {
 	computeCounts,
 	computeList,
 	isOverdue,
+	placeLabel,
 	sameList,
 	type Item,
 	type ListId,
@@ -50,11 +51,11 @@ function meta(list: ListId, item: Item, today: string): { text: string; cls?: st
 	const { task } = item;
 	switch (list.kind) {
 		case 'today':
-			return isOverdue(task, today) ? { text: overdueLabel(task.date ?? today, today), cls: 'is-overdue' } : { text: item.project?.name ?? '' };
+			return isOverdue(task, today) ? { text: overdueLabel(task.date ?? today, today), cls: 'is-overdue' } : { text: placeLabel(item) };
 		case 'upcoming':
 		case 'someday':
 		case 'completed':
-			return { text: item.project?.name ?? '' };
+			return { text: placeLabel(item) };
 		default:
 			return { text: task.date ? metaDate(task.date, today) : '' };
 	}

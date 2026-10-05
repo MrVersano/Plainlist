@@ -3,7 +3,7 @@
 
 import { headingOf, isBlank, projectLinkTarget } from './parse';
 import { formatTaskLine, setDate, setDone, setTitle } from './taskLine';
-import type { Doc, LineEdit, ProjectLink, Task, TaskDate } from './types';
+import type { Doc, Heading, LineEdit, ProjectLink, Task, TaskDate } from './types';
 
 export class PatchConflict extends Error {}
 
@@ -21,8 +21,8 @@ export interface Removed {
 	after: string | null;
 }
 
-/** Where a to-do goes: the task file's Inbox, or the to-do list of a project note. */
-export type Destination = 'inbox' | 'note';
+/** Where a to-do goes: the task file's Inbox, the to-do list of a project note, or under a heading in one. */
+export type Destination = 'inbox' | 'note' | { heading: LineRef };
 
 export function refOf(item: { line: number; text: string }): LineRef {
 	return { line: item.line, text: item.text };
@@ -38,6 +38,10 @@ function locate<T extends { line: number; text: string }>(items: T[], ref: LineR
 
 export function findTask(doc: Doc, ref: LineRef): Task {
 	return locate(doc.tasks, ref, 'To-do');
+}
+
+export function findHeading(doc: Doc, ref: LineRef): Heading {
+	return locate(doc.headings, ref, 'Heading');
 }
 
 export function findProjectLink(doc: Doc, ref: LineRef): ProjectLink {
@@ -125,8 +129,24 @@ function appendToInbox(doc: Doc, lines: string[]): Insertion {
 	return { edit: { at, delete: 0, insert: [...lines, ...gap] }, offset: 0 };
 }
 
-/** Appends lines for a to-do after the note's last top-level to-do, or at the end of the note. */
+/**
+ * Appends lines for a to-do to the note itself, not under a heading: after the last top-level
+ * to-do above the first heading, or just above that heading. Without headings: after the
+ * note's last top-level to-do, or at the end of the note.
+ */
 function appendToNote(doc: Doc, lines: string[]): Insertion {
+	const first = doc.headings[0];
+	if (first) {
+		const own = doc.tasks.filter((t) => t.line < first.line);
+		if (!own.length) {
+			const at = beforeBlanks(doc, first.line, doc.frontmatterEnd);
+			const b = block(doc, at, lines);
+			return { edit: { at, delete: 0, insert: b.lines }, offset: b.offset };
+		}
+		const top = Math.min(...own.map((t) => t.indent.length));
+		const anchor = [...own].reverse().find((t) => t.indent.length === top) ?? own[own.length - 1]!;
+		return { edit: { at: anchor.subtreeEnd, delete: 0, insert: reindent(lines, '', anchor.indent) }, offset: 0 };
+	}
 	if (!doc.tasks.length) {
 		const at = beforeBlanks(doc, doc.lines.length, doc.frontmatterEnd);
 		const b = block(doc, at, lines);
@@ -137,8 +157,23 @@ function appendToNote(doc: Doc, lines: string[]): Insertion {
 	return { edit: { at: anchor.subtreeEnd, delete: 0, insert: reindent(lines, '', anchor.indent) }, offset: 0 };
 }
 
+/** Appends lines for a to-do after the last top-level to-do under a heading, or at the end of its section. */
+function appendToHeading(doc: Doc, ref: LineRef, lines: string[]): Insertion {
+	const h = findHeading(doc, ref);
+	const own = doc.tasks.filter((t) => t.heading?.line === h.line);
+	if (!own.length) {
+		const at = beforeBlanks(doc, h.end, h.line + 1);
+		const b = block(doc, at, lines);
+		return { edit: { at, delete: 0, insert: b.lines }, offset: b.offset };
+	}
+	const top = Math.min(...own.map((t) => t.indent.length));
+	const anchor = [...own].reverse().find((t) => t.indent.length === top) ?? own[own.length - 1]!;
+	return { edit: { at: anchor.subtreeEnd, delete: 0, insert: reindent(lines, '', anchor.indent) }, offset: 0 };
+}
+
 export function insertTaskLines(doc: Doc, lines: string[], dest: Destination): Insertion {
-	return dest === 'inbox' ? appendToInbox(doc, lines) : appendToNote(doc, lines);
+	if (dest === 'inbox') return appendToInbox(doc, lines);
+	return dest === 'note' ? appendToNote(doc, lines) : appendToHeading(doc, dest.heading, lines);
 }
 
 // --- To-dos ---------------------------------------------------------------
@@ -191,6 +226,25 @@ export function extractTask(doc: Doc, ref: LineRef): { lines: string[]; edits: L
 	return {
 		lines: reindent(doc.lines.slice(t.line, end), t.indent, ''),
 		edits: [{ at: t.line, delete: end - t.line, insert: [] }],
+	};
+}
+
+/**
+ * Moves a to-do (and everything nested under it) under another heading in the same note, or
+ * above all headings when `heading` is null. Returns no edits when it is already there.
+ * `landed` is where its title line ends up.
+ */
+export function moveTaskToHeading(doc: Doc, ref: LineRef, heading: LineRef | null): { edits: LineEdit[]; landed: LineRef } {
+	const t = findTask(doc, ref);
+	const h = heading && findHeading(doc, heading);
+	if ((t.heading?.line ?? null) === (h?.line ?? null)) return { edits: [], landed: refOf(t) };
+	const out = extractTask(doc, ref);
+	const removed = out.edits[0]!;
+	const ins = insertTaskLines(doc, out.lines, heading ? { heading } : 'note');
+	const shift = ins.edit.at >= removed.at + removed.delete ? removed.delete : 0;
+	return {
+		edits: [...out.edits, ins.edit],
+		landed: { line: ins.edit.at - shift + ins.offset, text: ins.edit.insert[ins.offset] ?? '' },
 	};
 }
 

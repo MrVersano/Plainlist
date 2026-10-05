@@ -7,6 +7,7 @@ import {
 	deleteTask,
 	extractTask,
 	insertTaskLines,
+	moveTaskToHeading,
 	PatchConflict,
 	refOf,
 	completeOpenTasks,
@@ -390,5 +391,102 @@ describe('rollOverdueTasks', () => {
 
 	it('does nothing when no to-do is overdue', () => {
 		expect(rollOverdueTasks(parse('- [ ] Now [date:: 2026-10-04]'), TODAY)).toEqual([]);
+	});
+});
+
+describe('headings', () => {
+	const text = [
+		'# Kitchen',
+		'- [ ] Paint walls',
+		'',
+		'# Bathroom',
+		'- [ ] New tiles',
+		'    - [ ] Pick grout',
+		'Some notes.',
+		'',
+		'# Garden',
+		'',
+	].join('\n');
+
+	it('attaches each to-do to the heading above it', () => {
+		const doc = parse(text);
+		expect(doc.headings.map((h) => h.name)).toEqual(['Kitchen', 'Bathroom', 'Garden']);
+		expect(doc.tasks.map((t) => t.heading?.name)).toEqual(['Kitchen', 'Bathroom', 'Bathroom']);
+	});
+
+	it('does not treat a note title as a heading', () => {
+		const doc = parse(note);
+		expect(doc.headings.map((h) => h.name)).toEqual(['Meeting notes']);
+		expect(doc.tasks.every((t) => t.heading === null)).toBe(true);
+	});
+
+	it('does not treat Inbox and Projects as headings', () => {
+		const doc = parse(example);
+		expect(doc.headings.some((h) => /^(inbox|projects)$/i.test(h.name))).toBe(false);
+		expect(doc.tasks.filter((t) => t.section === 'inbox').every((t) => t.heading === null)).toBe(true);
+	});
+
+	it('adds a to-do after the last one under a heading', () => {
+		const doc = parse(text);
+		const heading = refOf(doc.headings[1]!);
+		const out = run(text, (d) => addTask(d, { title: 'Fix tap', date: null }, { heading }));
+		expect(out.split('\n').slice(3, 8)).toEqual(['# Bathroom', '- [ ] New tiles', '    - [ ] Pick grout', '- [ ] Fix tap', 'Some notes.']);
+	});
+
+	it('adds a to-do under a heading with none yet, as its own block', () => {
+		const doc = parse(text);
+		const heading = refOf(doc.headings[2]!);
+		const out = run(text, (d) => addTask(d, { title: 'Plant bulbs', date: null }, { heading }));
+		expect(out.endsWith('# Garden\n\n- [ ] Plant bulbs\n')).toBe(true);
+	});
+
+	it('moves a to-do and its nested to-dos under another heading in the same note', () => {
+		const doc = parse(text);
+		const r = moveTaskToHeading(doc, refOf(task(doc, 'New tiles')), refOf(doc.headings[0]!));
+		const out = applyEdits(doc, r.edits);
+		expect(out.split('\n').slice(0, 6)).toEqual(['# Kitchen', '- [ ] Paint walls', '- [ ] New tiles', '    - [ ] Pick grout', '', '# Bathroom']);
+		expect(out.split('\n')[r.landed.line]).toBe(r.landed.text);
+		expect(r.landed.text).toBe('- [ ] New tiles');
+	});
+
+	it('moves a to-do down to a later heading and reports where it landed', () => {
+		const doc = parse(text);
+		const r = moveTaskToHeading(doc, refOf(task(doc, 'Paint walls')), refOf(doc.headings[2]!));
+		const out = applyEdits(doc, r.edits);
+		expect(out.split('\n')[r.landed.line]).toBe('- [ ] Paint walls');
+		expect(parse(out).tasks.find((t) => t.title === 'Paint walls')?.heading?.name).toBe('Garden');
+	});
+
+	it('does nothing when the to-do is already under that heading', () => {
+		const doc = parse(text);
+		expect(moveTaskToHeading(doc, refOf(task(doc, 'Paint walls')), refOf(doc.headings[0]!)).edits).toEqual([]);
+	});
+
+	it('adds a to-do for the project itself above all headings', () => {
+		const out = run(text, (d) => addTask(d, { title: 'Measure room', date: null }, 'note'));
+		expect(out.split('\n').slice(0, 4)).toEqual(['- [ ] Measure room', '', '# Kitchen', '- [ ] Paint walls']);
+		const intro = ['Intro text.', '', '## Walls', '- [ ] Paint', ''].join('\n');
+		expect(run(intro, (d) => addTask(d, { title: 'Measure room', date: null }, 'note'))).toBe(
+			['Intro text.', '', '- [ ] Measure room', '', '## Walls', '- [ ] Paint', ''].join('\n'),
+		);
+		const titled = ['# Office', '', '- [ ] Loose', '', '## Walls', '- [ ] Paint', ''].join('\n');
+		expect(run(titled, (d) => addTask(d, { title: 'Measure room', date: null }, 'note'))).toBe(
+			['# Office', '', '- [ ] Loose', '- [ ] Measure room', '', '## Walls', '- [ ] Paint', ''].join('\n'),
+		);
+	});
+
+	it('moves a to-do out from under its heading to above all headings', () => {
+		const intro = ['Intro text.', '', '## Walls', '- [ ] Paint', '- [ ] Sand', ''].join('\n');
+		const doc = parse(intro);
+		const r = moveTaskToHeading(doc, refOf(task(doc, 'Sand')), null);
+		const out = applyEdits(doc, r.edits);
+		expect(out).toBe(['Intro text.', '', '- [ ] Sand', '', '## Walls', '- [ ] Paint', ''].join('\n'));
+		expect(out.split('\n')[r.landed.line]).toBe('- [ ] Sand');
+		expect(moveTaskToHeading(parse(out), refOf(task(parse(out), 'Sand')), null).edits).toEqual([]);
+	});
+
+	it('refuses a heading that is no longer there', () => {
+		const doc = parse(text);
+		expect(() => addTask(doc, { title: 'x', date: null }, { heading: { line: 3, text: '# Gone' } })).toThrow(PatchConflict);
 	});
 });

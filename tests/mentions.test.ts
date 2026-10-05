@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findMention, mentionQuery, stripRanges } from '../src/mentions';
+import { findMention, mentionQuery, mentionTargets, stripRanges, targetName } from '../src/mentions';
 
 const NAMES = ['House', 'House Renovation 2026', 'Garden for spring'];
 const found = (text: string) => {
@@ -45,5 +45,23 @@ describe('stripRanges', () => {
 	it('removes ranges and collapses spaces', () => {
 		const text = 'Call plumber tomorrow @House Renovation 2026 #home';
 		expect(stripRanges(text, [{ index: 22, end: 44 }, { index: 13, end: 21 }])).toBe('Call plumber #home');
+	});
+});
+
+describe('mention targets', () => {
+	const targets = mentionTargets([
+		{ name: 'House', path: 'House.md', headings: [{ name: 'Kitchen', line: 3, text: '## Kitchen' }] },
+		{ name: 'Garden', path: 'Garden.md' },
+	]);
+
+	it('lists each project followed by its headings', () => {
+		expect(targets.map((t) => t.label)).toEqual(['House', 'House/Kitchen', 'Garden']);
+		expect(targetName(targets[1]!)).toBe('House › Kitchen');
+	});
+
+	it('finds a heading mention, preferring it over the bare project', () => {
+		const names = targets.map((t) => t.label);
+		expect(targets[findMention('Fix tap @house/kitchen today', names)!.project]?.heading?.name).toBe('Kitchen');
+		expect(targets[findMention('Fix tap @House today', names)!.project]?.heading).toBeNull();
 	});
 });

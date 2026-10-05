@@ -3,7 +3,7 @@
 // the task file and project notes; only the task file uses `# Inbox` / `# Projects`.
 
 import { isTaskLine, parseTaskLine } from './taskLine';
-import type { Doc, LineKind, ProjectLink, Section, Task } from './types';
+import type { Doc, Heading, LineKind, ProjectLink, Section, Task } from './types';
 
 const HEADING_RE = /^(#{1,6})(?:[ \t]+(.*?))?[ \t]*$/;
 const FENCE_RE = /^[ \t]*(`{3,}|~{3,})/;
@@ -139,6 +139,8 @@ export function parse(text: string): Doc {
 	const isPlainlist = lines.slice(1, Math.max(fmEnd - 1, 1)).some((l) => PLAINLIST_RE.test(l));
 
 	const headings: { line: number; level: number }[] = [];
+	const grouping: Heading[] = [];
+	let heading: Heading | null = null;
 	const tasks: Task[] = [];
 	const projectLinks: ProjectLink[] = [];
 	let inbox: Section | null = null;
@@ -166,6 +168,7 @@ export function parse(text: string): Doc {
 		if (h) {
 			headings.push({ line: i, level: h.level });
 			const name = h.name.toLowerCase();
+			heading = null;
 			if (h.level === 1 && name === 'inbox') {
 				kinds[i] = 'section';
 				inbox ??= { line: i, end: n };
@@ -174,9 +177,11 @@ export function parse(text: string): Doc {
 				kinds[i] = 'section';
 				projectsSection ??= { line: i, end: n };
 				ctx = 'projects';
-			} else if (h.level === 1 || ctx === 'inbox') {
+			} else {
 				// Any other heading ends the Inbox's own region.
-				ctx = 'other';
+				if (h.level === 1 || ctx === 'inbox') ctx = 'other';
+				heading = { line: i, text: line, level: h.level, name: h.name, end: n };
+				grouping.push(heading);
 			}
 			continue;
 		}
@@ -207,6 +212,7 @@ export function parse(text: string): Doc {
 				end,
 				subtreeEnd,
 				section: ctx === 'inbox' ? 'inbox' : 'other',
+				heading,
 			});
 			kinds[i] = 'task';
 			for (let j = i + 1; j < end; j++) kinds[j] = 'taskDesc';
@@ -218,6 +224,14 @@ export function parse(text: string): Doc {
 		headings.find((h) => h.line > after && h.level <= maxLevel)?.line ?? n;
 	if (inbox) inbox.end = nextHeading(inbox.line, 6);
 	if (projectsSection) projectsSection.end = nextHeading(projectsSection.line, 1);
+	for (const h of grouping) h.end = nextHeading(h.line, 6);
+
+	// A note's title, its only level-1 heading and its first heading, does not group to-dos.
+	const first = grouping[0];
+	if (first?.level === 1 && first.line === headings[0]?.line && headings.filter((h) => h.level === 1).length === 1) {
+		grouping.shift();
+		for (const t of tasks) if (t.heading === first) t.heading = null;
+	}
 
 	return {
 		lines,
@@ -231,5 +245,6 @@ export function parse(text: string): Doc {
 		projectsSection,
 		projectLinks,
 		tasks,
+		headings: grouping,
 	};
 }

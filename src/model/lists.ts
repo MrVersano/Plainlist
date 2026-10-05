@@ -60,6 +60,13 @@ export const INBOX_GROUP = 'Inbox';
 
 const isDated = (t: Task): boolean => !!t.date && t.date !== 'someday';
 
+/** Where a to-do lives, for row meta: `Project › Heading`, or just the project. Blank for the task file. */
+export function placeLabel(item: Item): string {
+	if (!item.project) return '';
+	const heading = item.task.heading?.name;
+	return heading ? `${item.project.name} › ${heading}` : item.project.name;
+}
+
 export function allItems(sources: Source[]): Item[] {
 	return sources.flatMap((s) => s.doc.tasks.map((task) => ({ task, path: s.path, project: s.project })));
 }
@@ -154,7 +161,12 @@ export function computeList(sources: Source[], projects: ProjectInfo[], list: Li
 		}
 		case 'project': {
 			const own = items.filter((i) => i.project?.path === list.path).sort(byFile);
-			return { ...flat(own.filter((i) => !i.task.done)), completed: own.filter((i) => i.task.done) };
+			// Open to-dos in file order, under their headings; those before any heading come first, unlabelled.
+			const groups = grouped(
+				own.filter((i) => !i.task.done),
+				(i) => (i.task.heading ? { key: `heading:${i.task.heading.line}`, label: i.task.heading.name } : { key: 'all', label: '' }),
+			);
+			return { groups, completed: own.filter((i) => i.task.done) };
 		}
 	}
 }

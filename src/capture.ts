@@ -7,6 +7,7 @@ import { parse } from './model/parse';
 import { addTask, PatchConflict } from './model/patch';
 import { resolveProjects } from './projects';
 import type { CaptureResult } from './ui/components/Capture';
+import type { PickerProject } from './ui/components/popovers';
 
 export interface CaptureOptions {
 	/** The task file. */
@@ -20,7 +21,7 @@ export interface CaptureOptions {
 
 export interface CaptureSession {
 	options: CaptureOptions;
-	projects: { name: string; path: string }[];
+	projects: PickerProject[];
 	/** The preselected project, if it is still an open project. */
 	initialProject: string | null;
 	/** Writes the to-do. Shows a notice and returns false on failure. */
@@ -33,13 +34,18 @@ export async function startCapture(app: App, options: CaptureOptions): Promise<C
 	const projects = resolveProjects(app, options.file, doc).filter((p) => p.file && !p.done);
 	const notes = new Map<string, TFile>();
 	for (const p of projects) if (p.file) notes.set(p.path, p.file);
+	const headings = new Map<string, PickerProject['headings']>();
+	await Promise.all(
+		projects.map(async (p) => p.file && headings.set(p.path, parse(await app.vault.cachedRead(p.file)).headings)),
+	);
 
 	const save = async (result: CaptureResult): Promise<boolean> => {
 		const note = result.project === null ? null : notes.get(result.project);
 		const file = note ?? options.file;
 		const task = { title: result.title, date: result.date };
+		const dest = !note ? 'inbox' : result.heading ? { heading: result.heading } : 'note';
 		try {
-			await app.vault.process(file, (text) => patchText(text, (doc) => addTask(doc, task, note ? 'note' : 'inbox')));
+			await app.vault.process(file, (text) => patchText(text, (doc) => addTask(doc, task, dest)));
 			return true;
 		} catch (e) {
 			new Notice(
@@ -53,7 +59,7 @@ export async function startCapture(app: App, options: CaptureOptions): Promise<C
 
 	return {
 		options,
-		projects: projects.map((p) => ({ name: p.name, path: p.path })),
+		projects: projects.map((p) => ({ name: p.name, path: p.path, headings: headings.get(p.path) })),
 		initialProject: options.project !== null && notes.has(options.project) ? options.project : null,
 		save,
 	};

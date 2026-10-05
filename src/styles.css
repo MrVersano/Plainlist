@@ -1056,3 +1056,11 @@ body.pl-quick-entry-body {
 	visibility: hidden;
 	pointer-events: none;
 }
+
+.pl-root button.pl-project-option.is-heading,
+.pl-capture button.pl-project-option.is-heading {
+	min-height: 28px;
+	padding-left: 22px;
+	font-size: 13px;
+	color: var(--text-muted);
+}

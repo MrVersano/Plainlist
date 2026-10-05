@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { addDays, longDate } from '../../dates/format';
-import type { Item, ProjectInfo } from '../../model/lists';
-import { stripRanges } from '../../mentions';
+import { placeLabel, type Item, type ProjectInfo } from '../../model/lists';
+import { mentionTargets, stripRanges, targetName } from '../../mentions';
 import { findTask, setTaskDate, setTaskDescription, setTaskTitle } from '../../model/patch';
 import { recogniseEdit } from '../../recognise';
 import type { TrackBox } from '../../store';
@@ -91,14 +91,16 @@ export function TaskEditor({
 	const latest = useRef({ title, description });
 	latest.current = { title, description };
 	const open = projects.filter((p) => p.exists);
-	const names = open.map((p) => p.name);
+	const choices = open.map((p) => ({ name: p.name, path: p.path, headings: workspace.doc(p.path)?.headings }));
+	const targets = mentionTargets(choices);
+	const names = targets.map((t) => t.label);
 	const links = noteLinks(app, item.path);
 
 	const onTitle = (value: string): void => {
 		setTitle(value);
 		save.schedule();
 	};
-	const suggest = useSuggest({ input: titleInput, value: title, onChange: onTitle, projects: open, links });
+	const suggest = useSuggest({ input: titleInput, value: title, onChange: onTitle, projects: targets, links });
 	const recognised = (text: string) => recogniseEdit(text, original.current, names, today, weekStart());
 	const { match, mention } = recognised(title);
 
@@ -128,7 +130,8 @@ export function TaskEditor({
 		void workspace.run(box.current.path, (doc) => setTaskTitle(doc, box.current.ref, rest), box);
 		const date = found.match?.date;
 		if (date) void workspace.run(box.current.path, (doc) => setTaskDate(doc, box.current.ref, date), box);
-		if (found.mention) void workspace.moveTask(box, open[found.mention.project]?.path ?? null);
+		const target = found.mention && targets[found.mention.project];
+		if (target) void workspace.moveTask(box, target.path, target.heading && { line: target.heading.line, text: target.heading.text });
 	};
 
 	// Collapsing unmounts the editor: save whatever is still pending.
@@ -157,7 +160,8 @@ export function TaskEditor({
 	if (match) marks.push({ start: match.index, end: match.end, cls: 'pl-capture-date' });
 	if (mention) marks.push({ start: mention.index, end: mention.end, cls: 'pl-capture-mention' });
 	const dateText = match ? dateLabel(match.date, today) : dateLabel(task.date, today);
-	const projectName = mention ? open[mention.project]?.name : item.project?.name;
+	const mentioned = mention ? targets[mention.project] : undefined;
+	const projectName = mentioned ? targetName(mentioned) : placeLabel(item) || undefined;
 
 	return (
 		<div
@@ -272,13 +276,14 @@ export function TaskEditor({
 						</button>
 						{popover === 'project' && (
 							<ProjectPicker
-								projects={open}
+								projects={choices}
 								current={item.project?.path ?? null}
+								currentHeading={item.task.heading?.line ?? null}
 								onClose={() => setPopover(null)}
-								onPick={(path) =>
+								onPick={(path, heading) =>
 									pick(() => {
 										drop(mention);
-										void workspace.moveTask(box, path);
+										void workspace.moveTask(box, path, heading);
 									})
 								}
 							/>
