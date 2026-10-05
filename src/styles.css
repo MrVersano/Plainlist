@@ -949,6 +949,17 @@
 	width: 100%;
 }
 
+/* System-wide Quick Entry window (desktop): the palette fills a small frameless window. */
+body.pl-quick-entry-body {
+	margin: 0;
+	overflow: hidden;
+	background: var(--modal-background, var(--background-primary));
+}
+
+.pl-quick-entry {
+	width: 100%;
+}
+
 /* Phones: no keyboard hints in the palette. */
 .is-mobile .pl-capture-keys {
 	display: none;

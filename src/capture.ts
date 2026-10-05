@@ -1,0 +1,60 @@
+// The "New to-do" palette's data and save path, shared by the in-app modal and the
+// desktop-only system-wide Quick Entry window.
+
+import { App, Notice, TFile } from 'obsidian';
+import { patchText } from './model/apply';
+import { parse } from './model/parse';
+import { addTask, PatchConflict } from './model/patch';
+import { resolveProjects } from './projects';
+import type { CaptureResult } from './ui/components/Capture';
+
+export interface CaptureOptions {
+	/** The task file. */
+	file: TFile;
+	today: string;
+	weekStart: 0 | 1;
+	/** Project note path to preselect, or null for the Inbox. */
+	project: string | null;
+	defaultDate: string | null;
+}
+
+export interface CaptureSession {
+	options: CaptureOptions;
+	projects: { name: string; path: string }[];
+	/** The preselected project, if it is still an open project. */
+	initialProject: string | null;
+	/** Writes the to-do. Shows a notice and returns false on failure. */
+	save: (result: CaptureResult) => Promise<boolean>;
+}
+
+/** Reads the open projects for the palette. Writes go straight to the notes, so no view needs to be open. */
+export async function startCapture(app: App, options: CaptureOptions): Promise<CaptureSession> {
+	const doc = parse(await app.vault.read(options.file));
+	const projects = resolveProjects(app, options.file, doc).filter((p) => p.file && !p.done);
+	const notes = new Map<string, TFile>();
+	for (const p of projects) if (p.file) notes.set(p.path, p.file);
+
+	const save = async (result: CaptureResult): Promise<boolean> => {
+		const note = result.project === null ? null : notes.get(result.project);
+		const file = note ?? options.file;
+		const task = { title: result.title, date: result.date };
+		try {
+			await app.vault.process(file, (text) => patchText(text, (doc) => addTask(doc, task, note ? 'note' : 'inbox')));
+			return true;
+		} catch (e) {
+			new Notice(
+				e instanceof PatchConflict
+					? `${file.name} changed — please try again`
+					: `Plainlist could not save: ${e instanceof Error ? e.message : String(e)}`,
+			);
+			return false;
+		}
+	};
+
+	return {
+		options,
+		projects: projects.map((p) => ({ name: p.name, path: p.path })),
+		initialProject: options.project !== null && notes.has(options.project) ? options.project : null,
+		save,
+	};
+}

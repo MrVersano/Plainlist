@@ -1,6 +1,8 @@
-import { Notice, Plugin, TFile, WorkspaceLeaf } from 'obsidian';
+import { Notice, Platform, Plugin, TFile, WorkspaceLeaf } from 'obsidian';
+import type { CaptureOptions } from './capture';
 import { Clock } from './clock';
 import { VIEW_ICON, VIEW_TYPE } from './constants';
+import type { QuickEntryService } from './desktop/QuickEntryService';
 import type { ListId } from './model/lists';
 import { DEFAULT_SETTINGS, firstDayOfWeek, PlainlistSettings, PlainlistSettingTab } from './settings';
 import { ensureTasksFile } from './tasksFile';
@@ -12,6 +14,8 @@ export default class PlainlistPlugin extends Plugin {
 	settings!: PlainlistSettings;
 	clock = new Clock();
 	forceMarkdown = new WeakMap<WorkspaceLeaf, string>();
+	/** System-wide Quick Entry; desktop only, null until loaded or when unavailable. */
+	quickEntry: QuickEntryService | null = null;
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -49,6 +53,21 @@ export default class PlainlistPlugin extends Plugin {
 		});
 
 		this.addRibbonIcon(VIEW_ICON, 'Open Plainlist', () => void this.openTasksFile());
+
+		if (Platform.isDesktopApp) void this.loadQuickEntry();
+	}
+
+	/** Loads the Electron-backed Quick Entry module on desktop. Its failure leaves the rest of the plugin working. */
+	private async loadQuickEntry(): Promise<void> {
+		try {
+			const { QuickEntryService } = await import('./desktop/QuickEntryService');
+			const service = QuickEntryService.create(this);
+			// addChild loads it now, or never if the plugin was unloaded meanwhile.
+			if (service) this.quickEntry = this.addChild(service);
+		} catch (e) {
+			console.error('Plainlist: could not start system-wide Quick Entry', e);
+			if (this.settings.quickEntryEnabled) new Notice('Plainlist: system-wide quick entry is unavailable. See the console for details.');
+		}
 	}
 
 	weekStart(): 0 | 1 {
@@ -92,23 +111,34 @@ export default class PlainlistPlugin extends Plugin {
 			view.openCapture();
 			return;
 		}
-		try {
-			const file = await ensureTasksFile(this.app, this.settings.tasksFile);
-			this.openCapture(file, { kind: 'inbox' });
-		} catch (e) {
-			new Notice(`Plainlist: could not open the tasks file. ${e instanceof Error ? e.message : String(e)}`);
-		}
+		const options = await this.inboxCaptureOptions();
+		if (options) new CaptureModal(this.app, options).open();
 	}
 
 	openCapture(file: TFile, list: ListId): void {
+		new CaptureModal(this.app, this.captureOptions(file, list)).open();
+	}
+
+	captureOptions(file: TFile, list: ListId): CaptureOptions {
 		const today = this.clock.today;
-		new CaptureModal(this.app, {
+		return {
 			file,
 			today,
 			weekStart: this.weekStart(),
 			project: list.kind === 'project' ? list.path : null,
 			defaultDate: list.kind === 'today' ? today : list.kind === 'someday' ? 'someday' : null,
-		}).open();
+		};
+	}
+
+	/** Options for a palette that adds to the Inbox of the tasks file, as "New to-do" does outside the view. */
+	async inboxCaptureOptions(): Promise<CaptureOptions | null> {
+		try {
+			const file = await ensureTasksFile(this.app, this.settings.tasksFile);
+			return this.captureOptions(file, { kind: 'inbox' });
+		} catch (e) {
+			new Notice(`Plainlist: could not open the tasks file. ${e instanceof Error ? e.message : String(e)}`);
+			return null;
+		}
 	}
 
 	async loadSettings(): Promise<void> {

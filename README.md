@@ -30,7 +30,9 @@ Plainlist needs Obsidian 1.13 or later, and works on desktop and mobile.
 
 Run **Plainlist: Open** from the command palette (or click the ribbon icon). It opens `Tasks.md`, creating it if needed. Any note with `plainlist: true` in its properties opens in the Plainlist view; use the header button or **Plainlist: Switch between task list and Markdown** to see the raw Markdown.
 
-Plainlist does not set a hotkey for you. To capture from anywhere, bind **Plainlist: New to-do** under **Settings → Hotkeys**; `Mod+Shift+N` works well.
+Plainlist does not set a hotkey for you. To capture from anywhere in Obsidian, bind **Plainlist: New to-do** under **Settings → Hotkeys**; `Mod+Shift+N` works well.
+
+On desktop you can also capture from any other app. Turn on **System-wide quick entry** in Plainlist's settings, and a global shortcut (`Cmd+Option+N` / `Ctrl+Alt+N` by default) opens the same palette in a small floating window while Obsidian is running. Enter saves and closes it; Escape or clicking elsewhere dismisses it.
 
 ## Projects
 

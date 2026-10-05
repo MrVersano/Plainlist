@@ -72,7 +72,8 @@ export function useOutsideClick(ref: { current: HTMLElement | null }, onClose: (
 			const target = evt.target as Node | null;
 			if (!ref.current || !target || ref.current.contains(target)) return;
 			// Obsidian menus and modals live outside the view; clicks there don't count.
-			if (target.instanceOf(Element) && target.closest('.menu, .modal-container, .pl-popover')) return;
+			// nodeType, not instanceOf: the Quick Entry window's nodes come from another realm.
+			if (target.nodeType === Node.ELEMENT_NODE && (target as Element).closest('.menu, .modal-container, .pl-popover')) return;
 			latest.current();
 		};
 		doc.addEventListener('pointerdown', handler, true);
