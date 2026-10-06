@@ -12,6 +12,7 @@ import {
 	setProjectDone,
 	extractTask,
 	insertTaskLines,
+	moveProjectLink,
 	moveTaskToHeading,
 	PatchConflict,
 	refOf,
@@ -19,6 +20,7 @@ import {
 	replaceProjectLink,
 	type LineRef,
 	type NewTask,
+	type Place,
 } from './model/patch';
 import type { Doc, LineEdit } from './model/types';
 import { notePath, projectNameError, resolveProjects } from './projects';
@@ -259,6 +261,11 @@ export class Workspace {
 	/** Reopens a project. Its to-dos stay as they are. */
 	reopenProject(project: ProjectInfo): Promise<RunResult> {
 		return this.run(this.masterPath, (d) => setProjectDone(d, refOf(project), false, ''));
+	}
+
+	/** Moves a project just before or after another in the sidebar, by moving its link line. */
+	moveProject(project: ProjectInfo, target: ProjectInfo, place: Place): Promise<RunResult> {
+		return this.run(this.masterPath, (d) => moveProjectLink(d, refOf(project), refOf(target), place));
 	}
 
 	/** Removes the project from Plainlist. The note itself is left alone. */

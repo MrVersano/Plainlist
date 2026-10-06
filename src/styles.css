@@ -51,8 +51,9 @@
 /* Sidebar ---------------------------------------------------------------- */
 
 .pl-sidebar {
-	flex: 0 0 220px;
-	width: 220px;
+	flex: 0 0 var(--pl-sidebar-width, 220px);
+	width: var(--pl-sidebar-width, 220px);
+	min-width: 0;
 	padding: 22px 12px;
 	background: var(--background-secondary);
 	border-right: 1px solid var(--pl-hairline);
@@ -196,6 +197,101 @@
 	padding: 0 9px;
 	font-size: 14px;
 	border-radius: var(--pl-radius);
+}
+
+/* The sidebar's edge: drag to resize, or all the way left to close. Closed, it sits at the view's left edge. */
+.pl-sidebar-handle {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: calc(var(--pl-sidebar-width, 220px) - 4px);
+	width: 8px;
+	z-index: 2;
+	cursor: col-resize;
+	touch-action: none;
+	outline: none;
+}
+
+.pl-sidebar-handle.is-closed {
+	left: 0;
+}
+
+.pl-sidebar-handle::after {
+	content: '';
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: 3px;
+	width: 2px;
+	background: var(--interactive-accent);
+	opacity: 0;
+	transition: opacity 120ms ease;
+}
+
+.pl-sidebar-handle.is-closed::after {
+	left: 0;
+}
+
+.pl-sidebar-handle:hover::after,
+.pl-sidebar-handle:focus-visible::after,
+.pl-root.is-resizing .pl-sidebar-handle::after {
+	opacity: 1;
+}
+
+.pl-root.is-resizing {
+	cursor: col-resize;
+	user-select: none;
+}
+
+/* Drag to reorder ----------------------------------------------------------- */
+
+.pl-root .is-reordering,
+.pl-root .is-reordering * {
+	cursor: grabbing;
+	user-select: none;
+}
+
+.pl-root .pl-row.is-dragging,
+.pl-root button.pl-nav-item.is-dragging {
+	opacity: 0.5;
+}
+
+.pl-root .pl-row.is-drop-before,
+.pl-root .pl-row.is-drop-after,
+.pl-root button.pl-nav-item.is-drop-before,
+.pl-root button.pl-nav-item.is-drop-after {
+	position: relative;
+}
+
+/* A line where the dragged row would land. */
+.pl-root .pl-row.is-drop-before::before,
+.pl-root .pl-row.is-drop-after::after,
+.pl-root button.pl-nav-item.is-drop-before::before,
+.pl-root button.pl-nav-item.is-drop-after::after {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	height: 2px;
+	border-radius: 1px;
+	background: var(--interactive-accent);
+	pointer-events: none;
+}
+
+.pl-root .pl-row.is-drop-before::before,
+.pl-root button.pl-nav-item.is-drop-before::before {
+	top: -1.5px;
+}
+
+.pl-root .pl-row.is-drop-after::after,
+.pl-root button.pl-nav-item.is-drop-after::after {
+	bottom: -1.5px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.pl-sidebar-handle::after {
+		transition: none;
+	}
 }
 
 /* Narrow layout: list picker instead of the sidebar ------------------------ */

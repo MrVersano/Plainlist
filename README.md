@@ -12,6 +12,8 @@ Plainlist turns your notes into a clean, minimal task manager in Obsidian. A tas
 - **Paste a list:** paste lines like `- [ ] Task`, `- [] Task`, `- Task` or `[ ] Task` into Plainlist and each one becomes a to-do in the list you are on. Indented lines become sub-tasks.
 - **Search:** the **Search to-dos** command fuzzy-finds any to-do by its title or project, from anywhere in Obsidian. Pick one to jump to it in its list. Completed to-dos are left out unless you turn on **Search completed to-dos** in the settings.
 - **Go to a list:** the **Go to Inbox**, **Go to Today**, **Go to Upcoming**, **Go to No Date** and **Go to Someday** commands open Plainlist on that list. Bind them to hotkeys to switch lists from anywhere in Obsidian.
+- **Reorder:** drag a to-do to a new place (on touch screens, hold it, then drag), or press `Alt+↑` / `Alt+↓`. In Today, put to-dos in any order; Plainlist remembers it (in its own data, not your notes). Elsewhere the to-do's lines move in its note, so it moves among the to-dos of its own note, next to others with the same parent. Drag projects in the sidebar to reorder them.
+- **Resizable sidebar:** drag the sidebar's edge to make it wider or narrower. Drag it all the way to the left to hide it; drag (or click) the view's left edge to bring it back.
 - **Safe editing:** Plainlist only changes the lines it owns. Headings, notes, tables and callouts it does not understand stay exactly as they are.
 
 | Upcoming | Project |
@@ -114,8 +116,9 @@ With the Plainlist view focused:
 | `Space` or `Mod+Enter` | Complete or reopen the selected to-do |
 | `Delete` / `Backspace` | Delete the selected to-do (with undo) |
 | `Tab` / `Shift+Tab` | Make the selected to-do a sub-task of the one above / move it out of its parent |
+| `Alt+↑` / `Alt+↓` | Move the selected to-do up or down |
 
-Right-click (or long-press on mobile) a to-do to complete it, add a sub-task, indent or outdent it, or delete it, or a project to open, rename or remove it.
+Right-click (or long-press without moving, on mobile) a to-do to complete it, add a sub-task, indent or outdent it, or delete it, or a project to open, rename or remove it.
 
 ## Settings
 

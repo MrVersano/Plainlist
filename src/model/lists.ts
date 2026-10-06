@@ -130,7 +130,42 @@ function sourceOrder(projects: ProjectInfo[]): (i: Item) => number {
 	return (i) => (i.project ? (rank.get(i.project.path) ?? projects.length + 1) : 0);
 }
 
-export function computeList(sources: Source[], projects: ProjectInfo[], list: ListId, today: string): ListView {
+/** Identifies a to-do in the saved Today order: its note and title, which survive completing it and date changes. */
+export function todayKey(item: Item): string {
+	return `${item.path}\u0000${item.task.title}`;
+}
+
+/**
+ * Puts Today's to-dos in the order the user dragged them into. To-dos not in that order yet
+ * (new for today, or with an edited title) follow, in their usual order.
+ */
+export function inTodayOrder(items: Item[], order: string[]): Item[] {
+	const rank = new Map<string, number>();
+	order.forEach((key, n) => {
+		if (!rank.has(key)) rank.set(key, n);
+	});
+	const ranked = items.filter((i) => rank.has(todayKey(i)));
+	ranked.sort((a, b) => (rank.get(todayKey(a)) ?? 0) - (rank.get(todayKey(b)) ?? 0));
+	return [...ranked, ...items.filter((i) => !rank.has(todayKey(i)))];
+}
+
+/** The Today order after moving `key` just before or after `target`, given the keys as shown. */
+export function moveInOrder(shown: string[], key: string, target: string, place: 'before' | 'after'): string[] {
+	const rest = shown.filter((k) => k !== key);
+	const at = rest.indexOf(target);
+	if (at === -1 || key === target) return shown;
+	rest.splice(place === 'before' ? at : at + 1, 0, key);
+	return rest;
+}
+
+export function computeList(
+	sources: Source[],
+	projects: ProjectInfo[],
+	list: ListId,
+	today: string,
+	/** Saved Today order, as `todayKey`s. */
+	todayOrder: string[] = [],
+): ListView {
 	const items = allItems(sources);
 	const rank = sourceOrder(projects);
 	const byFile = (a: Item, b: Item): number => rank(a) - rank(b) || a.task.line - b.task.line;
@@ -143,7 +178,8 @@ export function computeList(sources: Source[], projects: ProjectInfo[], list: Li
 			return flat(nested(open.filter((i) => !i.project)));
 		case 'today': {
 			const all = open.filter((i) => isInToday(i.task, today));
-			return flat([...all.filter((i) => isOverdue(i.task, today)), ...all.filter((i) => !isOverdue(i.task, today))]);
+			const usual = [...all.filter((i) => isOverdue(i.task, today)), ...all.filter((i) => !isOverdue(i.task, today))];
+			return flat(inTodayOrder(usual, todayOrder));
 		}
 		case 'upcoming': {
 			const future = open

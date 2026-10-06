@@ -26,6 +26,14 @@ export default class PlainlistPlugin extends Plugin {
 		this.clock.start(this);
 		this.registerView(VIEW_TYPE, (leaf) => new PlainlistView(leaf, this));
 		installViewSwitch(this);
+		// Keep a renamed project's to-dos in their place in Today.
+		this.registerEvent(
+			this.app.vault.on('rename', (file, oldPath) => {
+				const prefix = `${oldPath}\u0000`;
+				if (!this.settings.todayOrder.some((k) => k.startsWith(prefix))) return;
+				this.setTodayOrder(this.settings.todayOrder.map((k) => (k.startsWith(prefix) ? file.path + k.slice(oldPath.length) : k)));
+			}),
+		);
 
 		this.addCommand({
 			id: 'open',
@@ -216,6 +224,11 @@ export default class PlainlistPlugin extends Plugin {
 
 	async loadSettings(): Promise<void> {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, (await this.loadData()) as Partial<PlainlistSettings>);
+	}
+
+	setTodayOrder(keys: string[]): void {
+		this.settings.todayOrder = keys;
+		void this.saveSettings();
 	}
 
 	async saveSettings(): Promise<void> {

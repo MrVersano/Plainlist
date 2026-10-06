@@ -14,6 +14,8 @@ export interface PlainlistSettings {
 	quickEntryShortcut: string;
 	/** "Search to-dos" also finds completed to-dos. */
 	searchCompleted: boolean;
+	/** The order the user dragged Today's to-dos into, as `todayKey`s. Not shown in the settings tab. */
+	todayOrder: string[];
 }
 
 export const DEFAULT_SETTINGS: PlainlistSettings = {
@@ -24,6 +26,7 @@ export const DEFAULT_SETTINGS: PlainlistSettings = {
 	quickEntryEnabled: false,
 	quickEntryShortcut: DEFAULT_SHORTCUT,
 	searchCompleted: false,
+	todayOrder: [],
 };
 
 /** 0 = Sunday, 1 = Monday. Locales that start on another day fall back to Monday. */

@@ -24,6 +24,8 @@ import {
 	indentTask,
 	outdentTask,
 	addSubtask,
+	moveTaskNextTo,
+	moveProjectLink,
 } from '../src/model/patch';
 import type { Doc, LineEdit } from '../src/model/types';
 import { changedLines, fixture, rng } from './helpers';
@@ -560,5 +562,64 @@ describe('sub-tasks', () => {
 		expect(applyEdits(doc, r.edits)).toBe('- [ ] a\n\tnote\n\t- [ ] x\n\t- [ ]\n- [ ] b\n');
 		expect(r.landed).toEqual({ line: 3, text: '\t- [ ]' });
 		expect(parse(applyEdits(doc, r.edits)).tasks[2]).toMatchObject({ title: '', parent: 0 });
+	});
+});
+
+describe('reordering', () => {
+	const at = (text: string, title: string) => refOf(task(parse(text), title));
+	const reorder = (text: string, title: string, target: string, place: 'before' | 'after') => {
+		const doc = parse(text);
+		const r = moveTaskNextTo(doc, at(text, title), at(text, target), place);
+		const out = applyEdits(doc, r.edits);
+		expect(parse(out).lines[r.landed.line]).toBe(r.landed.text);
+		return out;
+	};
+
+	it('moves a to-do up, with its description and sub-tasks', () => {
+		const text = '- [ ] a\n- [ ] b\n- [ ] c\n\tnote\n\t- [ ] d\n';
+		expect(reorder(text, 'c', 'a', 'before')).toBe('- [ ] c\n\tnote\n\t- [ ] d\n- [ ] a\n- [ ] b\n');
+	});
+
+	it('moves a to-do down, after the target and everything nested under it', () => {
+		const text = '- [ ] a\n- [ ] b\n\t- [ ] x\n- [ ] c\n';
+		expect(reorder(text, 'a', 'b', 'after')).toBe('- [ ] b\n\t- [ ] x\n- [ ] a\n- [ ] c\n');
+	});
+
+	it('does nothing when the to-do is already there', () => {
+		const text = '- [ ] a\n- [ ] b\n';
+		const doc = parse(text);
+		expect(moveTaskNextTo(doc, at(text, 'a'), at(text, 'b'), 'before').edits).toEqual([]);
+		expect(moveTaskNextTo(doc, at(text, 'b'), at(text, 'a'), 'after').edits).toEqual([]);
+	});
+
+	it('reorders sub-tasks among their siblings', () => {
+		const text = '- [ ] a\n\t- [ ] x\n\t- [ ] y\n- [ ] b\n';
+		expect(reorder(text, 'y', 'x', 'before')).toBe('- [ ] a\n\t- [ ] y\n\t- [ ] x\n- [ ] b\n');
+	});
+
+	it('leaves other lines in place', () => {
+		const text = '# Inbox\n- [ ] a\n- [ ] b\n\nSome prose\n';
+		expect(reorder(text, 'b', 'a', 'before')).toBe('# Inbox\n- [ ] b\n- [ ] a\n\nSome prose\n');
+	});
+
+	it('moves a to-do under the target\'s heading', () => {
+		const text = '- [ ] a\n\n## Later\n- [ ] b\n';
+		const out = reorder(text, 'a', 'b', 'after');
+		expect(out).toBe('\n## Later\n- [ ] b\n- [ ] a\n');
+		expect(parse(out).tasks.map((t) => t.heading?.name ?? null)).toEqual(['Later', 'Later']);
+	});
+
+	it('refuses to move a to-do next to one with another parent', () => {
+		const text = '- [ ] a\n\t- [ ] x\n- [ ] b\n';
+		expect(() => moveTaskNextTo(parse(text), at(text, 'x'), at(text, 'b'), 'after')).toThrow(PatchConflict);
+	});
+
+	it('moves a project link', () => {
+		const text = '# Projects\n- [[A]]\n- [[B]]\n- [[C]]\n';
+		const doc = parse(text);
+		const [a, , c] = doc.projectLinks;
+		expect(applyEdits(doc, moveProjectLink(doc, refOf(c!), refOf(a!), 'before'))).toBe('# Projects\n- [[C]]\n- [[A]]\n- [[B]]\n');
+		expect(applyEdits(doc, moveProjectLink(doc, refOf(a!), refOf(c!), 'after'))).toBe('# Projects\n- [[B]]\n- [[C]]\n- [[A]]\n');
+		expect(moveProjectLink(doc, refOf(a!), refOf(doc.projectLinks[1]!), 'before')).toEqual([]);
 	});
 });

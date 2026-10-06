@@ -1,13 +1,24 @@
-import { FileView, Platform, TFile, ViewStateResult, WorkspaceLeaf } from 'obsidian';
+import { App as ObsidianApp, FileView, Platform, TFile, ViewStateResult, WorkspaceLeaf } from 'obsidian';
 import { h, render } from 'preact';
 import { NEW_TODO_COMMAND, VIEW_ICON, VIEW_TYPE } from '../constants';
 import type { ListId } from '../model/lists';
 import type PlainlistPlugin from '../main';
 import { Workspace, type TaskRef } from '../store';
 import { App } from './components/App';
-import { EnvContext, type Env } from './env';
+import { EnvContext, type Env, type SidebarLayout } from './env';
 import { confirmModal, promptModal } from './modals';
 import { hotkeyLabel } from './obsidian';
+
+const SIDEBAR_KEY = 'plainlist-sidebar';
+const SIDEBAR_WIDTH = 220;
+
+function loadSidebar(app: ObsidianApp): SidebarLayout {
+	const saved = app.loadLocalStorage(SIDEBAR_KEY) as Partial<SidebarLayout> | null;
+	return {
+		width: typeof saved?.width === 'number' ? saved.width : SIDEBAR_WIDTH,
+		hidden: saved?.hidden === true,
+	};
+}
 
 const LIST_KINDS = new Set(['inbox', 'today', 'upcoming', 'nodate', 'someday', 'completed', 'project']);
 
@@ -132,6 +143,14 @@ export class PlainlistView extends FileView {
 			openCapture: (list) => this.openCapture(list),
 			confirm: (title, message, cta, destructive) => confirmModal(this.app, title, message, cta, destructive),
 			prompt: (title, placeholder, initial, cta) => promptModal(this.app, title, placeholder, initial, cta),
+			sidebar: {
+				load: () => loadSidebar(this.app),
+				save: (layout) => this.app.saveLocalStorage(SIDEBAR_KEY, layout),
+			},
+			todayOrder: {
+				get: () => this.plugin.settings.todayOrder,
+				set: (keys) => this.plugin.setTodayOrder(keys),
+			},
 			hint: () => (Platform.isMobile ? null : { hotkey: hotkeyLabel(this.app, NEW_TODO_COMMAND) }),
 			onReveal: (fn) => {
 				this.revealListener = fn;

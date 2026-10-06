@@ -7,8 +7,10 @@ import {
 	computeList,
 	homeList,
 	isOverdue,
+	moveInOrder,
 	placeLabel,
 	sameList,
+	todayKey,
 	type Item,
 	type ListId,
 	type ListView,
@@ -18,12 +20,15 @@ import {
 import { pastedTasks } from '../../model/paste';
 import {
 	addSubtask,
+	canReorder,
 	deleteTask,
 	indentTask,
+	moveTaskNextTo,
 	outdentTask,
 	refOf,
 	restoreLines,
 	setTaskDone,
+	type Place,
 	type Relocation,
 	type Removed,
 } from '../../model/patch';
@@ -32,8 +37,9 @@ import { locateLine, type TaskRef, type TrackBox } from '../../store';
 import { useEnv, useToday, useWorkspace } from '../env';
 import { themeCheckboxRadius } from '../obsidian';
 import { ProjectSuggestModal } from '../ProjectSuggestModal';
+import { useReorder } from '../reorder';
 import { Checkbox } from './bits';
-import { LISTS, listLabel, projectMenu, Sidebar, type ProjectActions } from './Sidebar';
+import { LISTS, listLabel, projectMenu, Sidebar, SidebarHandle, type ProjectActions } from './Sidebar';
 import { TaskEditor, TaskRow, type RowActions } from './TaskRow';
 
 const NARROW = 600;
@@ -203,6 +209,10 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 	/** A just-added sub-task, open in the editor; it is removed if closed while still empty. */
 	const fresh = useRef<TrackBox | null>(null);
 	const [narrow, setNarrow] = useState(false);
+	const [sidebar, setSidebar] = useState(() => env.sidebar.load());
+	/** Re-renders after the saved Today order changes. */
+	const [orderVersion, setOrderVersion] = useState(0);
+	const todayOrder = env.todayOrder.get();
 	const root = useRef<HTMLDivElement>(null);
 
 	const sources = useMemo(() => workspace.sources(), [version]);
@@ -247,6 +257,10 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		observer.observe(el);
 		return () => observer.disconnect();
 	}, []);
+
+	useLayoutEffect(() => {
+		root.current?.setCssProps({ '--pl-sidebar-width': `${sidebar.width}px` });
+	}, [sidebar.width]);
 
 	// Match the theme's checkbox shape (round, or square with its corner radius).
 	useEffect(() => {
@@ -293,8 +307,8 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 	useEffect(() => clearLingering, []);
 
 	const view = useMemo(
-		() => withLingering(sources, lingering, (s) => computeList(s, projects, list, today)),
-		[sources, lingering, list, today],
+		() => withLingering(sources, lingering, (s) => computeList(s, projects, list, today, todayOrder)),
+		[sources, lingering, list, today, todayOrder, orderVersion],
 	);
 	const counts = useMemo(() => computeCounts(sources, projects, today), [sources, today]);
 
@@ -324,7 +338,7 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		if (!item) return;
 		const same = (i: Item): boolean => i.path === item.path && i.task.line === item.task.line;
 		const placeIn = (id: ListId): 'open' | 'completed' | null => {
-			const v = computeList(all, workspace.projects, id, today);
+			const v = computeList(all, workspace.projects, id, today, todayOrder);
 			if (v.groups.some((g) => g.items.some(same))) return 'open';
 			return v.completed.some(same) ? 'completed' : null;
 		};
@@ -437,32 +451,85 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 			setSelected(rows.indexOf(item));
 			setExpanded({ current: { path: item.path, ref: refOf(item.task) } });
 		},
-		onMenu: (item, pos) => {
-			const menu = new Menu().addItem((i) =>
-				i
-					.setTitle(item.task.done ? 'Mark as open' : 'Complete')
-					.setIcon('check')
-					.onClick(() => toggle(item)),
-			);
-			if (isNested(list) && !item.task.done) {
-				if (list.kind === 'inbox' || list.kind === 'project') {
-					menu.addItem((i) => i.setTitle('Add sub-task').setIcon('list-plus').onClick(() => addSub(item)));
-				}
-				if (indentTarget(item)) menu.addItem((i) => i.setTitle('Indent').setIcon('indent-increase').onClick(() => indent(item)));
-				if (item.task.parent !== null) {
-					menu.addItem((i) => i.setTitle('Outdent').setIcon('indent-decrease').onClick(() => outdent(item)));
-				}
+	};
+
+	const rowMenu = (item: Item, pos: { x: number; y: number }): void => {
+		const menu = new Menu().addItem((i) =>
+			i
+				.setTitle(item.task.done ? 'Mark as open' : 'Complete')
+				.setIcon('check')
+				.onClick(() => toggle(item)),
+		);
+		if (isNested(list) && !item.task.done) {
+			if (list.kind === 'inbox' || list.kind === 'project') {
+				menu.addItem((i) => i.setTitle('Add sub-task').setIcon('list-plus').onClick(() => addSub(item)));
 			}
-			menu
-				.addItem((i) =>
-					i
-						.setTitle('Delete')
-						.setIcon('trash')
-						.setWarning(true)
-						.onClick(() => void remove(item)),
-				)
-				.showAtPosition(pos);
-		},
+			if (indentTarget(item)) menu.addItem((i) => i.setTitle('Indent').setIcon('indent-increase').onClick(() => indent(item)));
+			if (item.task.parent !== null) {
+				menu.addItem((i) => i.setTitle('Outdent').setIcon('indent-decrease').onClick(() => outdent(item)));
+			}
+		}
+		menu
+			.addItem((i) =>
+				i
+					.setTitle('Delete')
+					.setIcon('trash')
+					.setWarning(true)
+					.onClick(() => void remove(item)),
+			)
+			.showAtPosition(pos);
+	};
+
+	/**
+	 * Today's order is free and saved by Plainlist. Elsewhere a to-do moves among its siblings
+	 * in its note, within its group (anywhere in a project).
+	 */
+	const groupOf = new Map(view.groups.flatMap((g) => g.items.map((i) => [i, g.key] as const)));
+	const canDrop = (a: Item, b: Item): boolean => {
+		if (!groupOf.has(a) || !groupOf.has(b) || a.task.done || b.task.done || a === b) return false;
+		if (list.kind === 'today') return true;
+		return (
+			list.kind !== 'completed' &&
+			a.path === b.path &&
+			canReorder(a.task, b.task) &&
+			(list.kind === 'project' || groupOf.get(a) === groupOf.get(b))
+		);
+	};
+
+	/** Puts a to-do just before or after another, and keeps it selected. */
+	const reorderTo = (item: Item, target: Item, place: Place): void => {
+		if (list.kind === 'today') {
+			const shown = view.groups.flatMap((g) => g.items.map(todayKey));
+			env.todayOrder.set(moveInOrder(shown, todayKey(item), todayKey(target), place));
+			setOrderVersion((v) => v + 1);
+			setFollow({ path: item.path, ref: refOf(item.task) });
+			return;
+		}
+		relocate(item, (d) => moveTaskNextTo(d, refOf(item.task), refOf(target.task), place));
+	};
+
+	const reorder = useReorder<Item>({
+		entries: rows.map((item) => ({ key: itemKey(item), item })),
+		canDrag: (item) => !item.task.done && list.kind !== 'completed',
+		canDrop,
+		onDrop: reorderTo,
+		onMenu: rowMenu,
+	});
+
+	/** The dragged row's sub-tasks move with it, so they look lifted too. */
+	const dragged = rows.find((i) => itemKey(i) === reorder.dragging);
+	const dragClass = (item: Item): string =>
+		dragged && item.path === dragged.path && item.task.line > dragged.task.line && item.task.line < dragged.task.subtreeEnd
+			? ' is-dragging'
+			: reorder.rowClass(itemKey(item));
+
+	/** Alt+↑/↓: swaps the selected to-do with the closest sibling above or below it. */
+	const moveSelected = (item: Item, step: 1 | -1): void => {
+		const open = view.groups.flatMap((g) => g.items);
+		for (let j = open.indexOf(item) + step; j >= 0 && j < open.length; j += step) {
+			const r = open[j];
+			if (r && canDrop(item, r)) return reorderTo(item, r, step < 0 ? 'before' : 'after');
+		}
 	};
 
 	const projectActions: ProjectActions = {
@@ -498,6 +565,7 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 				.then((ok) => ok && go());
 		},
 		reopen: (p) => void workspace.reopenProject(p),
+		move: (p, target, place) => void workspace.moveProject(p, target, place),
 	};
 
 	const addProject = (): void => {
@@ -512,7 +580,10 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		if (e.isComposing || target?.closest('input, textarea, [contenteditable="true"], .pl-popover')) return;
 		const mod = Keymap.isModEvent(e) === true || e.metaKey || e.ctrlKey;
 		const current = rows[selected];
-		if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+		if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && e.altKey && !mod) {
+			e.preventDefault();
+			if (!expanded && current) moveSelected(current, e.key === 'ArrowDown' ? 1 : -1);
+		} else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
 			e.preventDefault();
 			if (expanded) return;
 			const step = e.key === 'ArrowDown' ? 1 : -1;
@@ -604,6 +675,7 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 				selected={rows[selected] === item}
 				reveal={isAt(revealed, item)}
 				leaving={item.task.done && lingering.get(lingerKey(item.path, item.task.line)) === true}
+				drag={{ props: reorder.rowProps(itemKey(item)), cls: dragClass(item) }}
 				actions={rowActions}
 			/>
 		);
@@ -656,14 +728,25 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 					)}
 				</div>
 			) : (
-				<Sidebar
-					list={list}
-					counts={counts}
-					projects={projects}
-					masterPath={workspace.masterPath}
-					onSelect={setList}
-					actions={projectActions}
-				/>
+				<>
+					{!sidebar.hidden && (
+						<Sidebar
+							list={list}
+							counts={counts}
+							projects={projects}
+							masterPath={workspace.masterPath}
+							onSelect={setList}
+							actions={projectActions}
+						/>
+					)}
+					<SidebarHandle
+						layout={sidebar}
+						onChange={(layout, done) => {
+							setSidebar(layout);
+							if (done) env.sidebar.save(layout);
+						}}
+					/>
+				</>
 			)}
 			<main
 				class="pl-main"
@@ -671,7 +754,7 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 					if (e.target === e.currentTarget) root.current?.focus({ preventScroll: true });
 				}}
 			>
-				<div class="pl-content">
+				<div class="pl-content" {...reorder.scopeProps}>
 					<header class="pl-header">
 						{project ? (
 							<ProjectHeader key={project.path} project={project} actions={projectActions} />

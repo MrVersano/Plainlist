@@ -2,7 +2,9 @@ import { Menu, TFile } from 'obsidian';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { Counts, ListId, ProjectInfo } from '../../model/lists';
 import { sameList } from '../../model/lists';
-import { useEnv, useLongPress } from '../env';
+import type { Place } from '../../model/patch';
+import { useEnv, type SidebarLayout } from '../env';
+import { useReorder } from '../reorder';
 
 export const LISTS: { id: ListId; label: string }[] = [
 	{ id: { kind: 'inbox' }, label: 'Inbox' },
@@ -21,6 +23,8 @@ export interface ProjectActions {
 	open: (project: ProjectInfo) => void;
 	complete: (project: ProjectInfo) => void;
 	reopen: (project: ProjectInfo) => void;
+	/** Moves a project just before or after another in the sidebar. */
+	move: (project: ProjectInfo, target: ProjectInfo, place: Place) => void;
 }
 
 export function listLabel(list: ListId, projects: ProjectInfo[]): string {
@@ -192,27 +196,28 @@ function ProjectItem({
 	project,
 	count,
 	selected,
+	renaming,
 	onSelect,
+	onRenamed,
+	drag,
 	actions,
 }: {
 	project: ProjectInfo;
 	count: number;
 	selected: boolean;
+	renaming: boolean;
 	onSelect: () => void;
+	onRenamed: () => void;
+	/** Drag-to-reorder handlers (they also open the menu), and the item's drag state class. */
+	drag: { props: Record<string, unknown>; cls: string };
 	actions: ProjectActions;
 }) {
-	const [renaming, setRenaming] = useState(false);
-	const menu = (pos: { x: number; y: number }): void => {
-		projectMenu(project, actions, () => setRenaming(true)).showAtPosition(pos);
-	};
-	const longPress = useLongPress(menu);
-
 	if (renaming) {
 		return (
 			<NameInput
 				initial={project.name}
 				onDone={(name) => {
-					setRenaming(false);
+					onRenamed();
 					if (name && name !== project.name) actions.rename(project, name);
 				}}
 			/>
@@ -221,15 +226,11 @@ function ProjectItem({
 	return (
 		<button
 			type="button"
-			class={`pl-nav-item${selected ? ' is-active' : ''}${project.exists ? '' : ' is-missing'}${project.done ? ' is-done' : ''}`}
+			class={`pl-nav-item${selected ? ' is-active' : ''}${project.exists ? '' : ' is-missing'}${project.done ? ' is-done' : ''}${drag.cls}`}
 			aria-current={selected ? 'page' : undefined}
 			title={project.exists ? project.path : `Note not found: ${project.path}`}
 			onClick={onSelect}
-			onContextMenu={(e) => {
-				e.preventDefault();
-				menu({ x: e.clientX, y: e.clientY });
-			}}
-			{...longPress}
+			{...drag.props}
 		>
 			<span class="pl-nav-label">{project.name}</span>
 			{selected && count > 0 && <span class="pl-nav-count">{count}</span>}
@@ -262,9 +263,32 @@ export function Sidebar({
 		if (viewingDone) setShowDone(true);
 	}, [viewingDone]);
 	const countOf = (id: ListId): number => (id.kind === 'inbox' ? counts.inbox : id.kind === 'today' ? counts.today : 0);
+	/** Path of the project being renamed inline. */
+	const [renaming, setRenaming] = useState<string | null>(null);
+	// Open projects can be dragged into a new order; completed ones only have the menu.
+	const reorder = useReorder<ProjectInfo>({
+		entries: projects.map((p) => ({ key: p.path, item: p })),
+		canDrag: (p) => !p.done,
+		canDrop: (a, b) => !a.done && !b.done,
+		onDrop: actions.move,
+		onMenu: (p, pos) => projectMenu(p, actions, () => setRenaming(p.path)).showAtPosition(pos),
+	});
+	const item = (p: ProjectInfo, count: number) => (
+		<ProjectItem
+			key={p.path}
+			project={p}
+			count={count}
+			selected={list.kind === 'project' && list.path === p.path}
+			renaming={renaming === p.path}
+			onSelect={() => onSelect({ kind: 'project', path: p.path })}
+			onRenamed={() => setRenaming(null)}
+			drag={{ props: reorder.rowProps(p.path), cls: reorder.rowClass(p.path) }}
+			actions={actions}
+		/>
+	);
 
 	return (
-		<nav class="pl-sidebar" aria-label="Lists">
+		<nav class="pl-sidebar" aria-label="Lists" {...reorder.scopeProps}>
 			{LISTS.map(({ id, label }) => {
 				const active = sameList(id, list);
 				const count = countOf(id);
@@ -282,16 +306,7 @@ export function Sidebar({
 				);
 			})}
 			<div class="pl-nav-header">Projects</div>
-			{open.map((p) => (
-				<ProjectItem
-					key={p.path}
-					project={p}
-					count={counts.projects[p.path] ?? 0}
-					selected={list.kind === 'project' && list.path === p.path}
-					onSelect={() => onSelect({ kind: 'project', path: p.path })}
-					actions={actions}
-				/>
-			))}
+			{open.map((p) => item(p, counts.projects[p.path] ?? 0))}
 			{adding ? (
 				<AddProject
 					exclude={new Set([masterPath, ...projects.map((p) => p.path)])}
@@ -308,17 +323,90 @@ export function Sidebar({
 					{showDone ? 'Hide completed' : `${done.length} completed`}
 				</button>
 			)}
-			{showDone &&
-				done.map((p) => (
-					<ProjectItem
-						key={p.path}
-						project={p}
-						count={0}
-						selected={list.kind === 'project' && list.path === p.path}
-						onSelect={() => onSelect({ kind: 'project', path: p.path })}
-						actions={actions}
-					/>
-				))}
+			{showDone && done.map((p) => item(p, 0))}
 		</nav>
+	);
+}
+
+/** The narrowest and widest the sidebar can be dragged. Below COLLAPSE_AT it closes. */
+const MIN_WIDTH = 160;
+const MAX_WIDTH = 480;
+const COLLAPSE_AT = 100;
+/** Room the to-do list keeps when the sidebar is dragged wide. */
+const MIN_CONTENT = 320;
+const KEY_STEP = 20;
+
+/**
+ * The sidebar's right edge: drag it to resize the sidebar, or all the way left to close it.
+ * Closed, it sits at the view's left edge, where dragging (or clicking) brings the sidebar back.
+ * `onChange` is called while dragging, then once more with `done` when the drag ends.
+ */
+export function SidebarHandle({ layout, onChange }: { layout: SidebarLayout; onChange: (layout: SidebarLayout, done: boolean) => void }) {
+	const maxWidth = (root: HTMLElement): number => Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, root.clientWidth - MIN_CONTENT));
+
+	const onPointerDown = (e: PointerEvent): void => {
+		if (e.button !== 0) return;
+		e.preventDefault();
+		const handle = e.currentTarget as HTMLElement;
+		const root = handle.closest<HTMLElement>('.pl-root');
+		if (!root) return;
+		const left = root.getBoundingClientRect().left;
+		const start = layout;
+		let current = layout;
+		let moved = false;
+		handle.setPointerCapture(e.pointerId);
+		root.addClass('is-resizing');
+		const move = (evt: PointerEvent): void => {
+			if (!moved && Math.abs(evt.clientX - e.clientX) < 3) return;
+			moved = true;
+			const width = evt.clientX - left;
+			current = width < COLLAPSE_AT ? { width: start.width, hidden: true } : { width: Math.round(Math.min(width, maxWidth(root))), hidden: false };
+			current.width = Math.max(MIN_WIDTH, current.width);
+			onChange(current, false);
+		};
+		const up = (): void => {
+			handle.removeEventListener('pointermove', move);
+			handle.removeEventListener('pointerup', up);
+			handle.removeEventListener('pointercancel', up);
+			root.removeClass('is-resizing');
+			// Clicking the closed sidebar's edge opens it again.
+			if (!moved && start.hidden) current = { ...start, hidden: false };
+			onChange(current, true);
+		};
+		handle.addEventListener('pointermove', move);
+		handle.addEventListener('pointerup', up);
+		handle.addEventListener('pointercancel', up);
+	};
+
+	const onKeyDown = (e: KeyboardEvent): void => {
+		const root = (e.currentTarget as HTMLElement).closest<HTMLElement>('.pl-root');
+		if (!root) return;
+		let next: SidebarLayout | null = null;
+		if (e.key === 'Enter' || e.key === ' ') next = { ...layout, hidden: !layout.hidden };
+		else if (e.key === 'ArrowRight') {
+			next = layout.hidden ? { ...layout, hidden: false } : { ...layout, width: Math.min(layout.width + KEY_STEP, maxWidth(root)) };
+		} else if (e.key === 'ArrowLeft' && !layout.hidden) {
+			next = layout.width - KEY_STEP < MIN_WIDTH ? { ...layout, hidden: true } : { ...layout, width: layout.width - KEY_STEP };
+		}
+		if (!next) return;
+		e.preventDefault();
+		e.stopPropagation();
+		onChange(next, true);
+	};
+
+	return (
+		<div
+			class={`pl-sidebar-handle${layout.hidden ? ' is-closed' : ''}`}
+			role="separator"
+			aria-orientation="vertical"
+			aria-label={layout.hidden ? 'Show sidebar' : 'Resize sidebar'}
+			aria-valuemin={0}
+			aria-valuemax={MAX_WIDTH}
+			aria-valuenow={layout.hidden ? 0 : layout.width}
+			title={layout.hidden ? 'Drag or click to show the sidebar' : 'Drag to resize, or all the way left to hide'}
+			tabIndex={0}
+			onPointerDown={onPointerDown}
+			onKeyDown={onKeyDown}
+		/>
 	);
 }

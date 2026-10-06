@@ -5,6 +5,12 @@ import type { Clock } from '../clock';
 import type { ListId } from '../model/lists';
 import type { TaskRef, Workspace } from '../store';
 
+/** The sidebar's width, and whether it is pulled closed. Kept per device. */
+export interface SidebarLayout {
+	width: number;
+	hidden: boolean;
+}
+
 export interface Env {
 	app: App;
 	workspace: Workspace;
@@ -17,6 +23,9 @@ export interface Env {
 	prompt: (title: string, placeholder: string, initial?: string, cta?: string) => Promise<string | null>;
 	/** Desktop: "Press N…" hint; null on mobile. */
 	hint: () => { hotkey: string | null } | null;
+	sidebar: { load: () => SidebarLayout; save: (layout: SidebarLayout) => void };
+	/** The saved Today order, as `todayKey`s. */
+	todayOrder: { get: () => string[]; set: (keys: string[]) => void };
 	/** Calls `fn` for each "go to this to-do" request, starting with one made before it subscribed. */
 	onReveal: (fn: (target: TaskRef) => void) => () => void;
 }
@@ -81,28 +90,4 @@ export function useOutsideClick(ref: { current: HTMLElement | null }, onClose: (
 		doc.addEventListener('pointerdown', handler, true);
 		return () => doc.removeEventListener('pointerdown', handler, true);
 	}, [active]);
-}
-
-/** Long-press (touch) handlers that call `fn` with the touch position. */
-export function useLongPress(fn: (pos: { x: number; y: number }) => void, ms = 500) {
-	const timer = useRef<number | null>(null);
-	const cancel = (): void => {
-		if (timer.current !== null) window.clearTimeout(timer.current);
-		timer.current = null;
-	};
-	return {
-		onTouchStart: (evt: TouchEvent) => {
-			const t = evt.touches[0];
-			if (!t) return;
-			const pos = { x: t.clientX, y: t.clientY };
-			cancel();
-			timer.current = window.setTimeout(() => {
-				timer.current = null;
-				fn(pos);
-			}, ms);
-		},
-		onTouchMove: cancel,
-		onTouchEnd: cancel,
-		onTouchCancel: cancel,
-	};
 }

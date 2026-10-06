@@ -5,7 +5,7 @@ import { mentionTargets, stripRanges, targetName } from '../../mentions';
 import { findTask, setTaskDate, setTaskDescription, setTaskTitle } from '../../model/patch';
 import { recogniseEdit } from '../../recognise';
 import type { TrackBox } from '../../store';
-import { useDebounced, useEnv, useLongPress, useOutsideClick } from '../env';
+import { useDebounced, useEnv, useOutsideClick } from '../env';
 import { noteLinks } from '../obsidian';
 import { AutoTextarea, Checkbox, MarkdownField, Title } from './bits';
 import { DatePopover, ProjectPicker } from './popovers';
@@ -14,7 +14,6 @@ import { highlighted, type Mark, useSuggest } from './suggest';
 export interface RowActions {
 	onToggle: (item: Item) => void;
 	onExpand: (item: Item) => void;
-	onMenu: (item: Item, pos: { x: number; y: number }) => void;
 }
 
 export function TaskRow({
@@ -24,6 +23,7 @@ export function TaskRow({
 	selected,
 	reveal = false,
 	leaving = false,
+	drag,
 	actions,
 }: {
 	item: Item;
@@ -34,11 +34,12 @@ export function TaskRow({
 	reveal?: boolean;
 	/** Just completed and fading out of a list that hides completed to-dos. */
 	leaving?: boolean;
+	/** Drag-to-reorder handlers (they also open the menu), and the row's drag state class. */
+	drag: { props: Record<string, unknown>; cls: string };
 	actions: RowActions;
 }) {
 	const { task } = item;
 	const el = useRef<HTMLDivElement>(null);
-	const longPress = useLongPress((pos) => actions.onMenu(item, pos));
 	useEffect(() => {
 		if (selected) el.current?.scrollIntoView({ block: 'nearest' });
 	}, [selected]);
@@ -55,12 +56,8 @@ export function TaskRow({
 	return (
 		<div
 			ref={el}
-			class={`pl-row${task.done ? ' is-done' : ''}${selected ? ' is-selected' : ''}${leaving ? ' is-leaving' : ''}`}
-			onContextMenu={(evt) => {
-				evt.preventDefault();
-				actions.onMenu(item, { x: evt.clientX, y: evt.clientY });
-			}}
-			{...longPress}
+			class={`pl-row${task.done ? ' is-done' : ''}${selected ? ' is-selected' : ''}${leaving ? ' is-leaving' : ''}${drag.cls}`}
+			{...drag.props}
 		>
 			<Checkbox done={task.done} title={task.title} onToggle={() => actions.onToggle(item)} />
 			<button type="button" class="pl-row-title" onClick={() => actions.onExpand(item)}>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { allItems, computeCounts, computeList, homeList, placeLabel, type ListId, type ProjectInfo, type Source } from '../src/model/lists';
+import { allItems, computeCounts, computeList, homeList, moveInOrder, placeLabel, type ListId, type ProjectInfo, type Source } from '../src/model/lists';
 import { parse } from '../src/model/parse';
 
 const TODAY = '2026-10-04';
@@ -67,6 +67,22 @@ describe('lists', () => {
 
 	it('Today: overdue first, then task file and projects in sidebar order', () => {
 		expect(titles({ kind: 'today' })).toEqual([['', ['Overdue', 'Inbox today', 'Today in project']]]);
+	});
+
+	it('Today: follows the saved order, with to-dos not in it after, in their usual order', () => {
+		const shown = (order: string[]) =>
+			computeList(sources, projects, { kind: 'today' }, TODAY, order).groups.flatMap((g) => g.items.map((i) => i.task.title));
+		expect(shown(['Office.md\u0000Today in project', 'Tasks.md\u0000Inbox today', 'Gone.md\u0000Old'])).toEqual([
+			'Today in project',
+			'Inbox today',
+			'Overdue',
+		]);
+	});
+
+	it('moveInOrder puts a key before or after another', () => {
+		expect(moveInOrder(['a', 'b', 'c'], 'c', 'a', 'before')).toEqual(['c', 'a', 'b']);
+		expect(moveInOrder(['a', 'b', 'c'], 'a', 'b', 'after')).toEqual(['b', 'a', 'c']);
+		expect(moveInOrder(['a', 'b'], 'a', 'x', 'after')).toEqual(['a', 'b']);
 	});
 
 	it('Upcoming: grouped by day, then by month, nested to-dos included', () => {

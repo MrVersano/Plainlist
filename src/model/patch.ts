@@ -330,6 +330,29 @@ export function outdentTask(doc: Doc, ref: LineRef): Relocation {
 	return relocate(doc, t, Math.max(p.end, p.subtreeEnd), p.indent);
 }
 
+/** Where a dragged item lands relative to the one it was dropped on. */
+export type Place = 'before' | 'after';
+
+/**
+ * Whether a to-do can be put next to `target` by reordering lines: both in the same note
+ * (checked by the caller), siblings under the same parent and in the same section.
+ */
+export function canReorder(t: Task, target: Task): boolean {
+	return t.line !== target.line && !t.done && !target.done && t.parent === target.parent && t.section === target.section;
+}
+
+/**
+ * Reorders a to-do (with everything nested under it) to just before or after a sibling's
+ * block, at the sibling's indent. In a note with headings this can also move it under the
+ * sibling's heading.
+ */
+export function moveTaskNextTo(doc: Doc, ref: LineRef, target: LineRef, place: Place): Relocation {
+	const t = findTask(doc, ref);
+	const p = findTask(doc, target);
+	if (!canReorder(t, p)) throw new PatchConflict(`Cannot move ${t.text} next to ${p.text}`);
+	return relocate(doc, t, place === 'before' ? p.line : Math.max(p.end, p.subtreeEnd), p.indent);
+}
+
 /** Adds an untitled sub-task after a to-do's last one. */
 export function addSubtask(doc: Doc, ref: LineRef): Relocation {
 	const p = findTask(doc, ref);
@@ -382,6 +405,18 @@ export function addProjectLink(doc: Doc, link: string): LineEdit[] {
 export function removeProjectLink(doc: Doc, ref: LineRef): LineEdit[] {
 	const p = findProjectLink(doc, ref);
 	return [{ at: p.line, delete: 1, insert: [] }];
+}
+
+/** Moves a project's link line to just before or after another's, which sets the sidebar order. */
+export function moveProjectLink(doc: Doc, ref: LineRef, target: LineRef, place: Place): LineEdit[] {
+	const p = findProjectLink(doc, ref);
+	const q = findProjectLink(doc, target);
+	const at = place === 'before' ? q.line : q.line + 1;
+	if (p.line === q.line || at === p.line || at === p.line + 1) return [];
+	return [
+		{ at: p.line, delete: 1, insert: [] },
+		{ at, delete: 0, insert: [p.text] },
+	];
 }
 
 /** Rewrites a project link (after its note was renamed), keeping the line's indent and marker. */
