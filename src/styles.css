@@ -1048,6 +1048,18 @@ body.pl-quick-entry-body {
 	}
 }
 
+/* Search to-dos */
+
+.pl-search-modal .pl-search-meta {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
+.pl-search-modal .pl-search-result.is-done .pl-search-title {
+	color: var(--text-faint);
+	text-decoration: line-through;
+}
+
 /* Hidden checkbox used to read the theme's checkbox shape. */
 .pl-probe {
 	position: absolute;

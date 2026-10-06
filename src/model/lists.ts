@@ -193,3 +193,12 @@ export function computeCounts(sources: Source[], projects: ProjectInfo[], today:
 export function sameList(a: ListId, b: ListId): boolean {
 	return a.kind === b.kind && (a.kind !== 'project' || a.path === (b as { path: string }).path);
 }
+
+/**
+ * The list that always shows a to-do: its project (behind "N completed" when done), the
+ * Inbox for open to-dos in the task file, or Completed for done ones.
+ */
+export function homeList(item: Item): ListId {
+	if (item.project) return { kind: 'project', path: item.project.path };
+	return item.task.done ? { kind: 'completed' } : { kind: 'inbox' };
+}

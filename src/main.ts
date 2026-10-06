@@ -3,11 +3,14 @@ import type { CaptureOptions } from './capture';
 import { Clock } from './clock';
 import { VIEW_ICON, VIEW_TYPE } from './constants';
 import type { QuickEntryService } from './desktop/QuickEntryService';
-import type { ListId } from './model/lists';
+import { allItems, type ListId } from './model/lists';
 import { DEFAULT_SETTINGS, firstDayOfWeek, PlainlistSettings, PlainlistSettingTab } from './settings';
+import { refOf } from './model/patch';
+import { Workspace } from './store';
 import { ensureTasksFile } from './tasksFile';
 import { CaptureModal } from './ui/CaptureModal';
 import { PlainlistView } from './ui/PlainlistView';
+import { TaskSearchModal } from './ui/TaskSearchModal';
 import { installViewSwitch } from './viewSwitch';
 
 export default class PlainlistPlugin extends Plugin {
@@ -35,6 +38,12 @@ export default class PlainlistPlugin extends Plugin {
 			id: 'new-todo',
 			name: 'New to-do',
 			callback: () => void this.newTodo(),
+		});
+
+		this.addCommand({
+			id: 'search',
+			name: 'Search to-dos',
+			callback: () => void this.searchTasks(),
 		});
 
 		this.addCommand({
@@ -76,18 +85,57 @@ export default class PlainlistPlugin extends Plugin {
 
 	async openTasksFile(): Promise<void> {
 		try {
-			const file = await ensureTasksFile(this.app, this.settings.tasksFile);
-			const existing = this.app.workspace
-				.getLeavesOfType(VIEW_TYPE)
-				.find((l) => l.view instanceof PlainlistView && l.view.file === file);
-			if (existing) {
-				await this.app.workspace.revealLeaf(existing);
-				return;
-			}
-			await this.openInPlainlist(this.app.workspace.getLeaf(false), file);
+			await this.showFile(await ensureTasksFile(this.app, this.settings.tasksFile));
 		} catch (e) {
 			new Notice(`Plainlist: could not open the tasks file. ${e instanceof Error ? e.message : String(e)}`);
 		}
+	}
+
+	private viewOf(file: TFile): PlainlistView | null {
+		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE)) {
+			if (leaf.view instanceof PlainlistView && leaf.view.file === file) return leaf.view;
+		}
+		return null;
+	}
+
+	/** Brings up the Plainlist tab showing `file`, opening one if needed. */
+	private async showFile(file: TFile): Promise<PlainlistView | null> {
+		const existing = this.viewOf(file);
+		if (existing) {
+			await this.app.workspace.revealLeaf(existing.leaf);
+			return existing;
+		}
+		const leaf = this.app.workspace.getLeaf(false);
+		await this.openInPlainlist(leaf, file);
+		return leaf.view instanceof PlainlistView ? leaf.view : null;
+	}
+
+	/**
+	 * Fuzzy-finds a to-do in the active Plainlist view's note (or the tasks file) and its
+	 * projects, then shows it there. Reads the notes itself when no view has them open.
+	 */
+	async searchTasks(): Promise<void> {
+		let file: TFile;
+		try {
+			file = this.app.workspace.getActiveViewOfType(PlainlistView)?.file ?? (await ensureTasksFile(this.app, this.settings.tasksFile));
+		} catch (e) {
+			new Notice(`Plainlist: could not open the tasks file. ${e instanceof Error ? e.message : String(e)}`);
+			return;
+		}
+		const shown = this.viewOf(file)?.workspace;
+		const workspace = shown ?? new Workspace(this.app, file);
+		if (!shown) await workspace.load();
+		new TaskSearchModal(
+			this.app,
+			allItems(workspace.sources()).filter((i) => this.settings.searchCompleted || !i.task.done),
+			this.clock.today,
+			(item) => {
+				void this.showFile(file).then((view) => view?.reveal({ path: item.path, ref: refOf(item.task) }));
+			},
+			() => {
+				if (!shown) workspace.dispose();
+			},
+		).open();
 	}
 
 	async openInPlainlist(leaf: WorkspaceLeaf, file?: TFile): Promise<void> {

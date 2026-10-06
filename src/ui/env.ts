@@ -3,7 +3,7 @@ import { useContext, useEffect, useRef, useState } from 'preact/hooks';
 import type { App, Component } from 'obsidian';
 import type { Clock } from '../clock';
 import type { ListId } from '../model/lists';
-import type { Workspace } from '../store';
+import type { TaskRef, Workspace } from '../store';
 
 export interface Env {
 	app: App;
@@ -17,6 +17,8 @@ export interface Env {
 	prompt: (title: string, placeholder: string, initial?: string, cta?: string) => Promise<string | null>;
 	/** Desktop: "Press N…" hint; null on mobile. */
 	hint: () => { hotkey: string | null } | null;
+	/** Calls `fn` for each "go to this to-do" request, starting with one made before it subscribed. */
+	onReveal: (fn: (target: TaskRef) => void) => () => void;
 }
 
 export const EnvContext = createContext<Env | null>(null);

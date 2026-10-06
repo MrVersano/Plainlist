@@ -2,8 +2,10 @@ import { Keymap, Menu } from 'obsidian';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { headerDate, metaDate, overdueLabel } from '../../dates/format';
 import {
+	allItems,
 	computeCounts,
 	computeList,
+	homeList,
 	isOverdue,
 	placeLabel,
 	sameList,
@@ -12,7 +14,7 @@ import {
 	type ProjectInfo,
 } from '../../model/lists';
 import { deleteTask, refOf, restoreLines, setTaskDone, type Removed } from '../../model/patch';
-import { locateLine, type TrackBox } from '../../store';
+import { locateLine, type TaskRef, type TrackBox } from '../../store';
 import { useEnv, useToday, useWorkspace } from '../env';
 import { themeCheckboxRadius } from '../obsidian';
 import { ProjectSuggestModal } from '../ProjectSuggestModal';
@@ -61,8 +63,10 @@ function meta(list: ListId, item: Item, today: string): { text: string; cls?: st
 	}
 }
 
-const isBoxed = (box: TrackBox | null, item: Item): boolean =>
-	!!box && box.current.path === item.path && box.current.ref.line === item.task.line && box.current.ref.text === item.task.text;
+const isAt = (at: TaskRef | null, item: Item): boolean =>
+	!!at && at.path === item.path && at.ref.line === item.task.line && at.ref.text === item.task.text;
+
+const isBoxed = (box: TrackBox | null, item: Item): boolean => isAt(box?.current ?? null, item);
 
 const itemKey = (item: Item): string => `${item.path}:${item.task.line}:${item.task.text}`;
 
@@ -140,6 +144,8 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 	const [selected, setSelected] = useState(-1);
 	const [showCompleted, setShowCompleted] = useState(false);
 	const [toast, setToast] = useState<Toast | null>(null);
+	/** A to-do found with "Search to-dos", until it is selected and scrolled to. */
+	const [revealed, setRevealed] = useState<TaskRef | null>(null);
 	const [narrow, setNarrow] = useState(false);
 	const root = useRef<HTMLDivElement>(null);
 
@@ -219,6 +225,43 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 	useEffect(() => {
 		if (expanded && !expandedVisible) setExpanded(null);
 	}, [expanded, expandedVisible]);
+
+	// "Search to-dos": stay on this list if it shows the to-do, otherwise go to the list that
+	// always does, then select it.
+	const reveal = useRef<(target: TaskRef) => void>(() => {});
+	reveal.current = (target) => {
+		const doc = workspace.doc(target.path);
+		const line = doc ? locateLine(doc, target.ref) : null;
+		const all = workspace.sources();
+		const item = allItems(all).find((i) => i.path === target.path && i.task.line === line);
+		if (!item) return;
+		const same = (i: Item): boolean => i.path === item.path && i.task.line === item.task.line;
+		const placeIn = (id: ListId): 'open' | 'completed' | null => {
+			const v = computeList(all, workspace.projects, id, today);
+			if (v.groups.some((g) => g.items.some(same))) return 'open';
+			return v.completed.some(same) ? 'completed' : null;
+		};
+		let next = list;
+		let where = placeIn(next);
+		if (!where) {
+			next = homeList(item);
+			where = placeIn(next);
+		}
+		setList(next);
+		if (where === 'completed') setShowCompleted(true);
+		if (expanded && !isBoxed(expanded, item)) setExpanded(null);
+		setRevealed({ path: item.path, ref: refOf(item.task) });
+		window.requestAnimationFrame(() => root.current?.focus({ preventScroll: true }));
+	};
+	// A layout effect, so this list takes reveals as soon as it mounts.
+	useLayoutEffect(() => env.onReveal((target) => reveal.current(target)), []);
+
+	useLayoutEffect(() => {
+		if (!revealed) return;
+		const at = rows.findIndex((i) => isAt(revealed, i));
+		if (at !== -1) setSelected(at);
+		setRevealed(null);
+	}, [revealed]);
 
 	const toggle = (item: Item): void => {
 		const box = isBoxed(expanded, item) ? (expanded ?? undefined) : undefined;
@@ -373,6 +416,7 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 				meta={m.text}
 				metaClass={m.cls}
 				selected={rows[selected] === item}
+				reveal={isAt(revealed, item)}
 				actions={rowActions}
 			/>
 		);

@@ -12,6 +12,8 @@ export interface PlainlistSettings {
 	quickEntryEnabled: boolean;
 	/** Electron accelerator, e.g. "CmdOrCtrl+Shift+Space". */
 	quickEntryShortcut: string;
+	/** "Search to-dos" also finds completed to-dos. */
+	searchCompleted: boolean;
 }
 
 export const DEFAULT_SETTINGS: PlainlistSettings = {
@@ -21,6 +23,7 @@ export const DEFAULT_SETTINGS: PlainlistSettings = {
 	// Off by default: a global shortcut reaches into every other app, so it should be opt-in.
 	quickEntryEnabled: false,
 	quickEntryShortcut: DEFAULT_SHORTCUT,
+	searchCompleted: false,
 };
 
 /** 0 = Sunday, 1 = Monday. Locales that start on another day fall back to Monday. */
@@ -75,6 +78,11 @@ export class PlainlistSettingTab extends PluginSettingTab {
 					defaultValue: DEFAULT_SETTINGS.weekStart,
 					options: { locale: `Locale default (${localeDay})`, sunday: 'Sunday', monday: 'Monday' },
 				},
+			},
+			{
+				name: 'Search completed to-dos',
+				desc: 'Include completed to-dos in "Search to-dos" results.',
+				control: { type: 'toggle', key: 'searchCompleted', defaultValue: DEFAULT_SETTINGS.searchCompleted },
 			},
 			// System-wide Quick Entry needs Electron, so these are hidden on mobile.
 			{

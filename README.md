@@ -8,6 +8,7 @@ Plainlist turns your notes into a clean, minimal task manager in Obsidian. A tas
 - **Projects are notes:** create a new project note, or turn an existing note into a project. Its checkboxes, nested ones included, become the project's to-dos.
 - **To-dos:** a title, a description, a date and a project. `#tags` and `[[links]]` work in both the title and the description, and typing `[[` suggests notes. Click a to-do to edit it in place; dates and `@project` typed into its title work as in quick capture.
 - **Quick capture:** the **New to-do** command opens a small palette that understands dates as you type: "today", "tonight", "fri", "next tue", "in 3 days", "oct 20", "someday". Type `@` to pick a project, e.g. `@House Renovation 2026`.
+- **Search:** the **Search to-dos** command fuzzy-finds any to-do by its title or project, from anywhere in Obsidian. Pick one to jump to it in its list. Completed to-dos are left out unless you turn on **Search completed to-dos** in the settings.
 - **Safe editing:** Plainlist only changes the lines it owns. Headings, notes, tables and callouts it does not understand stay exactly as they are.
 
 | Upcoming | Project |
@@ -30,7 +31,7 @@ Plainlist needs Obsidian 1.13 or later, and works on desktop and mobile.
 
 Run **Plainlist: Open** from the command palette (or click the ribbon icon). It opens `Tasks.md`, creating it if needed. Any note with `plainlist: true` in its properties opens in the Plainlist view; use the header button or **Plainlist: Switch between task list and Markdown** to see the raw Markdown.
 
-Plainlist does not set a hotkey for you. To capture from anywhere in Obsidian, bind **Plainlist: New to-do** under **Settings → Hotkeys**; `Mod+Shift+N` works well.
+Plainlist does not set hotkeys for you. To capture from anywhere in Obsidian, bind **Plainlist: New to-do** under **Settings → Hotkeys**; `Mod+Shift+N` works well. **Plainlist: Search to-dos** is worth a hotkey too.
 
 On desktop you can also capture from any other app. Turn on **System-wide quick entry** in Plainlist's settings, and a global shortcut (`Cmd+Option+N` / `Ctrl+Alt+N` by default) opens the same palette in a small floating window while Obsidian is running. Enter saves and closes it; Escape or clicking elsewhere dismisses it.
 
@@ -116,6 +117,7 @@ Right-click (or long-press on mobile) a to-do to complete or delete it, or a pro
 - **Tasks file:** the task file the **Open** command uses. Default: `Tasks.md`.
 - **Open this file in Plainlist view by default:** notes with `plainlist: true` open as a task list. Default: on.
 - **Week starts on:** used for "next week". Default: your locale.
+- **Search completed to-dos:** include completed to-dos in **Search to-dos** results. Default: off.
 
 ## Development
 

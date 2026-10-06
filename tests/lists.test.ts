@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeCounts, computeList, placeLabel, type ListId, type ProjectInfo, type Source } from '../src/model/lists';
+import { allItems, computeCounts, computeList, homeList, placeLabel, type ListId, type ProjectInfo, type Source } from '../src/model/lists';
 import { parse } from '../src/model/parse';
 
 const TODAY = '2026-10-04';
@@ -184,5 +184,19 @@ describe('headings in a project', () => {
 	it('labels a to-do with its project and heading', () => {
 		const item = computeList(sources, [p], { kind: 'today' }, TODAY).groups[0]!.items.find((i) => i.task.title === 'Tiles')!;
 		expect(placeLabel(item)).toBe('Office › Floor');
+	});
+});
+
+describe('homeList', () => {
+	it('is a list that shows every to-do, done ones and loose ones included', () => {
+		const done = project('Office.md', 11, { done: true, doneDate: '2026-10-03' });
+		for (const ps of [projects, [done, projects[1]!]]) {
+			const srcs = sources.map((s) => (s.project?.path === 'Office.md' ? { ...s, project: ps[0]! } : s));
+			for (const item of allItems(srcs)) {
+				const view = computeList(srcs, ps, homeList(item), TODAY);
+				const shown = [...view.groups.flatMap((g) => g.items), ...view.completed];
+				expect(shown.some((i) => i.path === item.path && i.task.line === item.task.line), item.task.title).toBe(true);
+			}
+		}
 	});
 });

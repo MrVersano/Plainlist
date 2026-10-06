@@ -22,12 +22,15 @@ export function TaskRow({
 	meta,
 	metaClass,
 	selected,
+	reveal = false,
 	actions,
 }: {
 	item: Item;
 	meta: string;
 	metaClass?: string;
 	selected: boolean;
+	/** Found with "Search to-dos": scroll it to the middle of the view. */
+	reveal?: boolean;
 	actions: RowActions;
 }) {
 	const { task } = item;
@@ -36,6 +39,9 @@ export function TaskRow({
 	useEffect(() => {
 		if (selected) el.current?.scrollIntoView({ block: 'nearest' });
 	}, [selected]);
+	useEffect(() => {
+		if (reveal) el.current?.scrollIntoView({ block: 'center' });
+	}, [reveal]);
 
 	return (
 		<div
