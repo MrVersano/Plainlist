@@ -9,6 +9,7 @@ Plainlist turns your notes into a clean, minimal task manager in Obsidian. A tas
 - **To-dos:** a title, a description, a date and a project. `#tags` and `[[links]]` work in both the title and the description, and typing `[[` suggests notes. Click a to-do to edit it in place; dates and `@project` typed into its title work as in quick capture.
 - **Quick capture:** the **New to-do** command opens a small palette that understands dates as you type: "today", "tonight", "fri", "next tue", "in 3 days", "oct 20", "someday". Type `@` to pick a project, e.g. `@House Renovation 2026`.
 - **Search:** the **Search to-dos** command fuzzy-finds any to-do by its title or project, from anywhere in Obsidian. Pick one to jump to it in its list. Completed to-dos are left out unless you turn on **Search completed to-dos** in the settings.
+- **Go to a list:** the **Go to Inbox**, **Go to Today**, **Go to Upcoming**, **Go to No Date** and **Go to Someday** commands open Plainlist on that list. Bind them to hotkeys to switch lists from anywhere in Obsidian.
 - **Safe editing:** Plainlist only changes the lines it owns. Headings, notes, tables and callouts it does not understand stay exactly as they are.
 
 | Upcoming | Project |
@@ -31,7 +32,7 @@ Plainlist needs Obsidian 1.13 or later, and works on desktop and mobile.
 
 Run **Plainlist: Open** from the command palette (or click the ribbon icon). It opens `Tasks.md`, creating it if needed. Any note with `plainlist: true` in its properties opens in the Plainlist view; use the header button or **Plainlist: Switch between task list and Markdown** to see the raw Markdown.
 
-Plainlist does not set hotkeys for you. To capture from anywhere in Obsidian, bind **Plainlist: New to-do** under **Settings → Hotkeys**; `Mod+Shift+N` works well. **Plainlist: Search to-dos** is worth a hotkey too.
+Plainlist does not set hotkeys for you. To capture from anywhere in Obsidian, bind **Plainlist: New to-do** under **Settings → Hotkeys**; `Mod+Shift+N` works well. **Plainlist: Search to-dos** is worth a hotkey too. To jump straight to a list, bind **Plainlist: Go to Inbox**, **Go to Today**, **Go to Upcoming**, **Go to No Date** or **Go to Someday**.
 
 On desktop you can also capture from any other app. Turn on **System-wide quick entry** in Plainlist's settings, and a global shortcut (`Cmd+Option+N` / `Ctrl+Alt+N` by default) opens the same palette in a small floating window while Obsidian is running. Enter saves and closes it; Escape or clicking elsewhere dismisses it.
 

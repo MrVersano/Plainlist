@@ -99,6 +99,16 @@ export class PlainlistView extends FileView {
 		await super.setState(state, result);
 	}
 
+	/** Switches to `list` and focuses the view, so the keyboard works there straight away. */
+	showList(list: ListId): void {
+		if (JSON.stringify(list) !== JSON.stringify(this.list)) {
+			this.list = list;
+			if (this.workspace) this.mount(this.workspace);
+			this.app.workspace.requestSaveLayout();
+		}
+		this.contentEl.querySelector<HTMLElement>('.pl-root')?.focus({ preventScroll: true });
+	}
+
 	openCapture(list: ListId = this.list): void {
 		if (!this.file) return;
 		this.plugin.openCapture(this.file, list);

@@ -46,6 +46,18 @@ export default class PlainlistPlugin extends Plugin {
 			callback: () => void this.searchTasks(),
 		});
 
+		// No default hotkeys; users can map them in Settings → Hotkeys.
+		const goTo: { id: string; name: string; list: ListId }[] = [
+			{ id: 'go-to-inbox', name: 'Go to Inbox', list: { kind: 'inbox' } },
+			{ id: 'go-to-today', name: 'Go to Today', list: { kind: 'today' } },
+			{ id: 'go-to-upcoming', name: 'Go to Upcoming', list: { kind: 'upcoming' } },
+			{ id: 'go-to-no-date', name: 'Go to No Date', list: { kind: 'nodate' } },
+			{ id: 'go-to-someday', name: 'Go to Someday', list: { kind: 'someday' } },
+		];
+		for (const { id, name, list } of goTo) {
+			this.addCommand({ id, name, callback: () => void this.showList(list) });
+		}
+
 		this.addCommand({
 			id: 'toggle-markdown',
 			name: 'Switch between task list and Markdown',
@@ -108,6 +120,19 @@ export default class PlainlistPlugin extends Plugin {
 		const leaf = this.app.workspace.getLeaf(false);
 		await this.openInPlainlist(leaf, file);
 		return leaf.view instanceof PlainlistView ? leaf.view : null;
+	}
+
+	/** Shows `list` in the active Plainlist view, or in the tasks file's view. */
+	async showList(list: ListId): Promise<void> {
+		try {
+			const file = this.app.workspace.getActiveViewOfType(PlainlistView)?.file ?? (await ensureTasksFile(this.app, this.settings.tasksFile));
+			const view = await this.showFile(file);
+			if (!view) return;
+			this.app.workspace.setActiveLeaf(view.leaf, { focus: true });
+			view.showList(list);
+		} catch (e) {
+			new Notice(`Plainlist: could not open the tasks file. ${e instanceof Error ? e.message : String(e)}`);
+		}
 	}
 
 	/**
