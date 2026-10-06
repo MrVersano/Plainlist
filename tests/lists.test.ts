@@ -207,11 +207,16 @@ describe('a day embedded in a note', () => {
 	const day = (date: string, extra: Source[] = [], order: string[] = []) =>
 		computeDay([...sources, ...extra], projects, date, TODAY, order).map((i) => i.task.title);
 
-	it("today: Today's to-dos plus those completed today, overdue first", () => {
-		expect(day(TODAY)).toEqual(['Overdue', 'Inbox today', 'Inbox done today', 'Today in project']);
+	it("today: Today's to-dos, overdue first, then those completed today", () => {
+		expect(day(TODAY)).toEqual(['Overdue', 'Inbox today', 'Today in project', 'Inbox done today']);
 	});
 
-	it('today: a to-do completed today stays where it was, whatever its date', () => {
+	it('keeps a just-completed to-do in place when asked', () => {
+		const items = computeDay(sources, projects, TODAY, TODAY, [], (i) => i.task.title === 'Inbox done today');
+		expect(items.map((i) => i.task.title)).toEqual(['Overdue', 'Inbox today', 'Inbox done today', 'Today in project']);
+	});
+
+	it('today: completed to-dos keep their order among themselves, whatever their date', () => {
 		const done = parse(['- [x] Was overdue [date:: 2026-10-01] [done:: 2026-10-04]', '- [x] Done early [date:: 2026-10-09] [done:: 2026-10-04]'].join('\n'));
 		const extra = { path: 'Office.md', doc: done, project: projects[0]! };
 		expect(computeDay([extra], projects, TODAY, TODAY).map((i) => i.task.title)).toEqual(['Was overdue', 'Done early']);
@@ -220,9 +225,9 @@ describe('a day embedded in a note', () => {
 	it("today: follows Today's saved order", () => {
 		expect(day(TODAY, [], ['Office.md\u0000Today in project', 'Tasks.md\u0000Inbox done today'])).toEqual([
 			'Today in project',
-			'Inbox done today',
 			'Overdue',
 			'Inbox today',
+			'Inbox done today',
 		]);
 	});
 
@@ -235,7 +240,7 @@ describe('a day embedded in a note', () => {
 	it('a later day: the to-dos dated that day, open or completed early', () => {
 		expect(day('2026-10-05')).toEqual(['Tomorrow']);
 		const early = parse('- [x] Done ahead [date:: 2026-10-05] [done:: 2026-10-04]');
-		expect(day('2026-10-05', [{ path: 'Early.md', doc: early, project: null }])).toEqual(['Done ahead', 'Tomorrow']);
+		expect(day('2026-10-05', [{ path: 'Early.md', doc: early, project: null }])).toEqual(['Tomorrow', 'Done ahead']);
 	});
 
 	it("leaves out a completed project's open to-dos, but not what was completed in it", () => {

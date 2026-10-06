@@ -14,6 +14,12 @@ const isAt = (at: TaskRef | null, item: Item): boolean =>
 
 const itemKey = (item: Item): string => `${item.path}:${item.task.line}:${item.task.text}`;
 
+/** Identifies a to-do across its completion, which rewrites its line's text but not its number. */
+const settleKey = (item: Item): string => `${item.path}:${item.task.line}`;
+
+/** How long a just-completed to-do stays in place, crossed off, before it moves to the bottom. As in the view. */
+const SETTLE_MS = 3000;
+
 /** One key per expansion, so opening another to-do mounts a fresh editor. */
 let nextExpansionId = 0;
 
@@ -46,10 +52,30 @@ export function DayList({ date, onAdd, onExit }: { date: string | null; onAdd: (
 
 	const sources = useMemo(() => workspace.sources(), [version]);
 	const projects = workspace.projects;
+	/** Just-completed to-dos, by settleKey, still in place among the open ones. */
+	const [settling, setSettling] = useState<ReadonlySet<string>>(new Set());
+	const settleTimers = useRef(new Map<string, number>());
 	const rows = useMemo(
-		() => computeDay(sources, projects, day, today, env.todayOrder.get()),
-		[sources, day, today, orderVersion],
+		() => computeDay(sources, projects, day, today, env.todayOrder.get(), (i) => settling.has(settleKey(i))),
+		[sources, day, today, orderVersion, settling],
 	);
+
+	const unsettle = (key: string): void => {
+		window.clearTimeout(settleTimers.current.get(key));
+		settleTimers.current.delete(key);
+		setSettling((s) => {
+			if (!s.has(key)) return s;
+			const next = new Set(s);
+			next.delete(key);
+			return next;
+		});
+	};
+	const settle = (key: string): void => {
+		window.clearTimeout(settleTimers.current.get(key));
+		setSettling((s) => new Set(s).add(key));
+		settleTimers.current.set(key, window.setTimeout(() => unsettle(key), SETTLE_MS));
+	};
+	useEffect(() => () => settleTimers.current.forEach((t) => window.clearTimeout(t)), []);
 
 	useLayoutEffect(() => {
 		const el = root.current;
@@ -122,6 +148,8 @@ export function DayList({ date, onAdd, onExit }: { date: string | null; onAdd: (
 	}, [expanded, expandedVisible]);
 
 	const toggle = (item: Item): void => {
+		if (item.task.done) unsettle(settleKey(item));
+		else settle(settleKey(item));
 		const tracked = isAt(box?.current ?? null, item) ? (box ?? undefined) : undefined;
 		void workspace.run(item.path, (d) => setTaskDone(d, tracked ? tracked.current.ref : refOf(item.task), !item.task.done, today), tracked);
 	};

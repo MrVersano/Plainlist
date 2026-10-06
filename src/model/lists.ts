@@ -226,11 +226,20 @@ export function computeList(
 
 /**
  * One day's to-dos, for a list embedded in a note. Unlike the Today list it keeps completed
- * to-dos, crossed off. Today: the Today list plus what was completed today. An earlier day:
- * what was completed that day (its open to-dos have rolled over to today). A later day: the
- * to-dos dated that day. To-dos dated before the day come first, then Today's saved order applies.
+ * to-dos, crossed off, after the open ones. Today: the Today list plus what was completed today.
+ * An earlier day: what was completed that day (its open to-dos have rolled over to today). A
+ * later day: the to-dos dated that day. To-dos dated before the day come first, then Today's
+ * saved order applies. `inPlace` keeps a completed to-do among the open ones, for one that was
+ * just completed.
  */
-export function computeDay(sources: Source[], projects: ProjectInfo[], day: string, today: string, todayOrder: string[] = []): Item[] {
+export function computeDay(
+	sources: Source[],
+	projects: ProjectInfo[],
+	day: string,
+	today: string,
+	todayOrder: string[] = [],
+	inPlace: (i: Item) => boolean = () => false,
+): Item[] {
 	const rank = sourceOrder(projects);
 	const shown = allItems(sources)
 		.filter(({ task, project }) => {
@@ -241,7 +250,9 @@ export function computeDay(sources: Source[], projects: ProjectInfo[], day: stri
 		.sort((a, b) => rank(a) - rank(b) || a.task.line - b.task.line);
 	// Not isOverdue: a to-do completed today keeps its place among them.
 	const early = (i: Item): boolean => isDated(i.task) && (i.task.date ?? '') < day;
-	return inTodayOrder([...shown.filter(early), ...shown.filter((i) => !early(i))], todayOrder);
+	const ordered = inTodayOrder([...shown.filter(early), ...shown.filter((i) => !early(i))], todayOrder);
+	const top = (i: Item): boolean => !i.task.done || inPlace(i);
+	return [...ordered.filter(top), ...ordered.filter((i) => !top(i))];
 }
 
 export interface Counts {
