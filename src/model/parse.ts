@@ -147,6 +147,8 @@ export function parse(text: string): Doc {
 	let projectsSection: Section | null = null;
 	let ctx: 'none' | 'inbox' | 'projects' | 'other' = 'none';
 	let fence: { ch: string; len: number } | null = null;
+	/** To-dos whose block is still open, innermost last: candidates for the next to-do's parent. */
+	const ancestors: { line: number; width: number; subtreeEnd: number }[] = [];
 
 	for (let i = fmEnd; i < n; i++) {
 		const line = lines[i] ?? '';
@@ -200,6 +202,13 @@ export function parse(text: string): Doc {
 			const width = indentWidth(line);
 			const end = blockEnd(lines, i, (l) => !isTaskLine(l) && indentWidth(l) >= width + 2);
 			const subtreeEnd = blockEnd(lines, i, (l) => indentWidth(l) > width);
+			let up = ancestors[ancestors.length - 1];
+			while (up && (up.subtreeEnd <= i || up.width >= width)) {
+				ancestors.pop();
+				up = ancestors[ancestors.length - 1];
+			}
+			const parent = up?.line ?? null;
+			ancestors.push({ line: i, width, subtreeEnd });
 			tasks.push({
 				line: i,
 				text: line,
@@ -211,6 +220,7 @@ export function parse(text: string): Doc {
 				description: descriptionText(lines.slice(i + 1, end)),
 				end,
 				subtreeEnd,
+				parent,
 				section: ctx === 'inbox' ? 'inbox' : 'other',
 				heading,
 			});

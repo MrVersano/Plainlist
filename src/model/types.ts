@@ -29,6 +29,8 @@ export interface Task {
 	end: number;
 	/** End of the to-do's block: its description plus everything indented under it, nested to-dos included. */
 	subtreeEnd: number;
+	/** Line of the to-do this one is nested under (a sub-task of), or null at the top level. */
+	parent: number | null;
 	/**
 	 * Task file only. `inbox`: directly under `# Inbox`. `other`: anywhere else
 	 * (shown as an Inbox item but never moved). Always `other` in project notes.

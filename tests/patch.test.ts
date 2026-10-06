@@ -21,6 +21,9 @@ import {
 	setTaskDescription,
 	setTaskDone,
 	setTaskTitle,
+	indentTask,
+	outdentTask,
+	addSubtask,
 } from '../src/model/patch';
 import type { Doc, LineEdit } from '../src/model/types';
 import { changedLines, fixture, rng } from './helpers';
@@ -225,10 +228,14 @@ describe('moving and deleting to-dos', () => {
 		expect(run(out, (d) => restoreLines(d, removed))).toBe(note);
 	});
 
-	it('deleting a parent leaves its nested to-dos', () => {
+	it('deleting a parent deletes its sub-tasks, and undo brings them back', () => {
 		const doc = parse(note);
-		const out = applyEdits(doc, deleteTask(doc, refOf(task(doc, 'Order standing'))).edits);
-		expect(out).toContain('Measure desk height');
+		const { edits, removed } = deleteTask(doc, refOf(task(doc, 'Order standing')));
+		const out = applyEdits(doc, edits);
+		expect(out).not.toContain('Measure desk height');
+		expect(out).not.toContain('Pick frame colour');
+		expect(out).toContain('- [ ] Pick shelving');
+		expect(run(out, (d) => restoreLines(d, removed))).toBe(note);
 	});
 
 	it('undo finds the spot after other edits shifted it', () => {
@@ -488,5 +495,70 @@ describe('headings', () => {
 	it('refuses a heading that is no longer there', () => {
 		const doc = parse(text);
 		expect(() => addTask(doc, { title: 'x', date: null }, { heading: { line: 3, text: '# Gone' } })).toThrow(PatchConflict);
+	});
+});
+
+describe('sub-tasks', () => {
+	const at = (text: string, title: string) => refOf(task(parse(text), title));
+
+	it('indents a to-do, with its description and sub-tasks, under the one above', () => {
+		const text = '- [ ] a\n- [ ] b\n\tnote\n\t- [ ] c\n- [ ] d\n';
+		const doc = parse(text);
+		const r = indentTask(doc, at(text, 'b'), at(text, 'a'));
+		expect(applyEdits(doc, r.edits)).toBe('- [ ] a\n\t- [ ] b\n\t\tnote\n\t\t- [ ] c\n- [ ] d\n');
+		expect(r.landed).toEqual({ line: 1, text: '\t- [ ] b' });
+	});
+
+	it('indents to match the sub-tasks already there, after the last one', () => {
+		const text = '- [ ] a\n    - [ ] x\n- [ ] b\n';
+		const doc = parse(text);
+		const r = indentTask(doc, at(text, 'b'), at(text, 'a'));
+		expect(applyEdits(doc, r.edits)).toBe('- [ ] a\n    - [ ] x\n    - [ ] b\n');
+		expect(parse(applyEdits(doc, r.edits)).tasks.map((t) => t.parent)).toEqual([null, 0, 0]);
+	});
+
+	it('moves the to-do up when other lines sit between it and the new parent', () => {
+		const text = '- [ ] a\nprose\n- [ ] b\n';
+		const doc = parse(text);
+		const r = indentTask(doc, at(text, 'b'), at(text, 'a'));
+		const out = applyEdits(doc, r.edits);
+		expect(out).toBe('- [ ] a\n\t- [ ] b\nprose\n');
+		expect(parse(out).lines[r.landed.line]).toBe(r.landed.text);
+	});
+
+	it('will not indent under a to-do at another level', () => {
+		const text = '- [ ] a\n\t- [ ] x\n- [ ] b\n';
+		expect(() => indentTask(parse(text), at(text, 'b'), at(text, 'x'))).toThrow(PatchConflict);
+	});
+
+	it('outdents a last sub-task in place', () => {
+		const text = '- [ ] a\n\t- [ ] b\n\t\tnote\n- [ ] c\n';
+		const doc = parse(text);
+		const r = outdentTask(doc, at(text, 'b'));
+		expect(applyEdits(doc, r.edits)).toBe('- [ ] a\n- [ ] b\n\tnote\n- [ ] c\n');
+		expect(r.landed).toEqual({ line: 1, text: '- [ ] b' });
+	});
+
+	it('outdents a sub-task to just after its parent, leaving its siblings under the parent', () => {
+		const text = '- [ ] a\n\t- [ ] b\n\t- [ ] c\n- [ ] d\n';
+		const doc = parse(text);
+		const r = outdentTask(doc, at(text, 'b'));
+		const out = applyEdits(doc, r.edits);
+		expect(out).toBe('- [ ] a\n\t- [ ] c\n- [ ] b\n- [ ] d\n');
+		expect(parse(out).lines[r.landed.line]).toBe(r.landed.text);
+	});
+
+	it('outdenting a top-level to-do does nothing', () => {
+		const text = '- [ ] a\n';
+		expect(outdentTask(parse(text), at(text, 'a')).edits).toEqual([]);
+	});
+
+	it('adds an untitled sub-task after the last one', () => {
+		const text = '- [ ] a\n\tnote\n\t- [ ] x\n- [ ] b\n';
+		const doc = parse(text);
+		const r = addSubtask(doc, at(text, 'a'));
+		expect(applyEdits(doc, r.edits)).toBe('- [ ] a\n\tnote\n\t- [ ] x\n\t- [ ]\n- [ ] b\n');
+		expect(r.landed).toEqual({ line: 3, text: '\t- [ ]' });
+		expect(parse(applyEdits(doc, r.edits)).tasks[2]).toMatchObject({ title: '', parent: 0 });
 	});
 });

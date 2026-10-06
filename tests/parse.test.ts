@@ -87,6 +87,20 @@ describe('parse: project note', () => {
 		]);
 	});
 
+	it('links a sub-task to the to-do it is nested under', () => {
+		const frame = byTitle('Order standing');
+		expect(byTitle('Measure desk height').parent).toBe(frame.line);
+		expect(byTitle('Pick frame colour').parent).toBe(frame.line);
+		expect(frame.parent).toBeNull();
+		expect(byTitle('Pick shelving').parent).toBeNull();
+	});
+
+	it('finds the parent at any depth, past descriptions and blank lines', () => {
+		const d = parse('- [ ] a\n\tnote\n\t- [ ] b\n\n\t\t- [ ] c\n\t- [ ] d\n- [ ] e\n  - [ ] f\n');
+		const parents = Object.fromEntries(d.tasks.map((t) => [t.title, t.parent === null ? null : d.lines[t.parent]]));
+		expect(parents).toEqual({ a: null, b: '- [ ] a', c: '\t- [ ] b', d: '- [ ] a', e: null, f: '- [ ] e' });
+	});
+
 	it('leaves headings and prose alone', () => {
 		expect(doc.inbox).toBeNull();
 		expect(doc.projectLinks).toEqual([]);

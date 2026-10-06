@@ -17,6 +17,8 @@
 	--pl-accent: var(--text-accent);
 	--pl-row-height: 44px;
 	--pl-radius: 6px;
+	/* Checkbox plus gap: a sub-task's checkbox lines up with its parent's title. */
+	--pl-subtask-indent: 32px;
 	display: flex;
 	background: var(--background-primary);
 	color: var(--text-normal);
@@ -378,6 +380,8 @@
 	gap: 14px;
 	min-height: var(--pl-row-height);
 	border-bottom: 1px solid var(--pl-hairline);
+	/* Sub-tasks sit under their parent's title. */
+	margin-left: calc(var(--pl-depth, 0) * var(--pl-subtask-indent));
 }
 
 .pl-row.is-selected:not(.is-expanded) {
@@ -518,7 +522,7 @@
 
 .pl-row.is-expanded {
 	display: block;
-	margin: 8px -24px;
+	margin: 8px -24px 8px calc(var(--pl-depth, 0) * var(--pl-subtask-indent) - 24px);
 	padding: 6px 24px 22px;
 	border: none;
 	border-radius: 14px;
@@ -527,7 +531,7 @@
 }
 
 .pl-root.is-narrow .pl-row.is-expanded {
-	margin: 8px -12px;
+	margin: 8px -12px 8px calc(var(--pl-depth, 0) * var(--pl-subtask-indent) - 12px);
 	padding: 6px 12px 16px;
 }
 

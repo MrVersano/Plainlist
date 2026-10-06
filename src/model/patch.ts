@@ -182,18 +182,23 @@ export interface NewTask {
 	title: string;
 	date: TaskDate | null;
 	description?: string;
+	/** How deeply it is nested under the to-dos before it: 1 is a sub-task of the closest one at 0. */
+	depth?: number;
+}
+
+function newTaskLines(t: NewTask): string[] {
+	const indent = '\t'.repeat(t.depth ?? 0);
+	return [formatTaskLine(t.title, false, t.date, null, `${indent}- `), ...descriptionLines(t.description ?? '', indent)];
 }
 
 export function addTask(doc: Doc, task: NewTask, dest: Destination): LineEdit[] {
-	const lines = [formatTaskLine(task.title, false, task.date, null), ...descriptionLines(task.description ?? '')];
-	return [insertTaskLines(doc, lines, dest).edit];
+	return [insertTaskLines(doc, newTaskLines(task), dest).edit];
 }
 
-/** Adds several to-dos at once, in order, as a single edit. */
+/** Adds several to-dos at once, in order, as a single edit. A to-do's `depth` nests it under the ones before. */
 export function addTasks(doc: Doc, tasks: NewTask[], dest: Destination): LineEdit[] {
 	if (!tasks.length) return [];
-	const lines = tasks.flatMap((t) => [formatTaskLine(t.title, false, t.date, null), ...descriptionLines(t.description ?? '')]);
-	return [insertTaskLines(doc, lines, dest).edit];
+	return [insertTaskLines(doc, tasks.flatMap(newTaskLines), dest).edit];
 }
 
 export function setTaskDone(doc: Doc, ref: LineRef, done: boolean, today: string): LineEdit[] {
@@ -255,17 +260,82 @@ export function moveTaskToHeading(doc: Doc, ref: LineRef, heading: LineRef | nul
 	};
 }
 
+/** Deletes a to-do with its description and its sub-tasks. */
 export function deleteTask(doc: Doc, ref: LineRef): { edits: LineEdit[]; removed: Removed } {
 	const t = findTask(doc, ref);
+	const end = Math.max(t.end, t.subtreeEnd);
 	return {
-		edits: [{ at: t.line, delete: t.end - t.line, insert: [] }],
+		edits: [{ at: t.line, delete: end - t.line, insert: [] }],
 		removed: {
 			at: t.line,
-			lines: doc.lines.slice(t.line, t.end),
+			lines: doc.lines.slice(t.line, end),
 			before: doc.lines[t.line - 1] ?? null,
-			after: doc.lines[t.end] ?? null,
+			after: doc.lines[end] ?? null,
 		},
 	};
+}
+
+// --- Sub-tasks --------------------------------------------------------------
+
+/** The edits that result, and where the to-do's title line ends up. */
+export interface Relocation {
+	edits: LineEdit[];
+	landed: LineRef;
+}
+
+/** The indent for a new sub-task of `t`: that of its existing sub-tasks, or one step deeper than it. */
+function childIndent(doc: Doc, t: Task): string {
+	const last = [...doc.tasks].reverse().find((c) => c.parent === t.line);
+	return last ? last.indent : t.indent + indentUnit(t.indent);
+}
+
+/**
+ * Re-indents a to-do's block to `indent` and puts it at line `at`. When only blank lines
+ * separate `at` from the block, the lines are rewritten in place, one edit per line.
+ */
+function relocate(doc: Doc, t: Task, at: number, indent: string): Relocation {
+	const end = Math.max(t.end, t.subtreeEnd);
+	const lines = reindent(doc.lines.slice(t.line, end), t.indent, indent);
+	const between = at <= t.line ? doc.lines.slice(at, t.line) : doc.lines.slice(end, at);
+	if (between.every(isBlank)) {
+		const edits = lines.flatMap((l, i) => replaceLine(t.line + i, doc.lines[t.line + i] ?? '', l));
+		return { edits, landed: { line: t.line, text: lines[0] ?? '' } };
+	}
+	const line = at < t.line ? at : at - (end - t.line);
+	return {
+		edits: [
+			{ at: t.line, delete: end - t.line, insert: [] },
+			{ at, delete: 0, insert: lines },
+		],
+		landed: { line, text: lines[0] ?? '' },
+	};
+}
+
+/**
+ * Makes a to-do (with everything nested under it) a sub-task of `under`, its last one.
+ * `under` must come before it and be nested under the same to-do (or both at the top level).
+ */
+export function indentTask(doc: Doc, ref: LineRef, under: LineRef): Relocation {
+	const t = findTask(doc, ref);
+	const p = findTask(doc, under);
+	if (p.line >= t.line || p.parent !== t.parent) throw new PatchConflict(`Cannot nest ${t.text} under ${p.text}`);
+	return relocate(doc, t, Math.max(p.end, p.subtreeEnd), childIndent(doc, p));
+}
+
+/** Moves a sub-task out of its parent, to just after the parent's block, at the parent's indent. */
+export function outdentTask(doc: Doc, ref: LineRef): Relocation {
+	const t = findTask(doc, ref);
+	const p = doc.tasks.find((x) => x.line === t.parent);
+	if (!p) return { edits: [], landed: refOf(t) };
+	return relocate(doc, t, Math.max(p.end, p.subtreeEnd), p.indent);
+}
+
+/** Adds an untitled sub-task after a to-do's last one. */
+export function addSubtask(doc: Doc, ref: LineRef): Relocation {
+	const p = findTask(doc, ref);
+	const at = Math.max(p.end, p.subtreeEnd);
+	const text = formatTaskLine('', false, null, null, `${childIndent(doc, p)}- `);
+	return { edits: [{ at, delete: 0, insert: [text] }], landed: { line: at, text } };
 }
 
 /** Puts deleted lines back between the same neighbours. */

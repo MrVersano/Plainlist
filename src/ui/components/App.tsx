@@ -16,8 +16,18 @@ import {
 	type Source,
 } from '../../model/lists';
 import { pastedTasks } from '../../model/paste';
-import { deleteTask, refOf, restoreLines, setTaskDone, type Removed } from '../../model/patch';
-import type { Task } from '../../model/types';
+import {
+	addSubtask,
+	deleteTask,
+	indentTask,
+	outdentTask,
+	refOf,
+	restoreLines,
+	setTaskDone,
+	type Relocation,
+	type Removed,
+} from '../../model/patch';
+import type { Doc, Task } from '../../model/types';
 import { locateLine, type TaskRef, type TrackBox } from '../../store';
 import { useEnv, useToday, useWorkspace } from '../env';
 import { themeCheckboxRadius } from '../obsidian';
@@ -75,6 +85,9 @@ const isAt = (at: TaskRef | null, item: Item): boolean =>
 	!!at && at.path === item.path && at.ref.line === item.task.line && at.ref.text === item.task.text;
 
 const isBoxed = (box: TrackBox | null, item: Item): boolean => isAt(box?.current ?? null, item);
+
+/** Lists that show to-dos in file order, with sub-tasks indented under their parents. */
+const isNested = (list: ListId): boolean => ['inbox', 'project', 'nodate', 'someday'].includes(list.kind);
 
 const itemKey = (item: Item): string => `${item.path}:${item.task.line}:${item.task.text}`;
 
@@ -185,6 +198,10 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 	const lingerTimers = useRef(new Map<string, number[]>());
 	/** A to-do found with "Search to-dos", until it is selected and scrolled to. */
 	const [revealed, setRevealed] = useState<TaskRef | null>(null);
+	/** A to-do that was just indented or outdented, until it is selected again. */
+	const [follow, setFollow] = useState<TaskRef | null>(null);
+	/** A just-added sub-task, open in the editor; it is removed if closed while still empty. */
+	const fresh = useRef<TrackBox | null>(null);
 	const [narrow, setNarrow] = useState(false);
 	const root = useRef<HTMLDivElement>(null);
 
@@ -333,6 +350,64 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		setRevealed(null);
 	}, [revealed]);
 
+	useLayoutEffect(() => {
+		if (!follow) return;
+		const at = rows.findIndex((i) => isAt(follow, i));
+		if (at !== -1) setSelected(at);
+		setFollow(null);
+	}, [follow]);
+
+	/** The row a to-do would be indented under: the closest one above it at the same depth, with the same parent. */
+	const indentTarget = (item: Item): Item | null => {
+		const open = view.groups.flatMap((g) => g.items);
+		const depth = item.depth ?? 0;
+		for (let j = open.indexOf(item) - 1; j >= 0; j--) {
+			const r = open[j];
+			if (!r || r.path !== item.path || (r.depth ?? 0) < depth) return null;
+			if ((r.depth ?? 0) > depth) continue;
+			const sameHeading = (r.task.heading?.line ?? null) === (item.task.heading?.line ?? null);
+			return r.task.parent === item.task.parent && sameHeading ? r : null;
+		}
+		return null;
+	};
+
+	/** Re-nests a to-do and keeps it selected. */
+	const relocate = (item: Item, makeEdits: (d: Doc) => Relocation): void => {
+		const landed: { at: TaskRef | null } = { at: null };
+		void workspace
+			.run(item.path, (d) => {
+				const r = makeEdits(d);
+				landed.at = { path: item.path, ref: r.landed };
+				return r.edits;
+			})
+			.then((res) => res.ok && landed.at && setFollow(landed.at));
+	};
+
+	const indent = (item: Item): void => {
+		const under = indentTarget(item);
+		if (under) relocate(item, (d) => indentTask(d, refOf(item.task), refOf(under.task)));
+	};
+
+	const outdent = (item: Item): void => {
+		if (item.task.parent !== null) relocate(item, (d) => outdentTask(d, refOf(item.task)));
+	};
+
+	const addSub = (item: Item): void => {
+		const landed: { at: TaskRef | null } = { at: null };
+		void workspace
+			.run(item.path, (d) => {
+				const r = addSubtask(d, refOf(item.task));
+				landed.at = { path: item.path, ref: r.landed };
+				return r.edits;
+			})
+			.then((res) => {
+				if (!res.ok || !landed.at) return;
+				const box = { current: landed.at };
+				fresh.current = box;
+				setExpanded(box);
+			});
+	};
+
 	const toggle = (item: Item): void => {
 		// Completed shows done to-dos anyway; elsewhere a completed one lingers, crossed off.
 		const key = lingerKey(item.path, item.task.line);
@@ -363,13 +438,22 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 			setExpanded({ current: { path: item.path, ref: refOf(item.task) } });
 		},
 		onMenu: (item, pos) => {
-			new Menu()
-				.addItem((i) =>
-					i
-						.setTitle(item.task.done ? 'Mark as open' : 'Complete')
-						.setIcon('check')
-						.onClick(() => toggle(item)),
-				)
+			const menu = new Menu().addItem((i) =>
+				i
+					.setTitle(item.task.done ? 'Mark as open' : 'Complete')
+					.setIcon('check')
+					.onClick(() => toggle(item)),
+			);
+			if (isNested(list) && !item.task.done) {
+				if (list.kind === 'inbox' || list.kind === 'project') {
+					menu.addItem((i) => i.setTitle('Add sub-task').setIcon('list-plus').onClick(() => addSub(item)));
+				}
+				if (indentTarget(item)) menu.addItem((i) => i.setTitle('Indent').setIcon('indent-increase').onClick(() => indent(item)));
+				if (item.task.parent !== null) {
+					menu.addItem((i) => i.setTitle('Outdent').setIcon('indent-decrease').onClick(() => outdent(item)));
+				}
+			}
+			menu
 				.addItem((i) =>
 					i
 						.setTitle('Delete')
@@ -433,6 +517,11 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 			if (expanded) return;
 			const step = e.key === 'ArrowDown' ? 1 : -1;
 			setSelected(Math.max(0, Math.min(rows.length - 1, (selected < 0 && step < 0 ? rows.length : selected) + step)));
+		} else if (e.key === 'Tab' && !mod && !e.altKey) {
+			e.preventDefault();
+			if (expanded || !current || current.task.done || !isNested(list)) return;
+			if (e.shiftKey) outdent(current);
+			else indent(current);
 		} else if (e.key === 'Enter' && mod) {
 			e.preventDefault();
 			if (current) toggle(current);
@@ -493,6 +582,15 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 					today={today}
 					onCollapse={collapse}
 					onToggle={() => toggle(item)}
+					onDiscard={
+						fresh.current === expanded
+							? () => {
+									const box = expanded;
+									fresh.current = null;
+									void workspace.run(box.current.path, (d) => deleteTask(d, box.current.ref).edits);
+								}
+							: undefined
+					}
 				/>
 			);
 		}

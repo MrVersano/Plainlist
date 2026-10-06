@@ -50,6 +50,7 @@ export function TaskRow({
 		const row = el.current;
 		if (leaving && row) row.setCssProps({ '--pl-leave-height': `${row.offsetHeight + 1}px` });
 	}, [leaving]);
+	useDepth(el, item.depth);
 
 	return (
 		<div
@@ -70,6 +71,13 @@ export function TaskRow({
 	);
 }
 
+/** Indents a sub-task's row under its parent's. */
+function useDepth(el: { current: HTMLElement | null }, depth = 0): void {
+	useLayoutEffect(() => {
+		el.current?.setCssProps({ '--pl-depth': String(depth) });
+	}, [depth]);
+}
+
 function dateLabel(date: string | null, today: string): string {
 	if (!date) return '';
 	if (date === today) return 'Today';
@@ -84,6 +92,7 @@ export function TaskEditor({
 	today,
 	onCollapse,
 	onToggle,
+	onDiscard,
 }: {
 	item: Item;
 	box: TrackBox;
@@ -91,6 +100,8 @@ export function TaskEditor({
 	today: string;
 	onCollapse: () => void;
 	onToggle: () => void;
+	/** For a just-added sub-task: called when the editor closes with no title or description. */
+	onDiscard?: () => void;
 }) {
 	const { app, workspace, weekStart } = useEnv();
 	const { task } = item;
@@ -136,6 +147,7 @@ export function TaskEditor({
 	const finish = useRef(() => {});
 	finish.current = () => {
 		save.flush();
+		if (onDiscard && !latest.current.title.trim() && !latest.current.description.trim()) return onDiscard();
 		const typed = latest.current.title;
 		const found = recognised(typed);
 		const rest = stripRanges(typed, [found.match, found.mention].filter((r) => r !== null));
@@ -151,6 +163,7 @@ export function TaskEditor({
 	useEffect(() => () => finish.current(), []);
 	useEffect(() => titleInput.current?.focus(), []);
 	useOutsideClick(wrap, onCollapse, popover === null);
+	useDepth(wrap, item.depth);
 
 	/** Removes a typed date or @project from the title, so a choice made in a popover wins. */
 	const drop = (r: { index: number; end: number } | null): void => {

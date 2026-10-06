@@ -6,9 +6,10 @@ Plainlist turns your notes into a clean, minimal task manager in Obsidian. A tas
 
 - **Lists:** Inbox, Today, Upcoming, No Date, Someday and Completed, plus one list per project. Open to-dos from past days move to today. A to-do you complete stays in its list, crossed off, for a few seconds before it fades away; done to-dos then live in Completed and in their project's completed section.
 - **Projects are notes:** create a new project note, or turn an existing note into a project. Its checkboxes, nested ones included, become the project's to-dos.
+- **Sub-tasks:** a checkbox indented under another checkbox is its sub-task, and shows indented under it. Press `Tab` / `Shift+Tab` to indent or outdent a to-do, or right-click it and choose **Add sub-task**.
 - **To-dos:** a title, a description, a date and a project. `#tags` and `[[links]]` work in both the title and the description, and typing `[[` suggests notes. Click a to-do to edit it in place; dates and `@project` typed into its title work as in quick capture.
 - **Quick capture:** the **New to-do** command opens a small palette that understands dates as you type: "today", "tonight", "fri", "next tue", "in 3 days", "oct 20", "someday". Type `@` to pick a project, e.g. `@House Renovation 2026`.
-- **Paste a list:** paste lines like `- [ ] Task`, `- [] Task`, `- Task` or `[ ] Task` into Plainlist and each one becomes a to-do in the list you are on.
+- **Paste a list:** paste lines like `- [ ] Task`, `- [] Task`, `- Task` or `[ ] Task` into Plainlist and each one becomes a to-do in the list you are on. Indented lines become sub-tasks.
 - **Search:** the **Search to-dos** command fuzzy-finds any to-do by its title or project, from anywhere in Obsidian. Pick one to jump to it in its list. Completed to-dos are left out unless you turn on **Search completed to-dos** in the settings.
 - **Go to a list:** the **Go to Inbox**, **Go to Today**, **Go to Upcoming**, **Go to No Date** and **Go to Someday** commands open Plainlist on that list. Bind them to hotkeys to switch lists from anywhere in Obsidian.
 - **Safe editing:** Plainlist only changes the lines it owns. Headings, notes, tables and callouts it does not understand stay exactly as they are.
@@ -92,12 +93,13 @@ The electrician is free Thursday mornings.
 | Project | A link list item (`- [[Note]]` or `- [Note](Note.md)`) under `# Projects` in the task file |
 | Completed project | `- [x] [[Note]] [done:: YYYY-MM-DD]` |
 | To-do | Any checkbox, at any indent: `- [ ] title`, `* [x] title`, `1. [ ] title` |
+| Sub-task | A checkbox indented under another one: `- [ ] parent`, then `\t- [ ] sub-task` on the next line |
 | Description | Indented lines directly under a to-do that are not themselves checkboxes |
 | Date | `[date:: YYYY-MM-DD]` or `[date:: someday]` (Dataview inline-field syntax) |
 | Completed | `[x]` plus `[done:: YYYY-MM-DD]`, added when you complete a to-do |
 | Tags | `#tag` anywhere in a title or description |
 
-To-dos elsewhere in the task file (under another heading, say) show up in the Inbox but are never moved. Checkboxes inside code blocks and callouts are ignored. Unknown inline fields such as `[priority:: high]` stay in the title. Moving a to-do to another project moves the checkboxes nested under it too.
+To-dos elsewhere in the task file (under another heading, say) show up in the Inbox but are never moved. Checkboxes inside code blocks and callouts are ignored. Unknown inline fields such as `[priority:: high]` stay in the title. Moving or deleting a to-do takes its sub-tasks with it.
 
 ## Keyboard
 
@@ -111,8 +113,9 @@ With the Plainlist view focused:
 | `N` | New to-do in the current list |
 | `Space` or `Mod+Enter` | Complete or reopen the selected to-do |
 | `Delete` / `Backspace` | Delete the selected to-do (with undo) |
+| `Tab` / `Shift+Tab` | Make the selected to-do a sub-task of the one above / move it out of its parent |
 
-Right-click (or long-press on mobile) a to-do to complete or delete it, or a project to open, rename or remove it.
+Right-click (or long-press on mobile) a to-do to complete it, add a sub-task, indent or outdent it, or delete it, or a project to open, rename or remove it.
 
 ## Settings
 

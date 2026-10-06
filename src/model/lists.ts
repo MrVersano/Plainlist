@@ -29,6 +29,8 @@ export interface Item {
 	/** Path of the note the to-do lives in. */
 	path: string;
 	project: ProjectInfo | null;
+	/** How deeply the row is indented under its parent to-do's row. Set only in lists that keep file order. */
+	depth?: number;
 }
 
 export type ListId =
@@ -98,6 +100,22 @@ function flat(items: Item[]): ListView {
 	return { groups: items.length ? [{ key: 'all', label: '', items }] : [], completed: [] };
 }
 
+/**
+ * Indents each sub-task under its parent's row, for items in file order. A sub-task whose
+ * parent is not in the list (done, or elsewhere) stays at the left.
+ */
+function nested(items: Item[]): Item[] {
+	const depths = new Map<string, number>();
+	return items.map((i) => {
+		const up = i.task.parent === null ? undefined : depths.get(`${i.path}:${i.task.parent}`);
+		const depth = up === undefined ? 0 : up + 1;
+		depths.set(`${i.path}:${i.task.line}`, depth);
+		return { ...i, depth };
+	});
+}
+
+const nestedGroups = (groups: Group[]): Group[] => groups.map((g) => ({ ...g, items: nested(g.items) }));
+
 export function isInToday(t: Task, today: string): boolean {
 	return !t.done && isDated(t) && (t.date ?? '') <= today;
 }
@@ -122,7 +140,7 @@ export function computeList(sources: Source[], projects: ProjectInfo[], list: Li
 
 	switch (list.kind) {
 		case 'inbox':
-			return flat(open.filter((i) => !i.project));
+			return flat(nested(open.filter((i) => !i.project)));
 		case 'today': {
 			const all = open.filter((i) => isInToday(i.task, today));
 			return flat([...all.filter((i) => isOverdue(i.task, today)), ...all.filter((i) => !isOverdue(i.task, today))]);
@@ -134,9 +152,9 @@ export function computeList(sources: Source[], projects: ProjectInfo[], list: Li
 			return { groups: grouped(future, (i) => upcomingGroup(i.task.date ?? today, today)), completed: [] };
 		}
 		case 'nodate':
-			return { groups: byProject(active, open.filter((i) => !i.task.date && i.project)), completed: [] };
+			return { groups: nestedGroups(byProject(active, open.filter((i) => !i.task.date && i.project))), completed: [] };
 		case 'someday':
-			return { groups: byProject(active, open.filter((i) => i.task.date === 'someday')), completed: [] };
+			return { groups: nestedGroups(byProject(active, open.filter((i) => i.task.date === 'someday'))), completed: [] };
 		case 'completed': {
 			const done = items.filter((i) => i.task.done);
 			const dated = done
@@ -165,7 +183,7 @@ export function computeList(sources: Source[], projects: ProjectInfo[], list: Li
 				own.filter((i) => !i.task.done),
 				(i) => (i.task.heading ? { key: `heading:${i.task.heading.line}`, label: i.task.heading.name } : { key: 'all', label: '' }),
 			);
-			return { groups, completed: own.filter((i) => i.task.done) };
+			return { groups: nestedGroups(groups), completed: own.filter((i) => i.task.done) };
 		}
 	}
 }

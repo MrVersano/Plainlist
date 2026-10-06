@@ -116,6 +116,27 @@ describe('lists', () => {
 		expect(view.groups[0]!.items.every((i) => i.path === 'Office.md' && i.project?.name === 'Office')).toBe(true);
 	});
 
+	it('Project: sub-tasks are indented under their parent', () => {
+		const view = computeList(sources, projects, { kind: 'project', path: 'Office.md' }, TODAY);
+		expect(view.groups[0]!.items.map((i) => [i.task.title, i.depth])).toEqual([
+			['Overdue', 0],
+			['Today in project', 0],
+			['Tomorrow', 0],
+			['Nested later this month', 1],
+			['Undated in project', 0],
+		]);
+	});
+
+	it('a sub-task whose parent is not shown sits at the left', () => {
+		const doc = parse('- [x] a\n\t- [ ] b\n\t\t- [ ] c\n');
+		const p = project('P.md', 0);
+		const view = computeList([{ path: 'P.md', doc, project: p }], [p], { kind: 'project', path: 'P.md' }, TODAY);
+		expect(view.groups[0]!.items.map((i) => [i.task.title, i.depth])).toEqual([
+			['b', 0],
+			['c', 1],
+		]);
+	});
+
 	it('completed to-dos stay out of the open lists', () => {
 		for (const kind of ['inbox', 'today', 'upcoming', 'nodate', 'someday'] as const) {
 			for (const g of computeList(sources, projects, { kind }, TODAY).groups) expect(g.items.every((i) => !i.task.done)).toBe(true);
