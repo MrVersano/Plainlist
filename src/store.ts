@@ -5,6 +5,7 @@ import { parse } from './model/parse';
 import {
 	addProjectLink,
 	addTask,
+	addTasks,
 	completeOpenTasks,
 	reopenTasks,
 	rollOverdueTasks,
@@ -137,6 +138,12 @@ export class Workspace {
 	addTask(projectPath: string | null, task: NewTask, heading: LineRef | null = null): Promise<RunResult> {
 		if (projectPath === null) return this.run(this.masterPath, (d) => addTask(d, task, 'inbox'));
 		return this.run(projectPath, (d) => addTask(d, task, heading ? { heading } : 'note'));
+	}
+
+	/** Adds several to-dos, in order, to the Inbox (project null) or the end of a project note's to-dos. */
+	addTasks(projectPath: string | null, tasks: NewTask[]): Promise<RunResult> {
+		if (projectPath === null) return this.run(this.masterPath, (d) => addTasks(d, tasks, 'inbox'));
+		return this.run(projectPath, (d) => addTasks(d, tasks, 'note'));
 	}
 
 	/**

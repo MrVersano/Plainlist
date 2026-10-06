@@ -1,4 +1,4 @@
-import { Keymap, Menu } from 'obsidian';
+import { Keymap, Menu, Notice } from 'obsidian';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { headerDate, metaDate, overdueLabel } from '../../dates/format';
 import {
@@ -15,6 +15,7 @@ import {
 	type ProjectInfo,
 	type Source,
 } from '../../model/lists';
+import { pastedTasks } from '../../model/paste';
 import { deleteTask, refOf, restoreLines, setTaskDone, type Removed } from '../../model/patch';
 import type { Task } from '../../model/types';
 import { locateLine, type TaskRef, type TrackBox } from '../../store';
@@ -456,6 +457,20 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		}
 	};
 
+	// Pasting a list (`- [ ] …`, `- …`, `[ ] …`) adds each item as a to-do in this list.
+	const onPaste = (e: ClipboardEvent): void => {
+		const target = e.target as HTMLElement | null;
+		if (target?.closest('input, textarea, [contenteditable="true"], .pl-popover')) return;
+		const tasks = pastedTasks(e.clipboardData?.getData('text/plain') ?? '');
+		if (!tasks) return;
+		e.preventDefault();
+		const date = list.kind === 'today' ? today : list.kind === 'someday' ? 'someday' : null;
+		const dated = tasks.map((t) => ({ ...t, date: t.date ?? date }));
+		void workspace.addTasks(list.kind === 'project' ? list.path : null, dated).then((res) => {
+			if (res.ok) new Notice(`Added ${dated.length} to-do${dated.length === 1 ? '' : 's'}`);
+		});
+	};
+
 	// Give the view keyboard focus back after a row collapses.
 	const collapse = (): void => {
 		setExpanded(null);
@@ -517,7 +532,7 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 	const hint = env.hint();
 
 	return (
-		<div ref={root} class={`pl-root${narrow ? ' is-narrow' : ''}`} tabIndex={-1} onKeyDown={onKeyDown}>
+		<div ref={root} class={`pl-root${narrow ? ' is-narrow' : ''}`} tabIndex={-1} onKeyDown={onKeyDown} onPaste={onPaste}>
 			{narrow ? (
 				<div class="pl-picker-bar">
 					<button type="button" class="pl-picker" aria-haspopup="menu" onClick={pickList}>

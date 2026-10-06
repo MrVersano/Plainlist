@@ -189,6 +189,13 @@ export function addTask(doc: Doc, task: NewTask, dest: Destination): LineEdit[] 
 	return [insertTaskLines(doc, lines, dest).edit];
 }
 
+/** Adds several to-dos at once, in order, as a single edit. */
+export function addTasks(doc: Doc, tasks: NewTask[], dest: Destination): LineEdit[] {
+	if (!tasks.length) return [];
+	const lines = tasks.flatMap((t) => [formatTaskLine(t.title, false, t.date, null), ...descriptionLines(t.description ?? '')]);
+	return [insertTaskLines(doc, lines, dest).edit];
+}
+
 export function setTaskDone(doc: Doc, ref: LineRef, done: boolean, today: string): LineEdit[] {
 	const t = findTask(doc, ref);
 	return replaceLine(t.line, t.text, setDone(t.text, done, today));

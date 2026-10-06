@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { longDate } from '../../dates/format';
 import { type Mention, mentionTargets, stripRanges, targetName } from '../../mentions';
+import { pastedTasks } from '../../model/paste';
 import { recognise } from '../../recognise';
 import type { LineRef } from '../../model/patch';
 import { type PickerProject, ProjectPicker } from './popovers';
@@ -108,6 +109,31 @@ export function Capture({
 		}
 	};
 
+	/**
+	 * Into an empty field, a pasted list item becomes its title; a list of several items saves
+	 * each as a to-do, with this palette's date and project.
+	 */
+	const paste = async (e: ClipboardEvent): Promise<void> => {
+		const tasks = pastedTasks(e.clipboardData?.getData('text/plain') ?? '');
+		if (!tasks || (input.current?.value ?? text).trim()) return;
+		e.preventDefault();
+		if (tasks.length === 1 && tasks[0]) {
+			suggest.replace(tasks[0].title, tasks[0].title.length);
+			return;
+		}
+		if (busy.current) return;
+		busy.current = true;
+		const target = { project: chosen, heading: chosenHeading && { line: chosenHeading.line, text: chosenHeading.text } };
+		for (const t of tasks) {
+			if (!(await onSave({ title: t.title, date: t.date ?? defaultDate, ...target }))) {
+				busy.current = false;
+				return;
+			}
+		}
+		busy.current = false;
+		onClose();
+	};
+
 	const marks: Mark[] = [];
 	if (match) marks.push({ start: match.index, end: match.end, cls: 'pl-capture-date' });
 	if (mention) marks.push({ start: mention.index, end: mention.end, cls: 'pl-capture-mention' });
@@ -134,6 +160,7 @@ export function Capture({
 						setText(e.currentTarget.value);
 						suggest.onInput();
 					}}
+					onPaste={(e) => void paste(e)}
 					onScroll={syncScroll}
 					onKeyUp={() => {
 						syncScroll();
