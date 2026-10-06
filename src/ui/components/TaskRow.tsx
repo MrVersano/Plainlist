@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { addDays, longDate } from '../../dates/format';
 import { placeLabel, type Item, type ProjectInfo } from '../../model/lists';
 import { mentionTargets, stripRanges, targetName } from '../../mentions';
@@ -7,7 +7,7 @@ import { recogniseEdit } from '../../recognise';
 import type { TrackBox } from '../../store';
 import { useDebounced, useEnv, useLongPress, useOutsideClick } from '../env';
 import { noteLinks } from '../obsidian';
-import { Checkbox, MarkdownField, Title } from './bits';
+import { AutoTextarea, Checkbox, MarkdownField, Title } from './bits';
 import { DatePopover, ProjectPicker } from './popovers';
 import { highlighted, type Mark, useSuggest } from './suggest';
 
@@ -45,6 +45,11 @@ export function TaskRow({
 	useEffect(() => {
 		if (reveal) el.current?.scrollIntoView({ block: 'center' });
 	}, [reveal]);
+	// A wrapped title makes the row taller: fade out from its real height.
+	useLayoutEffect(() => {
+		const row = el.current;
+		if (leaving && row) row.setCssProps({ '--pl-leave-height': `${row.offsetHeight + 1}px` });
+	}, [leaving]);
 
 	return (
 		<div
@@ -93,8 +98,7 @@ export function TaskEditor({
 	const [description, setDescription] = useState(task.description);
 	const [popover, setPopover] = useState<'date' | 'project' | null>(null);
 	const wrap = useRef<HTMLDivElement>(null);
-	const titleInput = useRef<HTMLInputElement>(null);
-	const backdrop = useRef<HTMLDivElement>(null);
+	const titleInput = useRef<HTMLTextAreaElement>(null);
 	/** The title as the editor opened: dates and @projects already in it are plain text. */
 	const original = useRef(task.title);
 	const latest = useRef({ title, description });
@@ -147,10 +151,6 @@ export function TaskEditor({
 	useEffect(() => () => finish.current(), []);
 	useEffect(() => titleInput.current?.focus(), []);
 	useOutsideClick(wrap, onCollapse, popover === null);
-	const syncScroll = (): void => {
-		if (backdrop.current && titleInput.current) backdrop.current.scrollLeft = titleInput.current.scrollLeft;
-	};
-	useEffect(syncScroll, [title]);
 
 	/** Removes a typed date or @project from the title, so a choice made in a popover wins. */
 	const drop = (r: { index: number; end: number } | null): void => {
@@ -194,30 +194,25 @@ export function TaskEditor({
 					}}
 				/>
 				<div class="pl-editor-title-field">
-					<div ref={backdrop} class="pl-editor-title-backdrop" aria-hidden="true">
+					<div class="pl-editor-title-backdrop" aria-hidden="true">
 						{highlighted(title, marks)}
 						{'\u200b'}
 					</div>
-					<input
-						ref={titleInput}
+					{/* A textarea so a long title wraps; it stays one line, as Enter closes the editor. */}
+					<AutoTextarea
+						inputRef={titleInput}
 						class="pl-editor-title"
-						type="text"
 						aria-label="Title"
 						placeholder="New to-do"
 						spellcheck={false}
-						role="combobox"
-						aria-expanded={suggest.open}
 						aria-autocomplete="list"
 						value={title}
 						onInput={(e) => {
-							onTitle(e.currentTarget.value);
+							// Pasted line breaks would split the to-do line in the note.
+							onTitle(e.currentTarget.value.replace(/[\r\n]+/g, ' '));
 							suggest.onInput();
 						}}
-						onScroll={syncScroll}
-						onKeyUp={() => {
-							syncScroll();
-							suggest.sync();
-						}}
+						onKeyUp={suggest.sync}
 						onClick={suggest.sync}
 						onBlur={suggest.onBlur}
 						onKeyDown={(e) => {

@@ -373,7 +373,8 @@
 
 .pl-row {
 	display: flex;
-	align-items: center;
+	/* Long titles wrap: the checkbox and meta stay level with the first line. */
+	align-items: flex-start;
 	gap: 14px;
 	min-height: var(--pl-row-height);
 	border-bottom: 1px solid var(--pl-hairline);
@@ -389,10 +390,12 @@
 	flex: 1;
 	min-width: 0;
 	min-height: var(--pl-row-height);
+	padding: 11px 0;
 	font-size: 15px;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+	line-height: 22px;
+	/* Obsidian's buttons don't wrap. */
+	white-space: normal;
+	overflow-wrap: anywhere;
 	color: var(--text-normal);
 }
 
@@ -410,7 +413,7 @@
 
 @keyframes pl-leave {
 	from {
-		max-height: calc(var(--pl-row-height) + 1px);
+		max-height: var(--pl-leave-height, calc(var(--pl-row-height) + 1px));
 	}
 	to {
 		max-height: 0;
@@ -427,6 +430,8 @@
 .pl-row-meta {
 	flex: 0 0 auto;
 	max-width: 40%;
+	padding: 11px 0;
+	line-height: 22px;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -471,6 +476,11 @@
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
+}
+
+/* Centred on the first line of a row whose title wraps. */
+.pl-root .pl-row button.pl-check {
+	margin-top: 13px;
 }
 
 /* Bigger tap target without changing the look. */
@@ -536,7 +546,7 @@
 
 .pl-row-line {
 	display: flex;
-	align-items: center;
+	align-items: flex-start;
 	gap: 14px;
 	min-height: var(--pl-row-height);
 }
@@ -546,6 +556,7 @@
 	position: relative;
 	flex: 1;
 	min-width: 0;
+	padding: 10px 0;
 }
 
 .pl-editor-title-backdrop,
@@ -553,14 +564,15 @@
 	font-family: inherit;
 	font-size: 15px;
 	font-weight: var(--font-medium, 500);
-	line-height: 32px;
+	line-height: 24px;
 	letter-spacing: normal;
-	white-space: pre;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
 }
 
 .pl-editor-title-backdrop {
 	position: absolute;
-	inset: 0;
+	inset: 10px 0;
 	overflow: hidden;
 	pointer-events: none;
 	color: var(--text-normal);
@@ -570,12 +582,14 @@
 	position: relative;
 	display: block;
 	width: 100%;
-	height: 32px;
+	min-height: 24px;
 	padding: 0;
 	border: none;
 	border-radius: 0;
 	background: transparent;
 	box-shadow: none;
+	resize: none;
+	overflow: hidden;
 	color: transparent;
 	caret-color: var(--text-normal);
 }
@@ -612,6 +626,7 @@
 	font-family: inherit;
 	font-size: 15px;
 	line-height: 1.55;
+	overflow-wrap: anywhere;
 	color: var(--pl-muted);
 }
 
@@ -630,6 +645,7 @@
 
 .pl-markdown-field {
 	cursor: text;
+	overflow-wrap: anywhere;
 	font-size: 15px;
 	line-height: 1.55;
 	color: var(--pl-muted);
