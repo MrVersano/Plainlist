@@ -65,8 +65,8 @@ describe('lists', () => {
 		]);
 	});
 
-	it('Today: overdue first, then task file and projects in sidebar order, plus to-dos completed today', () => {
-		expect(titles({ kind: 'today' })).toEqual([['', ['Overdue', 'Inbox today', 'Inbox done today', 'Today in project']]]);
+	it('Today: overdue first, then task file and projects in sidebar order', () => {
+		expect(titles({ kind: 'today' })).toEqual([['', ['Overdue', 'Inbox today', 'Today in project']]]);
 	});
 
 	it('Upcoming: grouped by day, then by month, nested to-dos included', () => {
@@ -117,7 +117,7 @@ describe('lists', () => {
 	});
 
 	it('completed to-dos stay out of the open lists', () => {
-		for (const kind of ['inbox', 'upcoming', 'nodate', 'someday'] as const) {
+		for (const kind of ['inbox', 'today', 'upcoming', 'nodate', 'someday'] as const) {
 			for (const g of computeList(sources, projects, { kind }, TODAY).groups) expect(g.items.every((i) => !i.task.done)).toBe(true);
 		}
 	});

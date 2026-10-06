@@ -23,6 +23,7 @@ export function TaskRow({
 	metaClass,
 	selected,
 	reveal = false,
+	leaving = false,
 	actions,
 }: {
 	item: Item;
@@ -31,6 +32,8 @@ export function TaskRow({
 	selected: boolean;
 	/** Found with "Search to-dos": scroll it to the middle of the view. */
 	reveal?: boolean;
+	/** Just completed and fading out of a list that hides completed to-dos. */
+	leaving?: boolean;
 	actions: RowActions;
 }) {
 	const { task } = item;
@@ -46,7 +49,7 @@ export function TaskRow({
 	return (
 		<div
 			ref={el}
-			class={`pl-row${task.done ? ' is-done' : ''}${selected ? ' is-selected' : ''}`}
+			class={`pl-row${task.done ? ' is-done' : ''}${selected ? ' is-selected' : ''}${leaving ? ' is-leaving' : ''}`}
 			onContextMenu={(evt) => {
 				evt.preventDefault();
 				actions.onMenu(item, { x: evt.clientX, y: evt.clientY });

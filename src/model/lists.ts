@@ -99,8 +99,7 @@ function flat(items: Item[]): ListView {
 }
 
 export function isInToday(t: Task, today: string): boolean {
-	if (!isDated(t) || (t.date ?? '') > today) return false;
-	return !t.done || t.doneDate === today;
+	return !t.done && isDated(t) && (t.date ?? '') <= today;
 }
 
 export function isOverdue(t: Task, today: string): boolean {
@@ -125,7 +124,7 @@ export function computeList(sources: Source[], projects: ProjectInfo[], list: Li
 		case 'inbox':
 			return flat(open.filter((i) => !i.project));
 		case 'today': {
-			const all = items.filter((i) => isInToday(i.task, today) && (!i.project?.done || i.task.done)).sort(byFile);
+			const all = open.filter((i) => isInToday(i.task, today));
 			return flat([...all.filter((i) => isOverdue(i.task, today)), ...all.filter((i) => !isOverdue(i.task, today))]);
 		}
 		case 'upcoming': {

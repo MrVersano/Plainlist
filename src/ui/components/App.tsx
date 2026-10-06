@@ -11,9 +11,12 @@ import {
 	sameList,
 	type Item,
 	type ListId,
+	type ListView,
 	type ProjectInfo,
+	type Source,
 } from '../../model/lists';
 import { deleteTask, refOf, restoreLines, setTaskDone, type Removed } from '../../model/patch';
+import type { Task } from '../../model/types';
 import { locateLine, type TaskRef, type TrackBox } from '../../store';
 import { useEnv, useToday, useWorkspace } from '../env';
 import { themeCheckboxRadius } from '../obsidian';
@@ -23,6 +26,10 @@ import { LISTS, listLabel, projectMenu, Sidebar, type ProjectActions } from './S
 import { TaskEditor, TaskRow, type RowActions } from './TaskRow';
 
 const NARROW = 600;
+/** How long a just-completed to-do stays in its list, crossed off, before it fades out. */
+const LINGER_MS = 3000;
+/** Matches the `pl-leave` animation in styles.css. */
+const LEAVE_MS = 250;
 
 /**
  * One key per expansion. The editor keeps its key while its to-do is edited (and its line
@@ -69,6 +76,34 @@ const isAt = (at: TaskRef | null, item: Item): boolean =>
 const isBoxed = (box: TrackBox | null, item: Item): boolean => isAt(box?.current ?? null, item);
 
 const itemKey = (item: Item): string => `${item.path}:${item.task.line}:${item.task.text}`;
+
+/** Identifies a to-do across its completion, which rewrites its line's text but not its number. */
+const lingerKey = (path: string, line: number): string => `${path}:${line}`;
+
+/**
+ * The list as if the lingering to-dos were still open, so each keeps its place; their rows
+ * still show the real, completed to-do.
+ */
+function withLingering(sources: Source[], lingering: Map<string, boolean>, compute: (s: Source[]) => ListView): ListView {
+	if (!lingering.size) return compute(sources);
+	const real = new Map<Task, Task>();
+	const shown = sources.map((s) => {
+		if (!s.doc.tasks.some((t) => t.done && lingering.has(lingerKey(s.path, t.line)))) return s;
+		const tasks = s.doc.tasks.map((t) => {
+			if (!t.done || !lingering.has(lingerKey(s.path, t.line))) return t;
+			const open = { ...t, done: false, doneDate: null };
+			real.set(open, t);
+			return open;
+		});
+		return { ...s, doc: { ...s.doc, tasks } };
+	});
+	const restore = (i: Item): Item => {
+		const task = real.get(i.task);
+		return task ? { ...i, task } : i;
+	};
+	const view = compute(shown);
+	return { groups: view.groups.map((g) => ({ ...g, items: g.items.map(restore) })), completed: view.completed };
+}
 
 function ProjectHeader({ project, actions }: { project: ProjectInfo; actions: ProjectActions }) {
 	const [name, setName] = useState(project.name);
@@ -144,6 +179,9 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 	const [selected, setSelected] = useState(-1);
 	const [showCompleted, setShowCompleted] = useState(false);
 	const [toast, setToast] = useState<Toast | null>(null);
+	/** Just-completed to-dos still shown in this list, by lingerKey; true once fading out. */
+	const [lingering, setLingering] = useState<Map<string, boolean>>(new Map());
+	const lingerTimers = useRef(new Map<string, number[]>());
 	/** A to-do found with "Search to-dos", until it is selected and scrolled to. */
 	const [revealed, setRevealed] = useState<TaskRef | null>(null);
 	const [narrow, setNarrow] = useState(false);
@@ -159,6 +197,7 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		setExpanded(null);
 		setSelected(-1);
 		setShowCompleted(false);
+		clearLingering();
 		onListChange(next);
 	};
 
@@ -208,7 +247,37 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		return () => window.clearTimeout(timer);
 	}, [toast]);
 
-	const view = useMemo(() => computeList(sources, projects, list, today), [sources, list, today]);
+	const stopLinger = (key: string): void => {
+		for (const t of lingerTimers.current.get(key) ?? []) window.clearTimeout(t);
+		lingerTimers.current.delete(key);
+	};
+	const unlinger = (key: string): void => {
+		stopLinger(key);
+		setLingering((m) => {
+			if (!m.has(key)) return m;
+			const next = new Map(m);
+			next.delete(key);
+			return next;
+		});
+	};
+	const linger = (key: string): void => {
+		stopLinger(key);
+		setLingering((m) => new Map(m).set(key, false));
+		lingerTimers.current.set(key, [
+			window.setTimeout(() => setLingering((m) => (m.has(key) ? new Map(m).set(key, true) : m)), LINGER_MS),
+			window.setTimeout(() => unlinger(key), LINGER_MS + LEAVE_MS),
+		]);
+	};
+	function clearLingering(): void {
+		for (const key of [...lingerTimers.current.keys()]) stopLinger(key);
+		setLingering(new Map());
+	}
+	useEffect(() => clearLingering, []);
+
+	const view = useMemo(
+		() => withLingering(sources, lingering, (s) => computeList(s, projects, list, today)),
+		[sources, lingering, list, today],
+	);
 	const counts = useMemo(() => computeCounts(sources, projects, today), [sources, today]);
 
 	// Keep the open row attached to its to-do when its note changes elsewhere.
@@ -264,6 +333,10 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 	}, [revealed]);
 
 	const toggle = (item: Item): void => {
+		// Completed shows done to-dos anyway; elsewhere a completed one lingers, crossed off.
+		const key = lingerKey(item.path, item.task.line);
+		if (item.task.done) unlinger(key);
+		else if (list.kind !== 'completed') linger(key);
 		const box = isBoxed(expanded, item) ? (expanded ?? undefined) : undefined;
 		void workspace.run(item.path, (d) => setTaskDone(d, box ? box.current.ref : refOf(item.task), !item.task.done, today), box);
 	};
@@ -417,6 +490,7 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 				metaClass={m.cls}
 				selected={rows[selected] === item}
 				reveal={isAt(revealed, item)}
+				leaving={item.task.done && lingering.get(lingerKey(item.path, item.task.line)) === true}
 				actions={rowActions}
 			/>
 		);

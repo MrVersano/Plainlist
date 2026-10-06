@@ -401,6 +401,25 @@
 	text-decoration: line-through;
 }
 
+/* A just-completed to-do fading out of a list that hides completed ones. */
+.pl-row.is-leaving {
+	overflow: hidden;
+	pointer-events: none;
+	animation: pl-leave 250ms ease-in forwards;
+}
+
+@keyframes pl-leave {
+	from {
+		max-height: calc(var(--pl-row-height) + 1px);
+	}
+	to {
+		max-height: 0;
+		min-height: 0;
+		opacity: 0;
+		border-bottom-color: transparent;
+	}
+}
+
 .pl-untitled {
 	color: var(--pl-faint);
 }
@@ -500,6 +519,12 @@
 .pl-root.is-narrow .pl-row.is-expanded {
 	margin: 8px -12px;
 	padding: 6px 12px 16px;
+}
+
+@keyframes pl-fade {
+	to {
+		opacity: 0;
+	}
 }
 
 @keyframes pl-expand {
@@ -1045,6 +1070,10 @@ body.pl-quick-entry-body {
 @media (prefers-reduced-motion: reduce) {
 	.pl-row.is-expanded {
 		animation: none;
+	}
+
+	.pl-row.is-leaving {
+		animation-name: pl-fade;
 	}
 }
 
