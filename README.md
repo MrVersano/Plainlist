@@ -110,7 +110,7 @@ With the Plainlist view focused:
 | `Esc` | Close the open to-do |
 | `N` | New to-do in the current list |
 | `Space` or `Mod+Enter` | Complete or reopen the selected to-do |
-| `Mod+Backspace` | Delete the selected to-do (with undo) |
+| `Delete` / `Backspace` | Delete the selected to-do (with undo) |
 
 Right-click (or long-press on mobile) a to-do to complete or delete it, or a project to open, rename or remove it.
 

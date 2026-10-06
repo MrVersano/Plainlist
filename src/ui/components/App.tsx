@@ -448,7 +448,7 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		} else if (e.key === ' ' && !mod) {
 			e.preventDefault();
 			if (current) toggle(current);
-		} else if ((e.key === 'Backspace' || e.key === 'Delete') && mod) {
+		} else if (e.key === 'Backspace' || e.key === 'Delete') {
 			e.preventDefault();
 			if (current) void remove(current);
 		} else if ((e.key === 'n' || e.key === 'N') && !mod && !e.altKey) {
