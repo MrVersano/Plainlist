@@ -224,6 +224,26 @@ export function computeList(
 	}
 }
 
+/**
+ * One day's to-dos, for a list embedded in a note. Unlike the Today list it keeps completed
+ * to-dos, crossed off. Today: the Today list plus what was completed today. An earlier day:
+ * what was completed that day (its open to-dos have rolled over to today). A later day: the
+ * to-dos dated that day. To-dos dated before the day come first, then Today's saved order applies.
+ */
+export function computeDay(sources: Source[], projects: ProjectInfo[], day: string, today: string, todayOrder: string[] = []): Item[] {
+	const rank = sourceOrder(projects);
+	const shown = allItems(sources)
+		.filter(({ task, project }) => {
+			if (task.done) return task.doneDate === day || (day > today && task.date === day);
+			if (project?.done) return false;
+			return day === today ? isInToday(task, today) : day > today && task.date === day;
+		})
+		.sort((a, b) => rank(a) - rank(b) || a.task.line - b.task.line);
+	// Not isOverdue: a to-do completed today keeps its place among them.
+	const early = (i: Item): boolean => isDated(i.task) && (i.task.date ?? '') < day;
+	return inTodayOrder([...shown.filter(early), ...shown.filter((i) => !early(i))], todayOrder);
+}
+
 export interface Counts {
 	inbox: number;
 	today: number;

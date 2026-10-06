@@ -116,9 +116,10 @@ export function useReorder<T>(opts: ReorderOptions<T>) {
 	const onPointerDown = (key: string, e: PointerEvent): void => {
 		const item = itemOf(key);
 		if (gesture.current || e.button !== 0 || item === undefined || !latest.current.canDrag(item)) return;
-		const target = e.target as HTMLElement | null;
-		if (target?.closest('input, textarea, [contenteditable="true"]')) return;
 		const row = e.currentTarget as HTMLElement;
+		// Only fields in the row count: a list embedded in a note sits inside the editor's contenteditable.
+		const field = (e.target as HTMLElement | null)?.closest('input, textarea, [contenteditable="true"]');
+		if (field && row.contains(field)) return;
 		const scope = row.closest<HTMLElement>(`[data-scope="${scopeId}"]`);
 		if (!scope) return;
 		const doc = row.ownerDocument;
@@ -196,7 +197,7 @@ export function useReorder<T>(opts: ReorderOptions<T>) {
 			armed: false,
 			dragging: false,
 			scope,
-			scroller: row.closest<HTMLElement>('.pl-main, .pl-sidebar'),
+			scroller: row.closest<HTMLElement>('.pl-main, .pl-sidebar, .cm-scroller, .markdown-preview-view'),
 			timer: null,
 			frame: null,
 			drop: null,

@@ -210,8 +210,9 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 	const fresh = useRef<TrackBox | null>(null);
 	const [narrow, setNarrow] = useState(false);
 	const [sidebar, setSidebar] = useState(() => env.sidebar.load());
-	/** Re-renders after the saved Today order changes. */
+	/** Re-renders after the saved Today order changes, here or in a list in a note. */
 	const [orderVersion, setOrderVersion] = useState(0);
+	useEffect(() => env.todayOrder.subscribe(() => setOrderVersion((v) => v + 1)), []);
 	const todayOrder = env.todayOrder.get();
 	const root = useRef<HTMLDivElement>(null);
 
@@ -501,7 +502,6 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		if (list.kind === 'today') {
 			const shown = view.groups.flatMap((g) => g.items.map(todayKey));
 			env.todayOrder.set(moveInOrder(shown, todayKey(item), todayKey(target), place));
-			setOrderVersion((v) => v + 1);
 			setFollow({ path: item.path, ref: refOf(item.task) });
 			return;
 		}

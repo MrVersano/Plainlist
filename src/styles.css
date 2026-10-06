@@ -1221,3 +1221,48 @@ body.pl-quick-entry-body {
 	font-size: 13px;
 	color: var(--text-muted);
 }
+
+/* ```plainlist blocks in notes ------------------------------------------- */
+
+.pl-embed-host {
+	height: auto;
+}
+
+.pl-root.pl-embed {
+	display: block;
+	height: auto;
+	background: none;
+}
+
+.pl-embed .pl-content {
+	max-width: none;
+	margin: 0;
+	padding: 4px 0;
+}
+
+.pl-embed .pl-header {
+	margin-bottom: 6px;
+}
+
+.pl-embed .pl-title {
+	font-size: 1.25em;
+}
+
+.pl-root.pl-embed button.pl-add-mobile {
+	margin-top: 6px;
+	min-height: 36px;
+	font-size: 14px;
+}
+
+.pl-embed .pl-toast {
+	left: auto;
+	right: 0;
+	bottom: 8px;
+	transform: none;
+}
+
+.pl-embed-message {
+	padding: 8px 0;
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+}

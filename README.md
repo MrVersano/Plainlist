@@ -13,6 +13,7 @@ Plainlist turns your notes into a clean, minimal task manager in Obsidian. A tas
 - **Search:** the **Search to-dos** command fuzzy-finds any to-do by its title or project, from anywhere in Obsidian. Pick one to jump to it in its list. Completed to-dos are left out unless you turn on **Search completed to-dos** in the settings.
 - **Go to a list:** the **Go to Inbox**, **Go to Today**, **Go to Upcoming**, **Go to No Date** and **Go to Someday** commands open Plainlist on that list. Bind them to hotkeys to switch lists from anywhere in Obsidian.
 - **Reorder:** drag a to-do to a new place (on touch screens, hold it, then drag), or press `Alt+↑` / `Alt+↓`. In Today, put to-dos in any order; Plainlist remembers it (in its own data, not your notes). Elsewhere the to-do's lines move in its note, so it moves among the to-dos of its own note, next to others with the same parent. Drag projects in the sidebar to reorder them.
+- **Lists in notes:** a `plainlist` code block with `Today` shows Today's list inside any note, completed to-dos included. In a daily note, `Note Title` shows the day the note is named after: what you completed that day, or what's planned for it. See [Lists in notes](#lists-in-notes).
 - **Resizable sidebar:** drag the sidebar's edge to make it wider or narrower. Drag it all the way to the left to hide it; drag (or click) the view's left edge to bring it back.
 - **Safe editing:** Plainlist only changes the lines it owns. Headings, notes, tables and callouts it does not understand stay exactly as they are.
 
@@ -54,6 +55,26 @@ Headings in a project note group its to-dos: the project view shows each heading
 Renaming a project renames its note. **Remove from Plainlist** (right-click a project) removes the link only: the note and its checkboxes stay as they are.
 
 To finish a project, tick the checkbox next to its title (or right-click it and choose **Complete project**). Any open to-dos in its note are marked done too, after you confirm, and you can undo for a few seconds. Completed projects move under a quiet "N completed" toggle at the bottom of the sidebar and appear in the Completed list; right-click one to reopen it.
+
+## Lists in notes
+
+Add a `plainlist` code block to any note to show a list there:
+
+````markdown
+```plainlist
+Today
+```
+````
+
+It shows Today's to-dos, and you can tick, edit, drag (the same order as the Today list) and right-click them as in the view. Completed to-dos stay in the list, crossed off, so it also shows what you've done today.
+
+To use the keyboard there, click a row: its empty space selects it, its title opens it for editing (press <kbd>Esc</kbd> to close it and keep it selected). The list then takes the view's keys (see [Keyboard](#keyboard)), and <kbd>Esc</kbd> puts the cursor back in the note, below the block.
+
+In a daily note, write `Note Title` instead of `Today` to show the day the note is named after. Plainlist reads the name with the date format from the core **Daily notes** settings (or as `YYYY-MM-DD`), so the block can go in your daily note template:
+
+- **Today's note** shows the same as `Today`.
+- **An earlier day's note** shows the to-dos completed that day. Open to-dos from that day aren't shown: they moved on to the next day at midnight.
+- **A later day's note** shows the to-dos dated that day. **New to-do** dates new ones for that day.
 
 ## File format
 

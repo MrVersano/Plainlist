@@ -9,6 +9,7 @@ import { refOf } from './model/patch';
 import { Workspace } from './store';
 import { ensureTasksFile } from './tasksFile';
 import { CaptureModal } from './ui/CaptureModal';
+import { BLOCK_LANGUAGE, DayEmbed, WorkspacePool } from './ui/DayEmbed';
 import { PlainlistView } from './ui/PlainlistView';
 import { TaskSearchModal } from './ui/TaskSearchModal';
 import { installViewSwitch } from './viewSwitch';
@@ -19,6 +20,8 @@ export default class PlainlistPlugin extends Plugin {
 	forceMarkdown = new WeakMap<WorkspaceLeaf, string>();
 	/** System-wide Quick Entry; desktop only, null until loaded or when unavailable. */
 	quickEntry: QuickEntryService | null = null;
+	/** Lists showing Today's order: the view and lists in notes. */
+	private todayOrderListeners = new Set<() => void>();
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -26,6 +29,11 @@ export default class PlainlistPlugin extends Plugin {
 		this.clock.start(this);
 		this.registerView(VIEW_TYPE, (leaf) => new PlainlistView(leaf, this));
 		installViewSwitch(this);
+		// ```plainlist blocks in notes: `Today`, or `Note Title` in a daily note.
+		const pool = new WorkspacePool(this.app);
+		this.registerMarkdownCodeBlockProcessor(BLOCK_LANGUAGE, (source, el, ctx) => {
+			ctx.addChild(new DayEmbed(this, pool, source, el, ctx));
+		});
 		// Keep a renamed project's to-dos in their place in Today.
 		this.registerEvent(
 			this.app.vault.on('rename', (file, oldPath) => {
@@ -229,6 +237,12 @@ export default class PlainlistPlugin extends Plugin {
 	setTodayOrder(keys: string[]): void {
 		this.settings.todayOrder = keys;
 		void this.saveSettings();
+		for (const fn of this.todayOrderListeners) fn();
+	}
+
+	onTodayOrderChange(fn: () => void): () => void {
+		this.todayOrderListeners.add(fn);
+		return () => this.todayOrderListeners.delete(fn);
 	}
 
 	async saveSettings(): Promise<void> {

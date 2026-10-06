@@ -1,7 +1,7 @@
 {
 	"id": "plainlist",
 	"name": "Plainlist",
-	"version": "1.0.14",
+	"version": "1.0.15",
 	"minAppVersion": "1.13.0",
 	"description": "Turn your notes into a minimal task manager, with an Inbox, Today and Upcoming lists, and projects that are ordinary notes.",
 	"author": "Kobi Versano",

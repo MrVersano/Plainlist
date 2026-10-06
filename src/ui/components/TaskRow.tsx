@@ -14,6 +14,8 @@ import { highlighted, type Mark, useSuggest } from './suggest';
 export interface RowActions {
 	onToggle: (item: Item) => void;
 	onExpand: (item: Item) => void;
+	/** A click on the row outside its checkbox, title and links. */
+	onSelect?: (item: Item) => void;
 }
 
 export function TaskRow({
@@ -58,6 +60,9 @@ export function TaskRow({
 			ref={el}
 			class={`pl-row${task.done ? ' is-done' : ''}${selected ? ' is-selected' : ''}${leaving ? ' is-leaving' : ''}${drag.cls}`}
 			{...drag.props}
+			onClick={(e) => {
+				if (actions.onSelect && !(e.target as HTMLElement).closest('button, a')) actions.onSelect(item);
+			}}
 		>
 			<Checkbox done={task.done} title={task.title} onToggle={() => actions.onToggle(item)} />
 			<button type="button" class="pl-row-title" onClick={() => actions.onExpand(item)}>

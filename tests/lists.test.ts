@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { allItems, computeCounts, computeList, homeList, moveInOrder, placeLabel, type ListId, type ProjectInfo, type Source } from '../src/model/lists';
+import { allItems, computeCounts, computeDay, computeList, homeList, moveInOrder, placeLabel, type ListId, type ProjectInfo, type Source } from '../src/model/lists';
 import { parse } from '../src/model/parse';
 
 const TODAY = '2026-10-04';
@@ -200,6 +200,49 @@ describe('completed projects', () => {
 		const lone = project('Lone.md', 15, { done: true, doneDate: '2026-10-02' });
 		const groups = computeList([...sources, { path: 'Lone.md', doc: parse(''), project: lone }], [...projects, lone], { kind: 'completed' }, TODAY).groups;
 		expect(groups.map((g) => g.label)).toEqual(['Today', 'Friday', 'Thursday', 'September', 'Earlier']);
+	});
+});
+
+describe('a day embedded in a note', () => {
+	const day = (date: string, extra: Source[] = [], order: string[] = []) =>
+		computeDay([...sources, ...extra], projects, date, TODAY, order).map((i) => i.task.title);
+
+	it("today: Today's to-dos plus those completed today, overdue first", () => {
+		expect(day(TODAY)).toEqual(['Overdue', 'Inbox today', 'Inbox done today', 'Today in project']);
+	});
+
+	it('today: a to-do completed today stays where it was, whatever its date', () => {
+		const done = parse(['- [x] Was overdue [date:: 2026-10-01] [done:: 2026-10-04]', '- [x] Done early [date:: 2026-10-09] [done:: 2026-10-04]'].join('\n'));
+		const extra = { path: 'Office.md', doc: done, project: projects[0]! };
+		expect(computeDay([extra], projects, TODAY, TODAY).map((i) => i.task.title)).toEqual(['Was overdue', 'Done early']);
+	});
+
+	it("today: follows Today's saved order", () => {
+		expect(day(TODAY, [], ['Office.md\u0000Today in project', 'Tasks.md\u0000Inbox done today'])).toEqual([
+			'Today in project',
+			'Inbox done today',
+			'Overdue',
+			'Inbox today',
+		]);
+	});
+
+	it('an earlier day: only what was completed that day', () => {
+		expect(day('2026-10-01')).toEqual(['Inbox done earlier']);
+		expect(day('2026-10-02')).toEqual([]);
+		expect(day('2026-09-02')).toEqual(['Done long ago']);
+	});
+
+	it('a later day: the to-dos dated that day, open or completed early', () => {
+		expect(day('2026-10-05')).toEqual(['Tomorrow']);
+		const early = parse('- [x] Done ahead [date:: 2026-10-05] [done:: 2026-10-04]');
+		expect(day('2026-10-05', [{ path: 'Early.md', doc: early, project: null }])).toEqual(['Done ahead', 'Tomorrow']);
+	});
+
+	it("leaves out a completed project's open to-dos, but not what was completed in it", () => {
+		const shed = parse(['- [x] Paint the shed [done:: 2026-10-04]', '- [ ] Left open [date:: 2026-10-04]'].join('\n'));
+		const shedProject = project('Shed.md', 13, { done: true, doneDate: '2026-10-04' });
+		const items = computeDay([{ path: 'Shed.md', doc: shed, project: shedProject }], [shedProject], TODAY, TODAY);
+		expect(items.map((i) => i.task.title)).toEqual(['Paint the shed']);
 	});
 });
 
