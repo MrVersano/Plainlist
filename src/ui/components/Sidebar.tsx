@@ -64,7 +64,7 @@ export function projectMenu(project: ProjectInfo, actions: ProjectActions, onRen
 	return menu;
 }
 
-function areaMenu(area: Area, actions: ProjectActions, onRename: () => void): Menu {
+export function areaMenu(area: Area, actions: ProjectActions, onRename: () => void): Menu {
 	const menu = new Menu();
 	menu.addItem((i) => i.setTitle('Rename').setIcon('pencil').onClick(onRename));
 	menu.addItem((i) =>

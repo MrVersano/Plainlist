@@ -40,7 +40,7 @@ import {
 	type Removed,
 } from '../../model/patch';
 import { setDate } from '../../model/taskLine';
-import type { Doc, Task, TaskDate } from '../../model/types';
+import type { Area, Doc, Task, TaskDate } from '../../model/types';
 import { locateLine, type RunResult, type TaskRef, type TrackBox } from '../../store';
 import { quoted, type UndoEntry } from '../../undo';
 import { useEnv, useToday, useWorkspace, type SelectionCommand, type ViewCommand } from '../env';
@@ -51,7 +51,7 @@ import { ProjectSuggestModal } from '../ProjectSuggestModal';
 import { useReorder } from '../reorder';
 import { Checkbox } from './bits';
 import { DatePopover, ProjectPicker } from './popovers';
-import { LISTS, listLabel, projectMenu, Sidebar, SidebarHandle, type ProjectActions } from './Sidebar';
+import { areaMenu, LISTS, listLabel, projectMenu, Sidebar, SidebarHandle, type ProjectActions } from './Sidebar';
 import { TaskEditor, TaskRow, type RowActions } from './TaskRow';
 
 const NARROW = 600;
@@ -990,8 +990,7 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 	const pickList = (evt: MouseEvent): void => {
 		const menu = new Menu();
 		for (const { id, label } of LISTS) menu.addItem((i) => i.setTitle(label).setChecked(sameList(id, list)).onClick(() => setList(id)));
-		if (projects.length) menu.addSeparator();
-		for (const p of [...projects.filter((x) => !x.done), ...projects.filter((x) => x.done)]) {
+		const addProjectItem = (p: ProjectInfo): void => {
 			const id: ListId = { kind: 'project', path: p.path };
 			menu.addItem((i) =>
 				i
@@ -999,9 +998,44 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 					.setChecked(sameList(id, list))
 					.onClick(() => setList(id)),
 			);
+		};
+		// Same order as the sidebar: projects outside any area, then each area's under its name, then completed ones.
+		const open = projects.filter((x) => !x.done);
+		const inArea = (a: Area | null) => open.filter((p) => (p.area?.line ?? null) === (a?.line ?? null));
+		if (inArea(null).length) {
+			menu.addSeparator();
+			inArea(null).forEach(addProjectItem);
+		}
+		for (const a of workspace.areas) {
+			menu.addSeparator();
+			// Tapping an area's name offers what right-clicking it does in the sidebar.
+			menu.addItem((i) =>
+				i
+					.setTitle(a.name)
+					.setIcon('folder')
+					.onClick((e) =>
+						areaMenu(a, projectActions, () => {
+							void env.prompt('Rename area', 'Area name', a.name, 'Rename').then((name) => {
+								const next = name?.trim();
+								if (next && next !== a.name) projectActions.renameArea(a, next);
+							});
+						}).showAtMouseEvent(e instanceof MouseEvent ? e : evt),
+					),
+			);
+			inArea(a).forEach(addProjectItem);
+		}
+		if (projects.some((x) => x.done)) {
+			menu.addSeparator();
+			projects.filter((x) => x.done).forEach(addProjectItem);
 		}
 		menu.addSeparator();
 		menu.addItem((i) => i.setTitle('New project').setIcon('plus').onClick(addProject));
+		menu.addItem((i) =>
+			i
+				.setTitle('New area')
+				.setIcon('folder-plus')
+				.onClick(() => void env.prompt('New area', 'Area name', '', 'Add').then((name) => name?.trim() && projectActions.addArea(name.trim()))),
+		);
 		menu.showAtMouseEvent(evt);
 	};
 

@@ -49,6 +49,7 @@ Areas group projects in the sidebar, for example **Work** and **Home**. Projects
 - To put a project in an area, drag it onto the area's name, or among the area's projects. Or right-click it and choose **Move to area…**, which also offers **No area**.
 - Click an area's name to fold it away, and again to unfold it. A folded area shows how many open to-dos its projects have. Plainlist remembers which areas are folded on each device.
 - Right-click an area to **Rename** it or **Remove area**. Removing an area, after you confirm, removes only its name: its projects stay in Plainlist and join the list above it.
+- On a phone, or in a narrow pane, tap the list's name at the top to see your areas with their projects under them. Choose **New area** there to add one, or tap an area's name to **Rename** it or **Remove area**. To move a project into an area, open the project and tap **•••**, then **Move to area…**.
 
 In the task file, an area is a heading under `# Projects`, with its projects' links below it; see the [file format](file-format.md#the-task-file). A heading there with to-dos under it, rather than links, is not an area.
 
