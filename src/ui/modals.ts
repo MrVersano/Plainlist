@@ -1,6 +1,6 @@
 import { App, Modal, Setting } from 'obsidian';
 
-export function confirmModal(app: App, title: string, message: string, cta: string, destructive = true): Promise<boolean> {
+export function confirmModal(app: App, title: string, message: string, cta: string, destructive = true, cancel = 'Cancel'): Promise<boolean> {
 	return new Promise((resolve) => {
 		let answered = false;
 		const modal = new (class extends Modal {
@@ -8,7 +8,7 @@ export function confirmModal(app: App, title: string, message: string, cta: stri
 				this.setTitle(title);
 				this.contentEl.createEl('p', { text: message });
 				new Setting(this.contentEl)
-					.addButton((b) => b.setButtonText('Cancel').onClick(() => this.close()))
+					.addButton((b) => b.setButtonText(cancel).onClick(() => this.close()))
 					.addButton((b) => {
 						b.setButtonText(cta).onClick(() => {
 							answered = true;

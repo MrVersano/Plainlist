@@ -1,5 +1,6 @@
 import { Notice, type ObsidianProtocolData, Platform, Plugin, TFile, WorkspaceLeaf } from 'obsidian';
 import type { CaptureOptions } from './capture';
+import { AutoProjects } from './autoProjects';
 import { Clock } from './clock';
 import { VIEW_ICON, VIEW_TYPE } from './constants';
 import type { QuickEntryService } from './desktop/QuickEntryService';
@@ -23,6 +24,7 @@ export default class PlainlistPlugin extends Plugin {
 	forceMarkdown = new WeakMap<WorkspaceLeaf, string>();
 	/** System-wide Quick Entry; desktop only, null until loaded or when unavailable. */
 	quickEntry: QuickEntryService | null = null;
+	autoProjects!: AutoProjects;
 	/** Lists showing Today's order: the view and lists in notes. */
 	private todayOrderListeners = new Set<() => void>();
 
@@ -30,6 +32,7 @@ export default class PlainlistPlugin extends Plugin {
 		await this.loadSettings();
 		this.addSettingTab(new PlainlistSettingTab(this.app, this));
 		this.clock.start(this);
+		this.autoProjects = this.addChild(new AutoProjects(this));
 		this.registerView(VIEW_TYPE, (leaf) => new PlainlistView(leaf, this));
 		installViewSwitch(this);
 		// ```plainlist blocks in notes: `Today`, or `Note Title` in a daily note.

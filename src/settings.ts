@@ -1,6 +1,7 @@
 import { App, moment, Platform, PluginSettingTab, Scope, Setting, SettingDefinitionItem } from 'obsidian';
 import { acceleratorFromEvent, DEFAULT_SHORTCUT, formatAccelerator } from './accelerator';
 import type PlainlistPlugin from './main';
+import { TagSuggest } from './ui/TagSuggest';
 
 export type WeekStart = 'locale' | 'sunday' | 'monday';
 
@@ -16,6 +17,8 @@ export interface PlainlistSettings {
 	searchCompleted: boolean;
 	/** Today, in the view and in notes, shows a group per project instead of one list. */
 	groupTodayByProject: boolean;
+	/** Notes with any of these tags (comma- or space-separated) become projects. Empty turns it off. */
+	projectTags: string;
 	/** The order the user dragged Today's to-dos into, as `todayKey`s. Not shown in the settings tab. */
 	todayOrder: string[];
 }
@@ -29,6 +32,7 @@ export const DEFAULT_SETTINGS: PlainlistSettings = {
 	quickEntryShortcut: DEFAULT_SHORTCUT,
 	searchCompleted: false,
 	groupTodayByProject: false,
+	projectTags: '',
 	todayOrder: [],
 };
 
@@ -54,6 +58,12 @@ export class PlainlistSettingTab extends PluginSettingTab {
 			this.update();
 		}
 		if (key === 'groupTodayByProject') this.plugin.todayChanged();
+	}
+
+	hide(): void {
+		super.hide();
+		// Applied here rather than per keystroke, so a half-typed tag never matches.
+		this.plugin.autoProjects.settingChanged();
 	}
 
 	getSettingDefinitions(): SettingDefinitionItem[] {
@@ -87,6 +97,11 @@ export class PlainlistSettingTab extends PluginSettingTab {
 				},
 			},
 			{
+				name: 'Project tags',
+				desc: 'Notes with any of these tags become projects, including notes that already have them. Separate tags with commas; changes apply when you close settings. Removing a tag never removes projects without asking.',
+				render: (setting) => this.renderProjectTags(setting),
+			},
+			{
 				name: 'Group Today by project',
 				desc: 'Show Today\'s to-dos under a heading for each project, with Inbox to-dos first. Lists in notes too.',
 				control: { type: 'toggle', key: 'groupTodayByProject', defaultValue: DEFAULT_SETTINGS.groupTodayByProject },
@@ -109,6 +124,24 @@ export class PlainlistSettingTab extends PluginSettingTab {
 				render: (setting) => this.renderShortcut(setting),
 			},
 		];
+	}
+
+	/** A text box that completes tags from the vault as you type. */
+	private renderProjectTags(setting: Setting): () => void {
+		const plugin = this.plugin;
+		const save = async (value: string): Promise<void> => {
+			plugin.settings.projectTags = value;
+			await plugin.saveSettings();
+		};
+		let suggest: TagSuggest | null = null;
+		setting.addText((text) => {
+			text
+				.setPlaceholder('For example #project, #client')
+				.setValue(plugin.settings.projectTags)
+				.onChange((value) => void save(value));
+			suggest = new TagSuggest(this.app, text.inputEl, (value) => void save(value));
+		});
+		return () => suggest?.close();
 	}
 
 	/** A button that records the next key combination, plus a reset button. */
