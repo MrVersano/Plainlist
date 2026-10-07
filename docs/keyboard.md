@@ -1,0 +1,35 @@
+# Keyboard shortcuts
+
+With the Plainlist view focused:
+
+| Key | Action |
+|---|---|
+| `↑` `↓` | Move the selection |
+| `Enter` | Open or close the selected to-do |
+| `Esc` | Close the open to-do |
+| `N` | New to-do in the current list |
+| `Space` or `Mod+Enter` | Complete or reopen the selected to-do |
+| `Delete` / `Backspace` | Delete the selected to-do (with undo) |
+| `Tab` / `Shift+Tab` | Make the selected to-do a sub-task of the one above / move it out of its parent |
+| `Alt+↑` / `Alt+↓` | Move the selected to-do up or down |
+
+The same keys work in a [list inside a note](lists-in-notes.md#using-the-keyboard) once you click one of its rows.
+
+`Mod` is `Cmd` on macOS and `Ctrl` elsewhere.
+
+## In quick capture
+
+| Key | Action |
+|---|---|
+| `Enter` | Save the to-do |
+| `Esc` | Cancel |
+| `Tab` | Choose a project |
+| `@` | Start typing a project name |
+
+## Global commands
+
+Plainlist does not set hotkeys for its commands. Bind the ones you use under **Settings → Hotkeys**; see [Getting started](getting-started.md#hotkeys-worth-setting) for suggestions.
+
+## Mouse and touch
+
+Right-click a to-do (or long-press it without moving, on mobile) to complete it, add a sub-task, indent or outdent it, or delete it. Right-click a project to open, rename, complete or remove it.
