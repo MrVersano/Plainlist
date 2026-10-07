@@ -20,6 +20,17 @@ export function findLinks(text: string): Link[] {
 	});
 }
 
+/** `text` as it reads with each link shown by its label, the way Obsidian renders it. */
+export function linkLabels(text: string): string {
+	let out = '';
+	let last = 0;
+	for (const l of findLinks(text)) {
+		out += text.slice(last, l.index) + l.label;
+		last = l.end;
+	}
+	return out + text.slice(last);
+}
+
 /**
  * The `[[query` being typed just before the caret, if any. Once a heading, block or
  * alias part starts (`#`, `^`, `|`) the note is chosen, so there is nothing to suggest.

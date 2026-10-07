@@ -1,5 +1,6 @@
 import { App, prepareFuzzySearch, renderMatches, SuggestModal, type SearchMatches } from 'obsidian';
 import { metaDate } from '../dates/format';
+import { linkLabels } from '../links';
 import { INBOX_GROUP, placeLabel, type Item } from '../model/lists';
 
 interface Result {
@@ -12,6 +13,9 @@ const LIMIT = 50;
 
 /** Where a to-do lives, as the results show it. */
 const place = (item: Item): string => placeLabel(item) || INBOX_GROUP;
+
+/** A to-do's title as the results show it: links by their labels, without brackets. */
+const shownTitle = (item: Item): string => linkLabels(item.task.title);
 
 /** "Search to-dos": fuzzy-finds a to-do by its title or where it lives. */
 export class TaskSearchModal extends SuggestModal<Result> {
@@ -47,7 +51,7 @@ export class TaskSearchModal extends SuggestModal<Result> {
 		const search = prepareFuzzySearch(q);
 		const out: Result[] = [];
 		for (const item of this.items) {
-			const found = search(`${item.task.title}\n${place(item)}`);
+			const found = search(`${shownTitle(item)}\n${place(item)}`);
 			if (found) out.push({ item, matches: found.matches, score: found.score });
 		}
 		return out.sort((a, b) => b.score - a.score || byDone(a, b));
@@ -58,8 +62,9 @@ export class TaskSearchModal extends SuggestModal<Result> {
 		el.addClass('pl-search-result');
 		if (task.done) el.addClass('is-done');
 		const title = el.createDiv({ cls: 'pl-search-title' });
-		const titleEnd = task.title.length;
-		if (task.title) renderMatches(title, task.title, matches.filter(([, end]) => end <= titleEnd));
+		const shown = shownTitle(item);
+		const titleEnd = shown.length;
+		if (task.title) renderMatches(title, shown, matches.filter(([, end]) => end <= titleEnd));
 		else title.createSpan({ text: 'New to-do', cls: 'pl-untitled' });
 
 		const meta = el.createDiv({ cls: 'pl-search-meta' });

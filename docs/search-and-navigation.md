@@ -6,7 +6,7 @@ The **Plainlist: Search to-dos** command fuzzy-finds any to-do by its title or p
 
 ![Search to-dos](../assets/search.png)
 
-Each result shows where the to-do lives (its project and heading, or Inbox) and its date. Pick one to jump to it: Plainlist opens a list that has it, scrolls to it and highlights it.
+Titles read as they do in the list, with `[[links]]` shown by their name or alias, without brackets. Each result shows where the to-do lives (its project and heading, or Inbox) and its date. Pick one to jump to it: Plainlist opens a list that has it, scrolls to it and highlights it.
 
 Completed to-dos are left out unless you turn on **Search completed to-dos** in the [settings](settings.md).
 

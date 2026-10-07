@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findLinks, linkQuery } from '../src/links';
+import { findLinks, linkLabels, linkQuery } from '../src/links';
 
 describe('findLinks', () => {
 	it('finds links with and without aliases', () => {
@@ -11,6 +11,13 @@ describe('findLinks', () => {
 
 	it('ignores unclosed and empty brackets', () => {
 		expect(findLinks('[[Plan and [[]]')).toEqual([]);
+	});
+});
+
+describe('linkLabels', () => {
+	it('shows each link by its label', () => {
+		expect(linkLabels('See [[Plan]] and [[Notes/Call#Agenda|the call]]!')).toBe('See Plan and the call!');
+		expect(linkLabels('No links here')).toBe('No links here');
 	});
 });
 
