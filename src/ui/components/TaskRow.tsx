@@ -16,6 +16,8 @@ export interface RowActions {
 	onExpand: (item: Item) => void;
 	/** A click on the row outside its checkbox, title and links. */
 	onSelect?: (item: Item) => void;
+	/** Cmd/Ctrl-click (`toggle`) or Shift-click (`range`) anywhere on the row, to select several to-dos. */
+	onMark?: (item: Item, how: 'toggle' | 'range') => void;
 }
 
 export function TaskRow({
@@ -23,6 +25,8 @@ export function TaskRow({
 	meta,
 	metaClass,
 	selected,
+	marked = false,
+	tapSelects = false,
 	reveal = false,
 	leaving = false,
 	drag,
@@ -32,6 +36,10 @@ export function TaskRow({
 	meta: string;
 	metaClass?: string;
 	selected: boolean;
+	/** One of the to-dos selected for a bulk action. */
+	marked?: boolean;
+	/** A selection is under way on a touch screen: a tap outside the checkbox selects or deselects. */
+	tapSelects?: boolean;
 	/** Found with "Search to-dos": scroll it to the middle of the view. */
 	reveal?: boolean;
 	/** Just completed and fading out of a list that hides completed to-dos. */
@@ -58,8 +66,23 @@ export function TaskRow({
 	return (
 		<div
 			ref={el}
-			class={`pl-row${task.done ? ' is-done' : ''}${selected ? ' is-selected' : ''}${leaving ? ' is-leaving' : ''}${drag.cls}`}
+			class={`pl-row${task.done ? ' is-done' : ''}${selected ? ' is-selected' : ''}${marked ? ' is-marked' : ''}${leaving ? ' is-leaving' : ''}${drag.cls}`}
+			aria-selected={marked}
 			{...drag.props}
+			onMouseDown={(e) => {
+				// Shift-click selects to-dos, not text.
+				if (e.shiftKey && actions.onMark) e.preventDefault();
+			}}
+			onClickCapture={(e) => {
+				if (!actions.onMark) return;
+				const onCheckbox = !!(e.target as HTMLElement).closest('.pl-check');
+				const how = e.shiftKey ? 'range' : e.metaKey || e.ctrlKey || (tapSelects && !onCheckbox) ? 'toggle' : null;
+				if (!how) return;
+				// Before the title, its links and the checkbox see it.
+				e.preventDefault();
+				e.stopPropagation();
+				actions.onMark(item, how);
+			}}
 			onClick={(e) => {
 				if (actions.onSelect && !(e.target as HTMLElement).closest('button, a')) actions.onSelect(item);
 			}}

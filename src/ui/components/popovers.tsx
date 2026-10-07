@@ -257,7 +257,8 @@ export function ProjectPicker({
 						aria-selected={i === index}
 						key={c.key}
 						class={`pl-project-option${c.heading ? ' is-heading' : ''}${i === index ? ' is-active' : ''}${isCurrent(c) ? ' is-current' : ''}`}
-						onMouseEnter={() => setActive(i)}
+						// Not mouseenter: a list re-laid out under a resting pointer would move the choice.
+						onMouseMove={() => i !== index && setActive(i)}
 						onClick={() => pick(c)}
 					>
 						{c.label}

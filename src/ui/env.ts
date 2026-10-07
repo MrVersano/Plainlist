@@ -28,7 +28,12 @@ export interface Env {
 	todayOrder: { get: () => string[]; set: (keys: string[]) => void; subscribe: (fn: () => void) => () => void };
 	/** Calls `fn` for each "go to this to-do" request, starting with one made before it subscribed. */
 	onReveal: (fn: (target: TaskRef) => void) => () => void;
+	/** Calls `fn` for each "Move selected to-dos" or "Schedule selected to-dos" command. */
+	onSelectionCommand: (fn: (command: SelectionCommand) => void) => () => void;
 }
+
+/** A command that acts on the selected to-dos, or on the highlighted one when none is selected. */
+export type SelectionCommand = 'move' | 'schedule';
 
 export const EnvContext = createContext<Env | null>(null);
 

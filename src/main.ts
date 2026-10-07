@@ -12,6 +12,7 @@ import { ensureTasksFile } from './tasksFile';
 import { CaptureModal } from './ui/CaptureModal';
 import { BLOCK_LANGUAGE, DayEmbed, WorkspacePool } from './ui/DayEmbed';
 import { PlainlistView } from './ui/PlainlistView';
+import type { SelectionCommand } from './ui/env';
 import { TaskSearchModal } from './ui/TaskSearchModal';
 import { installViewSwitch } from './viewSwitch';
 import { withParams } from './xcallback';
@@ -74,6 +75,24 @@ export default class PlainlistPlugin extends Plugin {
 		];
 		for (const { id, name, list } of goTo) {
 			this.addCommand({ id, name, callback: () => void this.showList(list) });
+		}
+
+		// No default hotkeys either; they act on the to-dos selected in the active Plainlist tab.
+		const onSelection: { id: string; name: string; command: SelectionCommand }[] = [
+			{ id: 'move-selected', name: 'Move selected to-dos to a project', command: 'move' },
+			{ id: 'schedule-selected', name: 'Schedule selected to-dos', command: 'schedule' },
+		];
+		for (const { id, name, command } of onSelection) {
+			this.addCommand({
+				id,
+				name,
+				checkCallback: (checking) => {
+					const view = this.app.workspace.getActiveViewOfType(PlainlistView);
+					if (!view) return false;
+					if (!checking) view.selectionCommand(command);
+					return true;
+				},
+			});
 		}
 
 		this.addCommand({

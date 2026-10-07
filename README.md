@@ -12,6 +12,7 @@ Plainlist turns your notes into a clean, minimal task manager in Obsidian. A tas
   - **[Repeating](docs/todos.md#repeating-to-dos):** "every 2 weeks", "every last sunday", or "every month when done" to count from the day you complete it.
   - **[Sub-tasks](docs/todos.md#sub-tasks):** indent a checkbox under another, or press `Tab` / `Shift+Tab`.
   - **[Reorder](docs/todos.md#reordering):** drag to-dos, or press `Alt+↑` / `Alt+↓`. Today keeps any order you like.
+  - **[Several at once](docs/todos.md#working-on-several-to-dos-at-once):** `Mod`-click or `Shift`-click to select to-dos, then complete, schedule, move or delete them together.
   - **[Paste a list](docs/todos.md#pasting-a-list):** paste `- [ ] Task` lines and each one becomes a to-do.
 - **[Quick capture](docs/quick-capture.md):** a small palette that understands dates as you type ("fri", "next tue", "in 3 days", "someday"), repeat rules ("every mon") and `@project`.
 - **[System-wide quick entry](docs/quick-capture.md#system-wide-quick-entry):** on desktop, a global shortcut opens the palette from any app.

@@ -1,6 +1,7 @@
 // Pure functions: Doc + action -> minimal line edits. They never touch lines the
 // action does not own, and throw PatchConflict rather than guess at a target.
 
+import { mapLine } from './apply';
 import { headingOf, isBlank, projectLinkTarget } from './parse';
 import { firstOccurrence, nextOccurrence, parseRepeat } from '../dates/repeat';
 import { formatTaskLine, parseTaskLine, setDate, setDone, setRepeat, setTitle } from './taskLine';
@@ -386,6 +387,144 @@ export function restoreLines(doc: Doc, removed: Removed): LineEdit[] {
 	for (let at = 0; at <= doc.lines.length; at++) if (fits(at)) spots.push(at);
 	if (spots.length === 1 && spots[0] !== undefined) return [{ at: spots[0], delete: 0, insert: removed.lines }];
 	throw new PatchConflict('Could not find where the deleted lines were');
+}
+
+// --- Several to-dos at once --------------------------------------------------
+//
+// One note's share of a bulk action, as a single set of edits against the same Doc, so no
+// edit has to find a line that an earlier one moved. A to-do nested under another one in
+// the selection goes along with it rather than being handled twice.
+
+/** The to-dos `refs` name, in file order and without duplicates. */
+function findTasks(doc: Doc, refs: LineRef[]): Task[] {
+	const found = new Map<number, Task>();
+	for (const ref of refs) {
+		const t = findTask(doc, ref);
+		found.set(t.line, t);
+	}
+	return [...found.values()].sort((a, b) => a.line - b.line);
+}
+
+const blockEnd = (t: Task): number => Math.max(t.end, t.subtreeEnd);
+
+/** Drops to-dos that sit inside the block of an earlier one in the list. */
+function outermost(tasks: Task[]): Task[] {
+	const out: Task[] = [];
+	for (const t of tasks) {
+		const last = out[out.length - 1];
+		if (!last || t.line >= blockEnd(last)) out.push(t);
+	}
+	return out;
+}
+
+/**
+ * Deletes several to-dos with their descriptions and sub-tasks. Each `Removed` is one run of
+ * deleted lines, with `at` counted in the note after the delete, so `restoreAll` can put them
+ * all back in one go.
+ */
+export function deleteTasks(doc: Doc, refs: LineRef[]): { edits: LineEdit[]; removed: Removed[] } {
+	const ranges: { start: number; end: number }[] = [];
+	for (const t of outermost(findTasks(doc, refs))) {
+		const last = ranges[ranges.length - 1];
+		if (last && t.line <= last.end) last.end = Math.max(last.end, blockEnd(t));
+		else ranges.push({ start: t.line, end: blockEnd(t) });
+	}
+	let gone = 0;
+	const removed = ranges.map(({ start, end }) => {
+		const r: Removed = {
+			at: start - gone,
+			lines: doc.lines.slice(start, end),
+			before: doc.lines[start - 1] ?? null,
+			after: doc.lines[end] ?? null,
+		};
+		gone += end - start;
+		return r;
+	});
+	return { edits: ranges.map(({ start, end }) => ({ at: start, delete: end - start, insert: [] })), removed };
+}
+
+/** Puts back everything `deleteTasks` removed. */
+export function restoreAll(doc: Doc, removed: Removed[]): LineEdit[] {
+	return removed.flatMap((r) => restoreLines(doc, r));
+}
+
+/** What `completeTasks` did, for undo and to know where each completed to-do ends up. */
+export interface BulkDone {
+	edits: LineEdit[];
+	/** Non-repeating to-dos it ticked (or reopened). */
+	changed: Reopen[];
+	/** Repeating to-dos it completed, each with its next one added above it. */
+	repeated: Repeated[];
+	/** Where each to-do's title line is after the edits. */
+	lines: number[];
+}
+
+/**
+ * Completes (or, with `done` false, reopens) several to-dos. A repeating one gets its next
+ * one, as when ticked on its own, and takes its open sub-tasks with it.
+ */
+export function completeTasks(doc: Doc, refs: LineRef[], done: boolean, today: string, weekStart: 0 | 1): BulkDone {
+	const edits: LineEdit[] = [];
+	const changed: { line: number; text: string; before: string }[] = [];
+	const repeated: { line: number; r: Repeated }[] = [];
+	let taken = -1;
+	for (const t of findTasks(doc, refs)) {
+		if (t.line < taken || t.done === done) continue;
+		const r = done && t.repeat ? completeRepeating(doc, refOf(t), today, weekStart) : null;
+		if (r) {
+			edits.push(...r.edits);
+			repeated.push({ line: t.line, r: r.repeated });
+			taken = blockEnd(t);
+			continue;
+		}
+		const text = setDone(t.text, done, today);
+		edits.push(...replaceLine(t.line, t.text, text));
+		changed.push({ line: t.line, text, before: t.text });
+	}
+	const at = (line: number): number => mapLine(doc, edits, line) ?? line;
+	return {
+		edits,
+		changed: changed.map((c) => ({ ref: { line: at(c.line), text: c.text }, before: c.before })),
+		// The next one goes just above the completed one, which is replaced line for line.
+		repeated: repeated.map(({ line, r }) => ({ ...r, next: { line: at(line) - (r.lines.length - r.before.length), text: r.next.text } })),
+		lines: [...changed.map((c) => at(c.line)), ...repeated.map(({ line }) => at(line))].sort((a, b) => a - b),
+	};
+}
+
+/** Undoes `completeTasks`, skipping any to-do that changed since. */
+export function undoComplete(doc: Doc, done: BulkDone): LineEdit[] {
+	const edits = reopenTasks(doc, done.changed);
+	for (const r of done.repeated) {
+		try {
+			edits.push(...undoRepeat(doc, r));
+		} catch {
+			// Changed since; leave it.
+		}
+	}
+	return edits;
+}
+
+/** Gives several to-dos the same date (or none). */
+export function setTasksDate(doc: Doc, refs: LineRef[], date: TaskDate | null): LineEdit[] {
+	return findTasks(doc, refs).flatMap((t) => replaceLine(t.line, t.text, setDate(t.text, date)));
+}
+
+/**
+ * Takes several to-dos out of a note for a move, as `extractTask` does: their blocks, one
+ * after another in file order and re-indented to the left margin, and the edits that remove them.
+ */
+export function extractTasks(doc: Doc, refs: LineRef[]): { lines: string[]; edits: LineEdit[] } {
+	const parts = outermost(findTasks(doc, refs)).map((t) => extractTask(doc, refOf(t)));
+	return { lines: parts.flatMap((p) => p.lines), edits: parts.flatMap((p) => p.edits) };
+}
+
+/** Moves several to-dos under one heading in the same note (or above all headings), as `moveTaskToHeading` does. */
+export function moveTasksToHeading(doc: Doc, refs: LineRef[], heading: LineRef | null): LineEdit[] {
+	const h = heading && findHeading(doc, heading);
+	const moving = outermost(findTasks(doc, refs)).filter((t) => (t.heading?.line ?? null) !== (h?.line ?? null));
+	if (!moving.length) return [];
+	const out = extractTasks(doc, moving.map(refOf));
+	return [...out.edits, insertTaskLines(doc, out.lines, heading ? { heading } : 'note').edit];
 }
 
 // --- Project links in the task file ---------------------------------------

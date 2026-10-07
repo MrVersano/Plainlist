@@ -21,24 +21,33 @@ import { pastedTasks } from '../../model/paste';
 import {
 	addSubtask,
 	canReorder,
+	completeTasks,
 	deleteTask,
+	deleteTasks,
 	indentTask,
 	moveTaskNextTo,
 	outdentTask,
 	refOf,
+	restoreAll,
 	restoreLines,
+	setTaskDate,
 	setTaskDone,
+	setTasksDate,
+	undoComplete,
+	type BulkDone,
 	type Place,
 	type Relocation,
 	type Removed,
 } from '../../model/patch';
-import type { Doc, Task } from '../../model/types';
+import { setDate } from '../../model/taskLine';
+import type { Doc, Task, TaskDate } from '../../model/types';
 import { locateLine, type TaskRef, type TrackBox } from '../../store';
-import { useEnv, useToday, useWorkspace } from '../env';
+import { useEnv, useToday, useWorkspace, type SelectionCommand } from '../env';
 import { themeCheckboxRadius } from '../obsidian';
 import { ProjectSuggestModal } from '../ProjectSuggestModal';
 import { useReorder } from '../reorder';
 import { Checkbox } from './bits';
+import { DatePopover, ProjectPicker } from './popovers';
 import { LISTS, listLabel, projectMenu, Sidebar, SidebarHandle, type ProjectActions } from './Sidebar';
 import { TaskEditor, TaskRow, type RowActions } from './TaskRow';
 
@@ -186,7 +195,16 @@ function ProjectHeader({ project, actions }: { project: ProjectInfo; actions: Pr
 
 interface Toast {
 	message: string;
-	undo: () => void;
+	undo?: () => void;
+}
+
+const todos = (n: number): string => `${n} to-do${n === 1 ? '' : 's'}`;
+
+/** Items grouped by the note they are in, in the order they come. */
+function byNote(items: Item[]): Map<string, Item[]> {
+	const out = new Map<string, Item[]>();
+	for (const i of items) out.set(i.path, [...(out.get(i.path) ?? []), i]);
+	return out;
 }
 
 export function App({ initialList, onListChange }: { initialList: ListId; onListChange: (list: ListId) => void }) {
@@ -199,6 +217,11 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 	const [selected, setSelected] = useState(-1);
 	const [showCompleted, setShowCompleted] = useState(false);
 	const [toast, setToast] = useState<Toast | null>(null);
+	/** To-dos selected for a bulk action, by itemKey. A Shift range starts at `anchor`. */
+	const [marks, setMarks] = useState<ReadonlySet<string>>(new Set());
+	const anchor = useRef<string | null>(null);
+	/** The bulk bar's open picker. */
+	const [picker, setPicker] = useState<SelectionCommand | null>(null);
 	/** Just-completed to-dos still shown in this list, by lingerKey; true once fading out. */
 	const [lingering, setLingering] = useState<Map<string, boolean>>(new Map());
 	const lingerTimers = useRef(new Map<string, number[]>());
@@ -226,6 +249,7 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		setExpanded(null);
 		setSelected(-1);
 		setShowCompleted(false);
+		clearMarks();
 		clearLingering();
 		onListChange(next);
 	};
@@ -327,6 +351,14 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 	useEffect(() => {
 		if (expanded && !expandedVisible) setExpanded(null);
 	}, [expanded, expandedVisible]);
+
+	const marked = rows.filter((i) => marks.has(itemKey(i)));
+	// Selected to-dos that changed elsewhere drop out; once none are left, so does the selection.
+	useEffect(() => {
+		if (marks.size && !marked.length && !picker) clearMarks();
+	}, [marks, marked.length]);
+	/** On touch screens, where there is no Cmd-click, a tap adds to (or takes from) a selection once one is started. */
+	const tapSelects = marked.length > 0 && env.hint() === null;
 
 	// "Search to-dos": stay on this list if it shows the to-do, otherwise go to the list that
 	// always does, then select it.
@@ -455,15 +487,199 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		}
 	};
 
+	function clearMarks(): void {
+		setMarks(new Set());
+		anchor.current = null;
+		setPicker(null);
+	}
+
+	/** Selects the rows from the anchor (or `from`) to `to`, keeping the anchor. */
+	const markRange = (from: number, to: number): void => {
+		const at = rows.findIndex((i) => itemKey(i) === anchor.current);
+		const start = at === -1 ? from : at;
+		if (at === -1) anchor.current = rows[start] ? itemKey(rows[start]) : null;
+		setMarks(new Set(rows.slice(Math.min(start, to), Math.max(start, to) + 1).map(itemKey)));
+	};
+
+	/** Cmd/Ctrl-click (or a tap while selecting) adds or removes one to-do; Shift-click selects a range. */
+	const mark = (item: Item, how: 'toggle' | 'range'): void => {
+		const at = rows.indexOf(item);
+		if (expanded) setExpanded(null);
+		if (how === 'range') {
+			markRange(marks.size ? at : selected >= 0 ? selected : at, at);
+		} else {
+			const key = itemKey(item);
+			const next = new Set(marks);
+			if (next.has(key)) next.delete(key);
+			else next.add(key);
+			setMarks(next);
+			anchor.current = key;
+		}
+		setSelected(at);
+	};
+
+	/** Selects one to-do (when none are) and opens the bulk bar's picker. */
+	const openPicker = (command: SelectionCommand, item?: Item): void => {
+		if (!item || !marks.has(itemKey(item))) {
+			const one = item ?? marked[0] ?? (expanded ? rows.find((i) => isBoxed(expanded, i)) : rows[selected]);
+			if (!one) {
+				new Notice('Select a to-do first.');
+				return;
+			}
+			if (item || !marked.length) {
+				setMarks(new Set([itemKey(one)]));
+				anchor.current = itemKey(one);
+			}
+		}
+		setExpanded(null);
+		setPicker(command);
+	};
+	const selectionCommand = useRef<(command: SelectionCommand) => void>(() => {});
+	selectionCommand.current = (command) => openPicker(command);
+	useLayoutEffect(() => env.onSelectionCommand((command) => selectionCommand.current(command)), []);
+
+	const refocus = (): void => {
+		window.requestAnimationFrame(() => root.current?.focus({ preventScroll: true }));
+	};
+
+	/** Completes the to-dos, or reopens them when they all are done already. */
+	const toggleAll = async (items: Item[]): Promise<void> => {
+		if (items.length === 1 && items[0]) return toggle(items[0]);
+		const done = !items.every((i) => i.task.done);
+		clearMarks();
+		setExpanded(null);
+		const ran: { path: string; done: BulkDone }[] = [];
+		const results = await Promise.all(
+			[...byNote(items)].map(([path, group]) => {
+				const refs = group.map((i) => refOf(i.task));
+				const doc = workspace.doc(path);
+				// Completed to-dos linger where they land, as one ticked on its own does.
+				if (doc && done && list.kind !== 'completed') {
+					try {
+						for (const line of completeTasks(doc, refs, true, today, env.weekStart()).lines) linger(lingerKey(path, line));
+					} catch {
+						// The run below reports it.
+					}
+				}
+				if (!done) for (const i of group) unlinger(lingerKey(path, i.task.line));
+				return workspace.run(path, (d) => {
+					const r = completeTasks(d, refs, done, today, env.weekStart());
+					ran.push({ path, done: r });
+					return r.edits;
+				});
+			}),
+		);
+		if (!results.some((r) => r.ok)) return;
+		const count = ran.reduce((n, r) => n + r.done.changed.length + r.done.repeated.length, 0);
+		setToast({
+			message: `${done ? 'Completed' : 'Reopened'} ${todos(count)}`,
+			undo: () => {
+				for (const r of ran) void workspace.run(r.path, (d) => undoComplete(d, r.done));
+			},
+		});
+	};
+
+	const removeAll = async (items: Item[]): Promise<void> => {
+		if (items.length === 1 && items[0]) return remove(items[0]);
+		clearMarks();
+		setExpanded(null);
+		const ran: { path: string; removed: Removed[] }[] = [];
+		const results = await Promise.all(
+			[...byNote(items)].map(([path, group]) =>
+				workspace.run(path, (d) => {
+					const r = deleteTasks(
+						d,
+						group.map((i) => refOf(i.task)),
+					);
+					ran.push({ path, removed: r.removed });
+					return r.edits;
+				}),
+			),
+		);
+		if (!results.some((r) => r.ok)) return;
+		setToast({
+			message: `Deleted ${todos(items.length)}`,
+			undo: () => {
+				for (const r of ran) void workspace.run(r.path, (d) => restoreAll(d, r.removed));
+			},
+		});
+	};
+
+	const scheduleAll = async (items: Item[], date: TaskDate | null): Promise<void> => {
+		clearMarks();
+		refocus();
+		// For undo: each to-do's line as it will be, and the date it had.
+		const before = items.map((i) => ({ path: i.path, ref: { line: i.task.line, text: setDate(i.task.text, date) }, date: i.task.date }));
+		const results = await Promise.all(
+			[...byNote(items)].map(([path, group]) =>
+				workspace.run(path, (d) =>
+					setTasksDate(
+						d,
+						group.map((i) => refOf(i.task)),
+						date,
+					),
+				),
+			),
+		);
+		if (!results.some((r) => r.ok)) return;
+		const n = todos(items.length);
+		setToast({
+			message: date === null ? `Removed the date from ${n}` : `${n}: ${metaDate(date, today)}`,
+			undo: () => {
+				for (const b of before) void workspace.run(b.path, (d) => setTaskDate(d, b.ref, b.date));
+			},
+		});
+	};
+
+	const moveAll = async (items: Item[], projectPath: string | null, heading: { line: number; text: string } | null): Promise<void> => {
+		clearMarks();
+		refocus();
+		const res = await workspace.moveTasks(
+			items.map((i) => ({ path: i.path, ref: refOf(i.task) })),
+			projectPath,
+			heading,
+		);
+		const name = projectPath === null ? 'the Inbox' : (projects.find((p) => p.path === projectPath)?.name ?? 'the project');
+		if (res.ok) setToast({ message: `Moved ${todos(items.length)} to ${name}` });
+	};
+
 	const rowActions: RowActions = {
 		onToggle: toggle,
 		onExpand: (item) => {
+			clearMarks();
 			setSelected(rows.indexOf(item));
 			setExpanded({ current: { path: item.path, ref: refOf(item.task) } });
 		},
+		onMark: mark,
+	};
+
+	/** The menu for a right-click on one of several selected to-dos. */
+	const selectionMenu = (pos: { x: number; y: number }): void => {
+		const items = marked;
+		const allDone = items.every((i) => i.task.done);
+		new Menu()
+			.addItem((i) =>
+				i
+					.setTitle(`${allDone ? 'Mark as open' : 'Complete'}: ${todos(items.length)}`)
+					.setIcon('check')
+					.onClick(() => void toggleAll(items)),
+			)
+			.addItem((i) => i.setTitle('Schedule…').setIcon('calendar').onClick(() => openPicker('schedule')))
+			.addItem((i) => i.setTitle('Move to…').setIcon('folder-input').onClick(() => openPicker('move')))
+			.addItem((i) => i.setTitle('Clear selection').setIcon('x').onClick(clearMarks))
+			.addSeparator()
+			.addItem((i) =>
+				i
+					.setTitle(`Delete ${todos(items.length)}`)
+					.setIcon('trash')
+					.setWarning(true)
+					.onClick(() => void removeAll(items)),
+			)
+			.showAtPosition(pos);
 	};
 
 	const rowMenu = (item: Item, pos: { x: number; y: number }): void => {
+		if (marked.length > 1 && marks.has(itemKey(item))) return selectionMenu(pos);
 		const menu = new Menu().addItem((i) =>
 			i
 				.setTitle(item.task.done ? 'Mark as open' : 'Complete')
@@ -480,6 +696,19 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 			}
 		}
 		menu
+			.addSeparator()
+			.addItem((i) => i.setTitle('Schedule…').setIcon('calendar').onClick(() => openPicker('schedule', item)))
+			.addItem((i) => i.setTitle('Move to…').setIcon('folder-input').onClick(() => openPicker('move', item)))
+			.addItem((i) =>
+				i
+					.setTitle('Select')
+					.setIcon('check-square')
+					.onClick(() => {
+						clearMarks();
+						mark(item, 'toggle');
+					}),
+			)
+			.addSeparator()
 			.addItem((i) =>
 				i
 					.setTitle('Delete')
@@ -589,37 +818,49 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		if (e.isComposing || target?.closest('input, textarea, [contenteditable="true"], .pl-popover')) return;
 		const mod = Keymap.isModEvent(e) === true || e.metaKey || e.ctrlKey;
 		const current = rows[selected];
+		/** The selected to-dos, or the highlighted one. */
+		const targets = marked.length ? marked : current ? [current] : [];
 		if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && e.altKey && !mod) {
 			e.preventDefault();
-			if (!expanded && current) moveSelected(current, e.key === 'ArrowDown' ? 1 : -1);
+			if (!expanded && !marked.length && current) moveSelected(current, e.key === 'ArrowDown' ? 1 : -1);
 		} else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
 			e.preventDefault();
-			if (expanded) return;
+			if (expanded || !rows.length) return;
 			const step = e.key === 'ArrowDown' ? 1 : -1;
-			setSelected(Math.max(0, Math.min(rows.length - 1, (selected < 0 && step < 0 ? rows.length : selected) + step)));
+			const next = Math.max(0, Math.min(rows.length - 1, (selected < 0 && step < 0 ? rows.length : selected) + step));
+			// Shift extends the selection from where it started; a plain arrow ends it.
+			if (e.shiftKey && !mod) markRange(selected < 0 ? next : selected, next);
+			else if (marks.size) clearMarks();
+			setSelected(next);
+		} else if ((e.key === 'a' || e.key === 'A') && mod && !e.altKey && !e.shiftKey) {
+			e.preventDefault();
+			if (expanded || !rows.length) return;
+			setMarks(new Set(rows.map(itemKey)));
+			anchor.current = null;
 		} else if (e.key === 'Tab' && !mod && !e.altKey) {
 			e.preventDefault();
-			if (expanded || !current || current.task.done || !isNested(list)) return;
+			if (expanded || marked.length || !current || current.task.done || !isNested(list)) return;
 			if (e.shiftKey) outdent(current);
 			else indent(current);
-		} else if (e.key === 'Enter' && mod) {
+		} else if ((e.key === 'Enter' && mod) || (e.key === ' ' && !mod)) {
 			e.preventDefault();
-			if (current) toggle(current);
+			if (targets.length) void toggleAll(targets);
 		} else if (e.key === 'Enter') {
 			e.preventDefault();
+			clearMarks();
 			if (expanded) setExpanded(null);
 			else if (current) setExpanded({ current: { path: current.path, ref: refOf(current.task) } });
 		} else if (e.key === 'Escape') {
 			if (expanded) {
 				e.preventDefault();
 				setExpanded(null);
+			} else if (marks.size) {
+				e.preventDefault();
+				clearMarks();
 			}
-		} else if (e.key === ' ' && !mod) {
-			e.preventDefault();
-			if (current) toggle(current);
 		} else if (e.key === 'Backspace' || e.key === 'Delete') {
 			e.preventDefault();
-			if (current) void remove(current);
+			if (targets.length) void removeAll(targets);
 		} else if ((e.key === 'n' || e.key === 'N') && !mod && !e.altKey) {
 			e.preventDefault();
 			env.openCapture(list);
@@ -682,6 +923,8 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 				meta={m.text}
 				metaClass={m.cls}
 				selected={rows[selected] === item}
+				marked={marks.has(itemKey(item))}
+				tapSelects={tapSelects}
 				reveal={isAt(revealed, item)}
 				leaving={item.task.done && lingering.get(lingerKey(item.path, item.task.line)) === true}
 				drag={{ props: reorder.rowProps(itemKey(item)), cls: dragClass(item) }}
@@ -711,7 +954,7 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 	const hint = env.hint();
 
 	return (
-		<div ref={root} class={`pl-root${narrow ? ' is-narrow' : ''}`} tabIndex={-1} onKeyDown={onKeyDown} onPaste={onPaste}>
+		<div ref={root} class={`pl-root${narrow ? ' is-narrow' : ''}${marked.length ? ' has-selection' : ''}`} tabIndex={-1} onKeyDown={onKeyDown} onPaste={onPaste}>
 			{narrow ? (
 				<div class="pl-picker-bar">
 					<button type="button" class="pl-picker" aria-haspopup="menu" onClick={pickList}>
@@ -816,6 +1059,27 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 						</div>
 					)}
 
+					{marked.length > 0 && (
+						<BulkBar
+							items={marked}
+							picker={picker}
+							projects={projects}
+							today={today}
+							onPicker={(p) => {
+								setPicker(p);
+								if (!p) refocus();
+							}}
+							onToggle={() => void toggleAll(marked)}
+							onSchedule={(date) => void scheduleAll(marked, date)}
+							onMove={(path, heading) => void moveAll(marked, path, heading)}
+							onDelete={() => void removeAll(marked)}
+							onClear={() => {
+								clearMarks();
+								refocus();
+							}}
+						/>
+					)}
+
 					{hint ? (
 						<p class="pl-hint">
 							Press <kbd>N</kbd> to add a to-do
@@ -836,18 +1100,95 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 			{toast && (
 				<div class="pl-toast" role="status">
 					<span>{toast.message}</span>
-					<span class="pl-toast-sep" aria-hidden="true">·</span>
-					<button
-						type="button"
-						onClick={() => {
-							toast.undo();
-							setToast(null);
-						}}
-					>
-						Undo
-					</button>
+					{toast.undo && (
+						<>
+							<span class="pl-toast-sep" aria-hidden="true">·</span>
+							<button
+								type="button"
+								onClick={() => {
+									toast.undo?.();
+									setToast(null);
+								}}
+							>
+								Undo
+							</button>
+						</>
+					)}
 				</div>
 			)}
+		</div>
+	);
+}
+
+/** The actions for the selected to-dos, at the bottom of the list. */
+function BulkBar({
+	items,
+	picker,
+	projects,
+	today,
+	onPicker,
+	onToggle,
+	onSchedule,
+	onMove,
+	onDelete,
+	onClear,
+}: {
+	items: Item[];
+	picker: SelectionCommand | null;
+	projects: ProjectInfo[];
+	today: string;
+	onPicker: (picker: SelectionCommand | null) => void;
+	onToggle: () => void;
+	onSchedule: (date: TaskDate | null) => void;
+	onMove: (projectPath: string | null, heading: { line: number; text: string } | null) => void;
+	onDelete: () => void;
+	onClear: () => void;
+}) {
+	const { workspace, weekStart } = useEnv();
+	const allDone = items.every((i) => i.task.done);
+	const first = items[0];
+	const oneProject = first && items.every((i) => i.project?.path === first.project?.path) ? (first.project?.path ?? null) : undefined;
+	const headingLine = first?.task.heading?.line ?? null;
+	const sharedHeading = oneProject !== undefined && items.every((i) => (i.task.heading?.line ?? null) === headingLine) ? headingLine : undefined;
+	const choices = projects
+		.filter((p) => p.exists && !p.done)
+		.map((p) => ({ name: p.name, path: p.path, headings: workspace.doc(p.path)?.headings }));
+
+	return (
+		<div class="pl-bulk" role="toolbar" aria-label="Selected to-dos">
+			<span class="pl-bulk-count">{items.length} selected</span>
+			<button type="button" onClick={onToggle}>
+				{allDone ? 'Mark as open' : 'Complete'}
+			</button>
+			<span class="pl-bulk-anchor">
+				<button type="button" aria-haspopup="dialog" aria-expanded={picker === 'schedule'} onClick={() => onPicker(picker === 'schedule' ? null : 'schedule')}>
+					Schedule
+				</button>
+				{picker === 'schedule' && <DatePopover today={today} weekStart={weekStart()} onClose={() => onPicker(null)} onPick={onSchedule} />}
+			</span>
+			<span class="pl-bulk-anchor">
+				<button type="button" aria-haspopup="listbox" aria-expanded={picker === 'move'} onClick={() => onPicker(picker === 'move' ? null : 'move')}>
+					Move
+				</button>
+				{picker === 'move' && (
+					<ProjectPicker
+						projects={choices}
+						current={oneProject ?? null}
+						// Marks where they all are, if that's one place; -1 matches no heading.
+						currentHeading={sharedHeading === undefined ? -1 : sharedHeading}
+						onClose={() => onPicker(null)}
+						onPick={onMove}
+					/>
+				)}
+			</span>
+			<button type="button" class="mod-warning" onClick={onDelete}>
+				Delete
+			</button>
+			<button type="button" class="pl-bulk-clear clickable-icon" aria-label="Clear selection" onClick={onClear}>
+				<svg viewBox="0 0 16 16" aria-hidden="true">
+					<path d="M4 4l8 8M12 4l-8 8" />
+				</svg>
+			</button>
 		</div>
 	);
 }

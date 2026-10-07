@@ -14,9 +14,11 @@ import {
 	undoRepeat,
 	setProjectDone,
 	extractTask,
+	extractTasks,
 	insertTaskLines,
 	moveProjectLink,
 	moveTaskToHeading,
+	moveTasksToHeading,
 	PatchConflict,
 	refOf,
 	removeProjectLink,
@@ -200,6 +202,47 @@ export class Workspace {
 			if (box && landed.at) box.current = landed.at;
 			this.notify();
 			return removed;
+		});
+		this.queue = job;
+		return job;
+	}
+
+	/**
+	 * Moves several to-dos, as `moveTask` does, keeping their order. Each note they come from
+	 * is changed once: their copies go in first, then they are removed from it.
+	 */
+	moveTasks(sources: TaskRef[], projectPath: string | null, heading: LineRef | null = null): Promise<RunResult> {
+		const job = this.queue.then(async () => {
+			const to = projectPath ?? this.masterPath;
+			const byPath = new Map<string, LineRef[]>();
+			for (const s of sources) byPath.set(s.path, [...(byPath.get(s.path) ?? []), s.ref]);
+			let ok = true;
+			for (const [path, refs] of byPath) {
+				if (to === path) {
+					if (to === this.masterPath) continue;
+					ok = (await this.apply(to, (d) => moveTasksToHeading(d, refs, heading))).ok && ok;
+					continue;
+				}
+				const fromDoc = this.doc(path);
+				if (!fromDoc) {
+					ok = false;
+					continue;
+				}
+				let lines: string[];
+				try {
+					lines = extractTasks(fromDoc, refs).lines;
+				} catch (e) {
+					this.report(path, e);
+					ok = false;
+					continue;
+				}
+				if (!lines.length) continue;
+				const added = await this.apply(to, (d) => [insertTaskLines(d, lines, to === this.masterPath ? 'inbox' : heading ? { heading } : 'note').edit]);
+				if (!added.ok) return added;
+				ok = (await this.apply(path, (d) => extractTasks(d, refs).edits)).ok && ok;
+			}
+			this.notify();
+			return { ok };
 		});
 		this.queue = job;
 		return job;

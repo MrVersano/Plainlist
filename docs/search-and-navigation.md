@@ -28,6 +28,8 @@ Bind them to hotkeys under **Settings → Hotkeys** to switch lists with one key
 |---|---|
 | **Plainlist: Open** | Opens your task file in the Plainlist view, creating it if needed |
 | **Plainlist: New to-do** | Opens [quick capture](quick-capture.md) |
+| **Plainlist: Move selected to-dos to a project** | Picks a project, heading or the Inbox for the [selected to-dos](todos.md#working-on-several-to-dos-at-once), or the highlighted one |
+| **Plainlist: Schedule selected to-dos** | Picks a date for the selected to-dos, or the highlighted one |
 | **Plainlist: Switch between task list and Markdown** | Shows the current task file as raw Markdown, or back as a task list |
 
 For moving around inside the view, see [Keyboard shortcuts](keyboard.md).

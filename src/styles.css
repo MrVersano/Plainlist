@@ -485,6 +485,12 @@
 	box-shadow: -8px 0 0 var(--background-modifier-hover), 8px 0 0 var(--background-modifier-hover);
 }
 
+.pl-row.is-marked:not(.is-expanded) {
+	background: hsla(var(--interactive-accent-hsl), 0.14);
+	box-shadow: -8px 0 0 hsla(var(--interactive-accent-hsl), 0.14), 8px 0 0 hsla(var(--interactive-accent-hsl), 0.14);
+	border-bottom-color: transparent;
+}
+
 .pl-root button.pl-row-title {
 	display: block;
 	flex: 1;
@@ -1023,6 +1029,66 @@
 
 .pl-toast-sep {
 	opacity: 0.6;
+}
+
+/* Bulk actions for selected to-dos ---------------------------------------- */
+
+.pl-bulk {
+	position: sticky;
+	bottom: 16px;
+	z-index: 5;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 4px;
+	margin-top: 22px;
+	padding: 6px 6px 6px 14px;
+	border: 1px solid var(--pl-hairline);
+	border-radius: 10px;
+	background: var(--background-primary);
+	box-shadow: var(--shadow-s);
+	font-size: 14px;
+}
+
+.pl-bulk-count {
+	margin-right: auto;
+	color: var(--pl-muted);
+	font-variant-numeric: tabular-nums;
+}
+
+.pl-root .pl-bulk button:not(.clickable-icon) {
+	padding: 4px 10px;
+	font-size: 14px;
+}
+
+.pl-root .pl-bulk button.mod-warning:not(.clickable-icon) {
+	color: var(--text-error);
+	background: none;
+	box-shadow: none;
+}
+
+.pl-bulk-anchor {
+	position: relative;
+}
+
+/* The bar sits at the bottom of the view, its buttons on the right: pickers open up and leftwards. */
+.pl-bulk .pl-popover {
+	top: auto;
+	bottom: calc(100% + 10px);
+	left: auto;
+	right: 0;
+}
+
+.pl-bulk-clear svg {
+	width: 14px;
+	height: 14px;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 1.6;
+}
+
+.pl-root.has-selection .pl-toast {
+	bottom: 88px;
 }
 
 /* Capture palette -------------------------------------------------------- */

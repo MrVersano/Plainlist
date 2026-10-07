@@ -13,7 +13,19 @@ With the Plainlist view focused:
 | `Tab` / `Shift+Tab` | Make the selected to-do a sub-task of the one above / move it out of its parent |
 | `Alt+↑` / `Alt+↓` | Move the selected to-do up or down |
 
-The same keys work in a [list inside a note](lists-in-notes.md#using-the-keyboard) once you click one of its rows.
+To [work on several to-dos at once](todos.md#working-on-several-to-dos-at-once):
+
+| Key | Action |
+|---|---|
+| `Shift+↑` / `Shift+↓` | Add the to-dos above or below to the selection |
+| `Mod+A` | Select every to-do in the list |
+| `Space` or `Mod+Enter` | Complete or reopen all the selected to-dos |
+| `Delete` / `Backspace` | Delete all the selected to-dos (with undo) |
+| `Esc` | Clear the selection |
+
+`Mod`-click and `Shift`-click select with the mouse.
+
+The keys in the first table also work in a [list inside a note](lists-in-notes.md#using-the-keyboard) once you click one of its rows. Selecting several to-dos does not.
 
 `Mod` is `Cmd` on macOS and `Ctrl` elsewhere.
 
@@ -32,4 +44,4 @@ Plainlist does not set hotkeys for its commands. Bind the ones you use under **S
 
 ## Mouse and touch
 
-Right-click a to-do (or long-press it without moving, on mobile) to complete it, add a sub-task, indent or outdent it, or delete it. Right-click a project to open, rename, complete or remove it.
+Right-click a to-do (or long-press it without moving, on mobile) to complete it, add a sub-task, indent or outdent it, schedule or move it, select it, or delete it. Right-click a project to open, rename, complete or remove it.

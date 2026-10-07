@@ -155,6 +155,7 @@ export class DayEmbed extends MarkdownRenderChild {
 				subscribe: (fn) => this.plugin.onTodayOrderChange(fn),
 			},
 			onReveal: () => () => {},
+			onSelectionCommand: () => () => {},
 		};
 		const onAdd = (day: string): void => {
 			const options = this.plugin.captureOptions(file, { kind: 'today' });

@@ -33,6 +33,7 @@ Plainlist does not set hotkeys for you. Under **Settings → Hotkeys**, search f
 |---|---|---|
 | **New to-do** | `Mod+Shift+N` | Opens [quick capture](quick-capture.md) from anywhere in Obsidian |
 | **Search to-dos** | your choice | Finds any to-do by name; see [Search and navigation](search-and-navigation.md) |
+| **Move selected to-dos to a project**, **Schedule selected to-dos** | your choice | Moves or schedules the [selected to-dos](todos.md#working-on-several-to-dos-at-once) |
 | **Go to Inbox**, **Go to Today**, **Go to Upcoming**, **Go to No Date**, **Go to Someday** | your choice | Opens Plainlist on that list |
 
 On desktop you can also capture from other apps with a global shortcut; see [System-wide quick entry](quick-capture.md#system-wide-quick-entry).

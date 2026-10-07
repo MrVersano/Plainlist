@@ -5,7 +5,7 @@ import type { ListId } from '../model/lists';
 import type PlainlistPlugin from '../main';
 import { Workspace, type TaskRef } from '../store';
 import { App } from './components/App';
-import { EnvContext, type Env, type SidebarLayout } from './env';
+import { EnvContext, type Env, type SelectionCommand, type SidebarLayout } from './env';
 import { confirmModal, promptModal } from './modals';
 import { hotkeyLabel } from './obsidian';
 
@@ -35,6 +35,7 @@ export class PlainlistView extends FileView {
 	/** A reveal made before the UI was mounted, handed to it when it subscribes. */
 	private pendingReveal: TaskRef | null = null;
 	private revealListener: ((target: TaskRef) => void) | null = null;
+	private selectionListener: ((command: SelectionCommand) => void) | null = null;
 
 	constructor(
 		leaf: WorkspaceLeaf,
@@ -131,6 +132,11 @@ export class PlainlistView extends FileView {
 		else this.pendingReveal = target;
 	}
 
+	/** Opens the picker for moving or scheduling the selected to-dos. */
+	selectionCommand(command: SelectionCommand): void {
+		this.selectionListener?.(command);
+	}
+
 	private mount(workspace: Workspace): void {
 		this.unmount();
 		this.root = this.contentEl.createDiv({ cls: 'pl-host' });
@@ -162,6 +168,12 @@ export class PlainlistView extends FileView {
 					if (this.revealListener === fn) this.revealListener = null;
 				};
 			},
+			onSelectionCommand: (fn) => {
+				this.selectionListener = fn;
+				return () => {
+					if (this.selectionListener === fn) this.selectionListener = null;
+				};
+			},
 		};
 		render(
 			h(EnvContext.Provider, {
@@ -182,6 +194,7 @@ export class PlainlistView extends FileView {
 	private unmount(): void {
 		// Preact may run the old UI's effect cleanups later; it must not take reveals meanwhile.
 		this.revealListener = null;
+		this.selectionListener = null;
 		if (!this.root) return;
 		render(null, this.root);
 		this.root.remove();

@@ -76,7 +76,24 @@ Right-click a to-do (or long-press it without moving, on mobile) for its menu:
 
 ![Right-click menu](../assets/context-menu.png)
 
-It offers whichever of these fit the to-do and the list you're on: **Complete** (or **Mark as open**), **Add sub-task**, **Indent**, **Outdent** and **Delete**. Deleting shows a toast with **Undo** for a few seconds.
+It offers whichever of these fit the to-do and the list you're on: **Complete** (or **Mark as open**), **Add sub-task**, **Indent**, **Outdent**, **Schedule…**, **Move to…**, **Select** and **Delete**. With several to-dos [selected](#working-on-several-to-dos-at-once), right-clicking one of them acts on them all. Deleting shows a toast with **Undo** for a few seconds.
+
+## Working on several to-dos at once
+
+Select several to-dos to complete, schedule, move or delete them together:
+
+- `Mod`-click a to-do to add it to the selection, or to take it out again.
+- `Shift`-click to select every to-do from the last one you picked to this one. With the keyboard, `Shift+↑` / `Shift+↓` does the same.
+- `Mod+A` selects every to-do in the list.
+- On mobile, long-press a to-do and choose **Select**. Tapping other to-dos then adds them to the selection, or takes them out.
+
+A bar at the bottom of the list shows how many are selected, with **Complete** (or **Mark as open**, when they're all done), **Schedule**, **Move** and **Delete**. **Schedule** offers the same choices as a to-do's date field. **Move** sends them to the Inbox, a project, or a heading in a project note, in the order they were in. The keys work too: `Space` completes them all and `Backspace` deletes them all. Right-click one of them for the same actions.
+
+Completing, scheduling and deleting show a toast with **Undo**. Moving or deleting a selected to-do takes its sub-tasks with it, as it does for one to-do. Press `Esc`, an arrow key or the bar's **×** to clear the selection.
+
+The **Plainlist: Move selected to-dos to a project** and **Plainlist: Schedule selected to-dos** commands open the same pickers, so you can give them hotkeys. With nothing selected, they act on the highlighted to-do.
+
+Selecting several to-dos works in the Plainlist view, not in [lists inside notes](lists-in-notes.md).
 
 ## Reordering
 
