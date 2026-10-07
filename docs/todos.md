@@ -30,12 +30,12 @@ To reopen one, find it in Completed (or in its project's "N completed" section) 
 
 On a phone or tablet, swipe a to-do sideways:
 
-- **Swipe right** to complete it (or, for a done one, to reopen it).
-- **Swipe left** to schedule it: the date picker opens, as with **Schedule…** in the [right-click menu](#the-right-click-menu).
+- **Swipe right** to complete it, behind a ✓. A done one is reopened instead, behind an arrow back.
+- **Swipe left** to schedule it. A sheet of dates opens: **Today**, **Tomorrow**, **This weekend** and **Next week** (each with the day it falls on), **Someday**, **Other date…** to type one ("fri", "oct 20"), and **Remove date** when it has one. The to-do's current choice is ticked. A toast shows the new date, with **Undo**.
 
 The row follows your finger and shows what it will do. Once you've swiped far enough, about a third of the row, the colour turns solid; let go to act. A quick flick is enough too. Let go sooner and the row slides back.
 
-Swiping is off while you're [selecting several to-dos](#working-on-several-to-dos-at-once) and on the to-do you're editing. In a [list inside a note](lists-in-notes.md), swiping left opens the to-do, so you can set its date there.
+Swiping is off while you're [selecting several to-dos](#working-on-several-to-dos-at-once) and on the to-do you're editing. It works the same in a [list inside a note](lists-in-notes.md).
 
 ## Repeating to-dos
 

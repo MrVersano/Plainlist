@@ -31,7 +31,8 @@ export interface ReorderOptions<T> {
 	onMenu: (item: T, pos: { x: number; y: number }) => void;
 	/** Whether a row can be swiped on a touch screen; no swiping without it. */
 	canSwipe?: (item: T) => boolean;
-	onSwipe?: (item: T, dir: SwipeDir) => void;
+	/** A finished swipe, with where the finger lifted. */
+	onSwipe?: (item: T, dir: SwipeDir, pos: { x: number; y: number }) => void;
 }
 
 export interface DropAt {
@@ -221,7 +222,7 @@ export function useReorder<T>(opts: ReorderOptions<T>) {
 				const { dx, v } = g.swipe;
 				const acts = Math.abs(dx) >= g.row.clientWidth * SWIPE_AT || (Math.abs(v) >= FLING && Math.sign(v) === Math.sign(dx));
 				end();
-				if (acts && dragged !== undefined) latest.current.onSwipe?.(dragged, dx > 0 ? 'right' : 'left');
+				if (acts && dragged !== undefined) latest.current.onSwipe?.(dragged, dx > 0 ? 'right' : 'left', { x: evt.clientX, y: evt.clientY });
 				return;
 			}
 			if (g.dragging) {

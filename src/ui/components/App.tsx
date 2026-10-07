@@ -46,6 +46,7 @@ import { quoted, type UndoEntry } from '../../undo';
 import { useEnv, useToday, useWorkspace, type SelectionCommand, type ViewCommand } from '../env';
 import { themeCheckboxRadius } from '../obsidian';
 import { AreaSuggestModal } from '../AreaSuggestModal';
+import { scheduleMenu } from '../scheduleMenu';
 import { ProjectSuggestModal } from '../ProjectSuggestModal';
 import { useReorder } from '../reorder';
 import { Checkbox } from './bits';
@@ -657,8 +658,8 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		if (!results.some((r) => r.ok)) return;
 		const n = todos(items.length);
 		undoToast(
-			date === null ? `Removed the date from ${n}` : `${n}: ${metaDate(date, today)}`,
-			keepUndo(`Scheduled ${n}`, () => {
+			date === null ? `Removed the date from ${n}` : `${items.length === 1 ? 'Scheduled' : n}: ${metaDate(date, today)}`,
+			keepUndo(`Scheduled ${items.length === 1 && items[0] ? quoted(items[0].task.title) : n}`, () => {
 				for (const b of before) void workspace.run(b.path, (d) => setTaskDate(d, b.ref, b.date));
 			}),
 		);
@@ -789,7 +790,10 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		onMenu: rowMenu,
 		// Not while picking several to-dos, nor on the one being edited.
 		canSwipe: (item) => !marks.size && !isBoxed(expanded, item),
-		onSwipe: (item, dir) => (dir === 'right' ? toggle(item) : openPicker('schedule', item)),
+		onSwipe: (item, dir, pos) => {
+			if (dir === 'right') return toggle(item);
+			scheduleMenu(app, { current: item.task.date, today, weekStart: env.weekStart(), onPick: (date) => void scheduleAll([item], date) }).showAtPosition(pos);
+		},
 	});
 
 	/** The dragged row's sub-tasks move with it, so they look lifted too. */

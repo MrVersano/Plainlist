@@ -12,6 +12,8 @@ Today
 
 It shows Today's to-dos, and you can tick, edit, drag (the same order as the Today list), right-click and [swipe](todos.md#swiping-on-touch-screens) them as in the view. Completed to-dos stay in the list too, crossed off, below the open ones, so it also shows what you've done today. One you've just ticked stays in its place for a few seconds before it moves down.
 
+Right-click a to-do in the list (or long-press it, on mobile) to **Complete**, **Schedule…** or **Delete** it. **Schedule…** opens the same sheet of dates as [swiping left](todos.md#swiping-on-touch-screens).
+
 Click **New to-do** under the list to add one for that day.
 
 With **Group Today by project** on in [Settings](settings.md), the list shows a heading for each project, as the Today list does; completed to-dos go to the bottom of their project's group.

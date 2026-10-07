@@ -2,11 +2,14 @@ import { Keymap, Menu, Scope } from 'obsidian';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { headerDate, metaDate, overdueLabel } from '../../dates/format';
 import { byProject, computeDay, isOverdue, moveInOrder, placeLabel, todayKey, type Group, type Item } from '../../model/lists';
-import { deleteTask, refOf, restoreLines, setTaskDone, type Place, type Removed } from '../../model/patch';
+import { deleteTask, refOf, restoreLines, setTaskDate, setTaskDone, type Place, type Removed } from '../../model/patch';
+import { setDate } from '../../model/taskLine';
+import type { TaskDate } from '../../model/types';
 import { locateLine, type TaskRef, type TrackBox } from '../../store';
 import { useEnv, useToday, useWorkspace } from '../env';
 import { themeCheckboxRadius } from '../obsidian';
 import { useReorder } from '../reorder';
+import { scheduleMenu } from '../scheduleMenu';
 import { TaskEditor, TaskRow, type RowActions } from './TaskRow';
 
 const isAt = (at: TaskRef | null, item: Item): boolean =>
@@ -169,6 +172,25 @@ export function DayList({ date, onAdd, onExit }: { date: string | null; onAdd: (
 		void workspace.run(item.path, (d) => setTaskDone(d, tracked ? tracked.current.ref : refOf(item.task), !item.task.done, today), tracked);
 	};
 
+	/** Gives a to-do a new date, with a toast to undo it. */
+	const schedule = (item: Item, date: TaskDate | null): void => {
+		const { task } = item;
+		if (date === task.date) return;
+		// For undo: the line as it will be, and the date it had.
+		const after = { line: task.line, text: setDate(task.text, date) };
+		void workspace.run(item.path, (d) => setTaskDate(d, refOf(task), date)).then((res) => {
+			if (!res.ok) return;
+			setToast({
+				message: date === null ? 'Removed the date' : `Scheduled: ${metaDate(date, today)}`,
+				undo: () => void workspace.run(item.path, (d) => setTaskDate(d, after, task.date)),
+			});
+		});
+	};
+
+	const openSchedule = (item: Item, pos: { x: number; y: number }): void => {
+		scheduleMenu(env.app, { current: item.task.date, today, weekStart: env.weekStart(), onPick: (date) => schedule(item, date) }).showAtPosition(pos);
+	};
+
 	const remove = async (item: Item): Promise<void> => {
 		const holder: { removed: Removed | null } = { removed: null };
 		if (isAt(box?.current ?? null, item)) setExpanded(null);
@@ -218,6 +240,12 @@ export function DayList({ date, onAdd, onExit }: { date: string | null; onAdd: (
 			)
 			.addItem((i) =>
 				i
+					.setTitle('Schedule…')
+					.setIcon('calendar')
+					.onClick(() => openSchedule(item, pos)),
+			)
+			.addItem((i) =>
+				i
 					.setTitle('Delete')
 					.setIcon('trash')
 					.setWarning(true)
@@ -243,8 +271,7 @@ export function DayList({ date, onAdd, onExit }: { date: string | null; onAdd: (
 		onDrop: reorderTo,
 		onMenu: rowMenu,
 		canSwipe: (item) => !isAt(expanded?.box.current ?? null, item),
-		// A list in a note has no date picker of its own: swiping left opens the to-do, to set its date there.
-		onSwipe: (item, dir) => (dir === 'right' ? toggle(item) : expand(item)),
+		onSwipe: (item, dir, pos) => (dir === 'right' ? toggle(item) : openSchedule(item, pos)),
 	});
 
 	/** Alt+↑/↓: swaps the selected to-do with the closest one above or below it that it can pass. */
