@@ -3,7 +3,7 @@ import { addDays, longDate } from '../../dates/format';
 import { placeLabel, type Item, type ProjectInfo } from '../../model/lists';
 import { mentionTargets, stripRanges, targetName } from '../../mentions';
 import { findTask, setTaskDate, setTaskDescription, setTaskRepeat, setTaskTitle } from '../../model/patch';
-import { recogniseEdit } from '../../recognise';
+import { phraseBefore, recogniseEdit, stillKept } from '../../recognise';
 import type { TrackBox } from '../../store';
 import { useDebounced, useEnv, useOutsideClick } from '../env';
 import { noteLinks } from '../obsidian';
@@ -142,6 +142,8 @@ export function TaskEditor({
 	const titleInput = useRef<HTMLTextAreaElement>(null);
 	/** The title as the editor opened: dates and @projects already in it are plain text. */
 	const original = useRef(task.title);
+	/** Recognised phrases the user backspaced into, to keep as plain words. */
+	const [kept, setKept] = useState<string[]>([]);
 	const latest = useRef({ title, description });
 	latest.current = { title, description };
 	const open = projects.filter((p) => p.exists);
@@ -151,11 +153,12 @@ export function TaskEditor({
 	const links = noteLinks(app, item.path);
 
 	const onTitle = (value: string): void => {
+		setKept((k) => stillKept(k, value));
 		setTitle(value);
 		save.schedule();
 	};
 	const suggest = useSuggest({ input: titleInput, value: title, onChange: onTitle, projects: targets, links });
-	const recognised = (text: string) => recogniseEdit(text, original.current, names, today, weekStart());
+	const recognised = (text: string) => recogniseEdit(text, original.current, names, today, weekStart(), kept);
 	const { match, mention, repeat } = recognised(title);
 
 	const save = useDebounced(() => {
@@ -264,7 +267,15 @@ export function TaskEditor({
 						onBlur={suggest.onBlur}
 						onKeyDown={(e) => {
 							if (suggest.onKeyDown(e)) return;
-							if (e.key === 'Enter' && !e.isComposing) {
+							const el = e.currentTarget;
+							if (e.key === 'Backspace' && !e.isComposing && el.selectionStart === el.selectionEnd) {
+								// Backspace at the end of a recognised phrase keeps it as words instead.
+								const phrase = phraseBefore(recognised(el.value), el.selectionStart);
+								if (phrase) {
+									e.preventDefault();
+									setKept([...kept, phrase]);
+								}
+							} else if (e.key === 'Enter' && !e.isComposing) {
 								e.preventDefault();
 								onCollapse();
 							}

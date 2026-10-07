@@ -8,7 +8,7 @@ Click a to-do's title to open it in place:
 
 ![An open to-do](../assets/todo-open.png)
 
-- **Title:** edit it directly. Dates, repeat rules and `@project` typed into the title work as in [quick capture](quick-capture.md): "Call Sam fri" moves the to-do to Friday and takes "fri" out of the title.
+- **Title:** edit it directly. Dates, repeat rules and `@project` typed into the title work as in [quick capture](quick-capture.md): "Call Sam fri" moves the to-do to Friday and takes "fri" out of the title. Press `Backspace` right after a highlighted phrase to [keep it as words](quick-capture.md#keeping-the-words).
 - **Description:** the notes under the title. They're stored as indented lines under the checkbox.
 - **Date:** type a date ("fri", "next week", "oct 20", "someday") or pick **Today**, **Tomorrow**, **Someday** or **Clear**.
 - **Repeat:** pick **Daily**, **Weekdays**, **Weekly**, **Monthly**, **Yearly** or **Never**, or type a rule such as "every 2 weeks" or "every last sunday". Tick **Repeat from the day it's completed** to make it [repeat when done](#repeat-when-done).

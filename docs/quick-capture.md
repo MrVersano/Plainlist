@@ -44,6 +44,12 @@ Pick a heading to put the to-do under that heading in the project's note, or typ
 
 Without a project, the to-do goes to the Inbox. When you open the palette from a project's view, that project is already filled in.
 
+## Keeping the words
+
+Sometimes a phrase that reads as a date is just part of the title. To keep it, press `Backspace` once with the cursor right after the highlighted phrase. The highlight goes away and nothing is deleted, so "Shop for clothes for my Italy trip on Jul 23" saves with those words and no date. The next `Backspace` deletes as usual. The same works for a repeat rule or an `@project`.
+
+If you delete the phrase and type it again, it is recognised again.
+
 ## The same parsing elsewhere
 
 Dates, repeat rules and `@project` also work when you edit a to-do's title in the view (see [Editing a to-do](todos.md#editing-a-to-do)).

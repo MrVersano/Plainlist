@@ -3,7 +3,7 @@ import { longDate } from '../../dates/format';
 import { firstOccurrence, parseRepeat } from '../../dates/repeat';
 import { type Mention, mentionTargets, stripRanges, targetName } from '../../mentions';
 import { pastedTasks } from '../../model/paste';
-import { recognise } from '../../recognise';
+import { locate, phraseBefore, recognise, stillKept } from '../../recognise';
 import type { LineRef } from '../../model/patch';
 import { type PickerProject, ProjectPicker } from './popovers';
 import { highlighted, type LinkSource, type Mark, useSuggest } from './suggest';
@@ -46,6 +46,8 @@ export function Capture({
 	onClose: () => void;
 }) {
 	const [text, setText] = useState(initialText);
+	/** Recognised phrases the user backspaced into, to keep as plain words. */
+	const [kept, setKept] = useState<string[]>([]);
 	const [project, setProject] = useState(initialProject);
 	const [heading, setHeading] = useState<LineRef | null>(null);
 	const [picking, setPicking] = useState(false);
@@ -54,7 +56,11 @@ export function Capture({
 	const busy = useRef(false);
 	const targets = mentionTargets(projects);
 	const names = targets.map((t) => t.label);
-	const suggest = useSuggest({ input, value: text, onChange: setText, projects: targets, links, enabled: !picking });
+	const change = (value: string): void => {
+		setText(value);
+		setKept((k) => stillKept(k, value));
+	};
+	const suggest = useSuggest({ input, value: text, onChange: change, projects: targets, links, enabled: !picking });
 
 	useEffect(() => {
 		const el = input.current;
@@ -71,7 +77,8 @@ export function Capture({
 		const rule = found.repeat && parseRepeat(found.repeat.rule);
 		return found.match?.date ?? (rule ? firstOccurrence(rule, today, weekStart) : defaultDate);
 	};
-	const recognised = recognise(text, names, today, weekStart);
+	const recogniseKeeping = (typed: string) => recognise(typed, names, today, weekStart, locate(typed, kept));
+	const recognised = recogniseKeeping(text);
 	const { mention, match, repeat } = recognised;
 	const date = dateFor(recognised);
 	const mentioned = mention ? targets[mention.project] : undefined;
@@ -100,7 +107,7 @@ export function Capture({
 	const save = async (keepOpen: boolean): Promise<void> => {
 		// Read the input itself: a fast Enter can arrive before the last keystroke re-renders.
 		const typed = input.current?.value ?? text;
-		const found = recognise(typed, names, today, weekStart);
+		const found = recogniseKeeping(typed);
 		const title = stripRanges(typed, [found.match, found.mention, found.repeat].filter((r) => r !== null));
 		const date = dateFor(found);
 		const typedTarget = found.mention ? targets[found.mention.project] : undefined;
@@ -120,6 +127,7 @@ export function Capture({
 		if (keepOpen) {
 			suggest.replace('', 0);
 			suggest.reset();
+			setKept([]);
 			input.current?.focus();
 		} else {
 			onClose();
@@ -175,7 +183,7 @@ export function Capture({
 					aria-autocomplete="list"
 					value={text}
 					onInput={(e) => {
-						setText(e.currentTarget.value);
+						change(e.currentTarget.value);
 						suggest.onInput();
 					}}
 					onPaste={(e) => void paste(e)}
@@ -190,7 +198,15 @@ export function Capture({
 						// Escape goes through the modal's handler (closeList).
 						if (e.key !== 'Escape' && suggest.onKeyDown(e)) return;
 						if (e.isComposing) return;
-						if (e.key === 'Enter') {
+						const el = e.currentTarget;
+						if (e.key === 'Backspace' && el.selectionStart === el.selectionEnd) {
+							// Backspace at the end of a recognised phrase keeps it as words instead.
+							const phrase = phraseBefore(recogniseKeeping(el.value), el.selectionStart ?? -1);
+							if (phrase) {
+								e.preventDefault();
+								setKept([...kept, phrase]);
+							}
+						} else if (e.key === 'Enter') {
 							e.preventDefault();
 							void save(e.shiftKey);
 						} else if (e.key === 'Tab' && !e.shiftKey) {

@@ -37,6 +37,7 @@ The keys in the first table also work in a [list inside a note](lists-in-notes.m
 | `Esc` | Cancel |
 | `Tab` | Choose a project |
 | `@` | Start typing a project name |
+| `Backspace` | Right after a highlighted date, repeat rule or `@project`: keep it as words in the title |
 
 ## Global commands
 

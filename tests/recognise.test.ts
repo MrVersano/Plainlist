@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { recognise, recogniseEdit } from '../src/recognise';
+import { locate, phraseBefore, recognise, recogniseEdit, stillKept } from '../src/recognise';
 
 const NAMES = ['House', 'Garden'];
 // Sun 2026-10-04
@@ -68,5 +68,26 @@ describe('repeat rules', () => {
 	it('only counts a rule typed during an edit', () => {
 		expect(recogniseEdit('Bins every mon', 'Bins every mon', NAMES, TODAY, 1).repeat).toBeNull();
 		expect(recogniseEdit('Bins every mon', 'Bins', NAMES, TODAY, 1).repeat?.rule).toBe('every mon');
+	});
+});
+
+describe('kept phrases', () => {
+	const text = 'Shop for clothes for my Italy trip on Jul 23';
+
+	it('finds the phrase that ends at the caret, and nothing elsewhere', () => {
+		const found = recognise(text, NAMES, TODAY, 1);
+		expect(phraseBefore(found, text.length)).toBe('Jul 23');
+		expect(phraseBefore(found, text.length - 1)).toBeNull();
+	});
+
+	it('leaves a kept phrase as words', () => {
+		expect(recognise(text, NAMES, TODAY, 1, locate(text, ['Jul 23'])).match).toBeNull();
+		expect(recogniseEdit(`${text} fri`, '', NAMES, TODAY, 1, ['Jul 23']).match?.text).toBe('fri');
+	});
+
+	it('forgets a kept phrase once it is no longer in the text', () => {
+		const kept = ['Jul 23'];
+		expect(stillKept(kept, text)).toBe(kept);
+		expect(stillKept(kept, 'Shop on Jul 2')).toEqual([]);
 	});
 });
