@@ -242,6 +242,9 @@ export function DayList({ date, onAdd, onExit }: { date: string | null; onAdd: (
 		canDrop,
 		onDrop: reorderTo,
 		onMenu: rowMenu,
+		canSwipe: (item) => !isAt(expanded?.box.current ?? null, item),
+		// A list in a note has no date picker of its own: swiping left opens the to-do, to set its date there.
+		onSwipe: (item, dir) => (dir === 'right' ? toggle(item) : expand(item)),
 	});
 
 	/** Alt+↑/↓: swaps the selected to-do with the closest one above or below it that it can pass. */

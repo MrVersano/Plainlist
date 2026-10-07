@@ -3,6 +3,7 @@ import { applyEdits, mapLine } from './model/apply';
 import type { ProjectInfo, Source } from './model/lists';
 import { parse } from './model/parse';
 import {
+	addArea,
 	addProjectLink,
 	addTask,
 	addTasks,
@@ -17,11 +18,14 @@ import {
 	extractTasks,
 	insertTaskLines,
 	moveProjectLink,
+	moveProjectToArea,
 	moveTaskToHeading,
 	moveTasksToHeading,
 	PatchConflict,
 	refOf,
+	removeArea,
 	removeProjectLink,
+	renameArea,
 	replaceProjectLink,
 	type LineRef,
 	type NewTask,
@@ -29,8 +33,9 @@ import {
 	type Reopen,
 	type Repeated,
 } from './model/patch';
-import type { Doc, LineEdit } from './model/types';
+import type { Area, Doc, LineEdit } from './model/types';
 import { notePath, projectNameError, resolveProjects } from './projects';
+import { UndoStack, type Change } from './undo';
 
 /** A to-do's location: the note it is in and its line there. */
 export interface TaskRef {
@@ -45,6 +50,13 @@ export interface TrackBox {
 
 export interface RunResult {
 	ok: boolean;
+	/** What was written, note by note, so it can be undone. */
+	changes?: Change[];
+}
+
+/** Both results' changes, in the order they were made. */
+function joined(a: RunResult, b: RunResult): Change[] {
+	return [...(a.changes ?? []), ...(b.changes ?? [])];
 }
 
 /** Finds a line by index and exact text, or by exact text alone when it is unique. */
@@ -69,6 +81,8 @@ interface FileState {
 export class Workspace {
 	master: FileState;
 	projects: ProjectInfo[] = [];
+	/** Actions that can be undone, newest last. */
+	readonly undo = new UndoStack();
 	private notes = new Map<string, FileState>();
 	private listeners = new Set<() => void>();
 	private queue: Promise<unknown> = Promise.resolve();
@@ -201,7 +215,7 @@ export class Workspace {
 			const removed = await this.apply(from.path, (d) => extractTask(d, from.ref).edits);
 			if (box && landed.at) box.current = landed.at;
 			this.notify();
-			return removed;
+			return { ok: removed.ok, changes: joined(added, removed) };
 		});
 		this.queue = job;
 		return job;
@@ -217,10 +231,15 @@ export class Workspace {
 			const byPath = new Map<string, LineRef[]>();
 			for (const s of sources) byPath.set(s.path, [...(byPath.get(s.path) ?? []), s.ref]);
 			let ok = true;
+			const changes: Change[] = [];
+			const step = (r: RunResult): boolean => {
+				changes.push(...(r.changes ?? []));
+				return r.ok;
+			};
 			for (const [path, refs] of byPath) {
 				if (to === path) {
 					if (to === this.masterPath) continue;
-					ok = (await this.apply(to, (d) => moveTasksToHeading(d, refs, heading))).ok && ok;
+					ok = step(await this.apply(to, (d) => moveTasksToHeading(d, refs, heading))) && ok;
 					continue;
 				}
 				const fromDoc = this.doc(path);
@@ -238,11 +257,11 @@ export class Workspace {
 				}
 				if (!lines.length) continue;
 				const added = await this.apply(to, (d) => [insertTaskLines(d, lines, to === this.masterPath ? 'inbox' : heading ? { heading } : 'note').edit]);
-				if (!added.ok) return added;
-				ok = (await this.apply(path, (d) => extractTasks(d, refs).edits)).ok && ok;
+				if (!step(added)) return { ok: false, changes };
+				ok = step(await this.apply(path, (d) => extractTasks(d, refs).edits)) && ok;
 			}
 			this.notify();
-			return { ok };
+			return { ok, changes };
 		});
 		this.queue = job;
 		return job;
@@ -349,6 +368,28 @@ export class Workspace {
 		return this.run(this.masterPath, (d) => moveProjectLink(d, refOf(project), refOf(target), place));
 	}
 
+	/** Moves a project to the end of an area, or out of all areas when `area` is null. */
+	moveProjectToArea(project: ProjectInfo, area: Area | null): Promise<RunResult> {
+		return this.run(this.masterPath, (d) => moveProjectToArea(d, refOf(project), area && refOf(area)));
+	}
+
+	/** Areas in the task file, in order. */
+	get areas(): Area[] {
+		return this.master.doc.areas;
+	}
+
+	addArea(name: string): Promise<RunResult> {
+		return this.run(this.masterPath, (d) => addArea(d, name));
+	}
+
+	renameArea(area: Area, name: string): Promise<RunResult> {
+		return this.run(this.masterPath, (d) => renameArea(d, refOf(area), name));
+	}
+
+	removeArea(area: Area): Promise<RunResult> {
+		return this.run(this.masterPath, (d) => removeArea(d, refOf(area)));
+	}
+
 	/** Removes the project from Plainlist. The note itself is left alone. */
 	removeProject(project: ProjectInfo): Promise<RunResult> {
 		return this.run(this.masterPath, (d) => removeProjectLink(d, refOf(project)));
@@ -380,6 +421,59 @@ export class Workspace {
 
 	// --- Internals ----------------------------------------------------------
 
+	/**
+	 * Remembers an action's changes so `undoLast` can put the notes back. Nothing is kept
+	 * when it failed or changed nothing.
+	 */
+	remember(label: string, res: RunResult): void {
+		const changes = res.ok ? res.changes : undefined;
+		if (changes?.length) this.undo.push(label, () => this.revert(changes));
+	}
+
+	/** Undoes the newest action. Returns its label, or null when there was nothing (or it couldn't). */
+	async undoLast(): Promise<string | null> {
+		const entry = this.undo.pop();
+		if (!entry) {
+			new Notice('Plainlist: nothing to undo.');
+			return null;
+		}
+		return (await entry.undo()) ? entry.label : null;
+	}
+
+	/**
+	 * Puts notes back as they were before some changes, all or none: only while every note
+	 * still reads exactly as the changes left it, so nothing written since is lost.
+	 */
+	revert(changes: Change[]): Promise<boolean> {
+		const job = this.queue.then(async () => {
+			const stale = changes.find((c) => this.state(c.path)?.text !== c.after);
+			if (stale) {
+				new Notice(`Plainlist: can't undo, “${stale.path.split('/').pop()?.replace(/\.md$/i, '')}” has changed since.`);
+				return false;
+			}
+			for (const c of [...changes].reverse()) {
+				const state = this.state(c.path);
+				if (!state) return false;
+				try {
+					const out = await this.app.vault.process(state.file, (text) => {
+						if (text !== c.after) throw new PatchConflict('Changed since');
+						return c.before;
+					});
+					state.text = out;
+					state.doc = parse(out);
+				} catch (e) {
+					this.report(c.path, e);
+					return false;
+				}
+			}
+			if (changes.some((c) => c.path === this.masterPath)) await this.resolve();
+			else this.notify();
+			return true;
+		});
+		this.queue = job;
+		return job;
+	}
+
 	private state(path: string): FileState | null {
 		return path === this.masterPath ? this.master : (this.notes.get(path) ?? null);
 	}
@@ -392,8 +486,10 @@ export class Workspace {
 		}
 		const track = box?.current.path === path ? box.current.ref : undefined;
 		let tracked: LineRef | null = null;
+		let before = '';
 		try {
 			const out = await this.app.vault.process(state.file, (text) => {
+				before = text;
 				const doc = parse(text);
 				const edits = makeEdits(doc);
 				if (!edits.length) return text;
@@ -416,7 +512,7 @@ export class Workspace {
 			state.doc = doc;
 			if (state === this.master) await this.resolve();
 			else this.notify();
-			return { ok: true };
+			return { ok: true, changes: out === before ? [] : [{ path, before, after: out }] };
 		} catch (e) {
 			this.report(path, e);
 			return { ok: false };

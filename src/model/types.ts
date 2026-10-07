@@ -65,6 +65,17 @@ export interface ProjectLink {
 	link: string;
 	done: boolean;
 	doneDate: string | null;
+	/** The area heading the link sits under, or null when it comes before any. */
+	area: Area | null;
+}
+
+/** A heading under `# Projects` (any level below 1) that groups the projects after it in the sidebar. */
+export interface Area {
+	line: number;
+	text: string;
+	name: string;
+	/** The next area heading, or the end of `# Projects`. */
+	end: number;
 }
 
 export interface Section {
@@ -93,6 +104,8 @@ export interface Doc {
 	inbox: Section | null;
 	projectsSection: Section | null;
 	projectLinks: ProjectLink[];
+	/** Area headings under `# Projects`, in file order. */
+	areas: Area[];
 	/** All to-dos in file order. */
 	tasks: Task[];
 	/** Headings that group to-dos, in file order. */

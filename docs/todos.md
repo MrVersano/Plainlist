@@ -26,6 +26,17 @@ Click the checkbox, or select the to-do and press `Space`. A completed to-do sta
 
 To reopen one, find it in Completed (or in its project's "N completed" section) and click its checkbox again.
 
+## Swiping, on touch screens
+
+On a phone or tablet, swipe a to-do sideways:
+
+- **Swipe right** to complete it (or, for a done one, to reopen it).
+- **Swipe left** to schedule it: the date picker opens, as with **Schedule…** in the [right-click menu](#the-right-click-menu).
+
+The row follows your finger and shows what it will do. Once you've swiped far enough, about a third of the row, the colour turns solid; let go to act. A quick flick is enough too. Let go sooner and the row slides back.
+
+Swiping is off while you're [selecting several to-dos](#working-on-several-to-dos-at-once) and on the to-do you're editing. In a [list inside a note](lists-in-notes.md), swiping left opens the to-do, so you can set its date there.
+
 ## Repeating to-dos
 
 A repeating to-do comes back after you complete it. Give it a rule in the editor's **Repeat** field, or type one into the title, e.g. "Water plants every 3 days".
@@ -116,6 +127,23 @@ Paste a list into Plainlist and each line becomes a to-do in the list you're on.
 ```
 
 Indented lines become sub-tasks of the line above. `[date:: …]` fields in the pasted text are kept. If any line isn't a list item or a checkbox, Plainlist leaves the paste alone.
+
+## Undo
+
+Press `Mod+Z` in the Plainlist view to undo your last change, and again to undo the one before, up to 30 changes back. A toast says what was undone. The **Plainlist: Undo** command does the same, so you can give it a hotkey of your own.
+
+Undo covers what you do in the view:
+- completing, reopening, deleting, scheduling and moving to-dos, one or several at a time;
+- reordering, indenting and outdenting;
+- pasting a list;
+- completing a project;
+- moving projects, and adding, renaming or removing areas.
+
+Everything you change while a to-do is open (its title, description, date, repeat rule and project) counts as one change, undone together once you've closed it. While the to-do is open, `Mod+Z` in its fields undoes typing, as usual.
+
+Undo only puts a note back while it still reads exactly as Plainlist left it. If the note has changed since, in the editor or by sync, Plainlist doesn't undo, and says so. Your later changes are never overwritten.
+
+Some changes can't be undone: adding a new to-do, renaming a project, and the order you drag Today into. In a [list inside a note](lists-in-notes.md), `Mod+Z` belongs to the note's editor; use the toast's **Undo** there.
 
 ## Safe editing
 

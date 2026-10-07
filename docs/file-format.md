@@ -15,11 +15,13 @@ plainlist: true
 
 # Projects
 - [[Renovate home office]]
-- [[Q4 Planning]]
 - [x] [[Garden for spring]] [done:: 2026-10-03]
+
+## Work
+- [[Q4 Planning]]
 ```
 
-The `plainlist: true` property makes the note open in the Plainlist view. `# Inbox` holds to-dos that aren't in a project, and `# Projects` lists links to your [project](projects.md) notes.
+The `plainlist: true` property makes the note open in the Plainlist view. `# Inbox` holds to-dos that aren't in a project, and `# Projects` lists links to your [project](projects.md) notes. A heading under `# Projects`, such as `## Work`, is an [area](projects.md#areas): the links below it are its projects.
 
 ## A project note
 
@@ -45,6 +47,7 @@ The electrician is free Thursday mornings.
 | Inbox | To-dos under `# Inbox` in the task file |
 | Project | A link list item (`- [[Note]]` or `- [Note](Note.md)`) under `# Projects` in the task file |
 | Completed project | `- [x] [[Note]] [done:: YYYY-MM-DD]` |
+| Area | A heading under `# Projects` (`## Work`), followed by its projects' links. A heading with to-dos under it is not an area |
 | To-do | Any checkbox, at any indent: `- [ ] title`, `* [x] title`, `1. [ ] title` |
 | Sub-task | A checkbox indented under another one: `- [ ] parent`, then `\t- [ ] sub-task` on the next line |
 | Description | Indented lines directly under a to-do that are not themselves checkboxes |

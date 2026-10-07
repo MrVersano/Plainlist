@@ -98,6 +98,27 @@
 	font-weight: normal;
 }
 
+.pl-ring {
+	flex: none;
+	overflow: visible;
+}
+
+.pl-ring-track {
+	fill: none;
+	stroke: var(--pl-faint);
+	stroke-width: 1.25;
+}
+
+.pl-ring-fill {
+	fill: none;
+	stroke: var(--pl-accent);
+}
+
+.pl-ring.is-complete .pl-ring-track,
+.pl-ring.is-complete .pl-ring-fill {
+	stroke: var(--pl-faint);
+}
+
 .pl-nav-header {
 	margin-top: 22px;
 	padding: 0 10px 6px;
@@ -113,6 +134,50 @@
 	font-size: 14px;
 	color: var(--pl-faint);
 	border-radius: var(--pl-radius);
+}
+
+.pl-nav-adds {
+	display: flex;
+	flex-wrap: wrap;
+}
+
+/* An area: a quiet, foldable heading over its projects. */
+.pl-root button.pl-nav-area {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-height: 28px;
+	margin-top: 12px;
+	padding: 0 10px 0 6px;
+	border-radius: var(--pl-radius);
+	font-size: 12px;
+	font-weight: var(--font-medium, 500);
+	color: var(--pl-muted);
+}
+
+.pl-root button.pl-nav-area:hover {
+	background: var(--background-modifier-hover);
+}
+
+/* Dropping a project on an area's header puts it in that area. */
+.pl-root button.pl-nav-area.is-drop-before,
+.pl-root button.pl-nav-area.is-drop-after {
+	background: var(--background-modifier-hover);
+	box-shadow: inset 0 0 0 1px var(--pl-accent);
+}
+
+.pl-nav-chevron {
+	flex: none;
+	width: 8px;
+	height: 8px;
+	border-right: 1.5px solid currentColor;
+	border-bottom: 1.5px solid currentColor;
+	transform: translateY(-2px) rotate(45deg);
+	transition: transform 120ms ease;
+}
+
+.pl-nav-area.is-collapsed .pl-nav-chevron {
+	transform: rotate(-45deg);
 }
 
 .pl-root button.pl-nav-completed {
@@ -1385,4 +1450,58 @@ body.pl-quick-entry-body {
 	padding: 8px 0;
 	font-size: var(--font-ui-small);
 	color: var(--text-muted);
+}
+
+/* Swiping a to-do on a touch screen: right completes it, left schedules it. */
+.pl-row {
+	touch-action: pan-y;
+}
+
+.pl-main,
+.pl-embed {
+	overflow-x: clip;
+}
+
+.pl-root .pl-row:not(.is-swiping) {
+	transition: transform 160ms ease-out;
+}
+
+.pl-root .pl-row.is-swiping {
+	position: relative;
+	transform: translateX(var(--pl-swipe-x, 0));
+}
+
+/* What the swipe will do, behind the row as it moves aside. */
+.pl-root .pl-row.is-swipe-right::before,
+.pl-root .pl-row.is-swipe-left::after {
+	content: '';
+	position: absolute;
+	top: 0;
+	bottom: -1px;
+	width: 100%;
+	background-color: var(--pl-swipe-color);
+	background-image: var(--pl-swipe-icon);
+	background-repeat: no-repeat;
+	background-size: 20px;
+	opacity: 0.45;
+	transition: opacity 120ms ease;
+}
+
+.pl-root .pl-row.is-swipe-ready::before,
+.pl-root .pl-row.is-swipe-ready::after {
+	opacity: 1;
+}
+
+.pl-root .pl-row.is-swipe-right::before {
+	--pl-swipe-color: var(--color-green);
+	--pl-swipe-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E");
+	right: 100%;
+	background-position: right 16px center;
+}
+
+.pl-root .pl-row.is-swipe-left::after {
+	--pl-swipe-color: var(--interactive-accent);
+	--pl-swipe-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2'/%3E%3Cpath d='M16 2v4M8 2v4M3 10h18'/%3E%3C/svg%3E");
+	left: 100%;
+	background-position: left 16px center;
 }

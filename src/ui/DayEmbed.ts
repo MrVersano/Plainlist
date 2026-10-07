@@ -148,7 +148,7 @@ export class DayEmbed extends MarkdownRenderChild {
 			confirm: (title, message, cta, destructive) => confirmModal(app, title, message, cta, destructive),
 			prompt: (title, placeholder, initial, cta) => promptModal(app, title, placeholder, initial, cta),
 			hint: () => null,
-			sidebar: { load: () => ({ width: 0, hidden: true }), save: () => {} },
+			sidebar: { load: () => ({ width: 0, hidden: true }), save: () => {}, collapsed: () => [], setCollapsed: () => {} },
 			todayOrder: {
 				get: () => this.plugin.settings.todayOrder,
 				set: (keys) => this.plugin.setTodayOrder(keys),
@@ -156,7 +156,7 @@ export class DayEmbed extends MarkdownRenderChild {
 				subscribe: (fn) => this.plugin.onTodayOrderChange(fn),
 			},
 			onReveal: () => () => {},
-			onSelectionCommand: () => () => {},
+			onCommand: () => () => {},
 		};
 		const onAdd = (day: string): void => {
 			const options = this.plugin.captureOptions(file, { kind: 'today' });

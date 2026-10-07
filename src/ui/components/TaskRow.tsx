@@ -4,7 +4,8 @@ import { placeLabel, type Item, type ProjectInfo } from '../../model/lists';
 import { mentionTargets, stripRanges, targetName } from '../../mentions';
 import { findTask, setTaskDate, setTaskDescription, setTaskRepeat, setTaskTitle } from '../../model/patch';
 import { phraseBefore, recogniseEdit, stillKept } from '../../recognise';
-import type { TrackBox } from '../../store';
+import type { RunResult, TrackBox } from '../../store';
+import { mergeChanges, quoted } from '../../undo';
 import { useDebounced, useEnv, useOutsideClick } from '../env';
 import { noteLinks } from '../obsidian';
 import { AutoTextarea, Checkbox, MarkdownField, RepeatIcon, Title } from './bits';
@@ -146,6 +147,11 @@ export function TaskEditor({
 	const [kept, setKept] = useState<string[]>([]);
 	const latest = useRef({ title, description });
 	latest.current = { title, description };
+	/** Everything this editor writes, so closing it leaves one change for Mod+Z to undo. */
+	const written = useRef<Promise<RunResult>[]>([]);
+	const track = (p: Promise<RunResult>): void => {
+		written.current.push(p);
+	};
 	const open = projects.filter((p) => p.exists);
 	const choices = open.map((p) => ({ name: p.name, path: p.path, headings: workspace.doc(p.path)?.headings }));
 	const targets = mentionTargets(choices);
@@ -163,16 +169,18 @@ export function TaskEditor({
 
 	const save = useDebounced(() => {
 		const { title: newTitle, description: newDesc } = latest.current;
-		void workspace.run(
-			box.current.path,
-			(doc) => {
-				const t = findTask(doc, box.current.ref);
-				return [
-					...(newTitle.trim() !== t.title ? setTaskTitle(doc, box.current.ref, newTitle) : []),
-					...(newDesc !== t.description ? setTaskDescription(doc, box.current.ref, newDesc) : []),
-				];
-			},
-			box,
+		track(
+			workspace.run(
+				box.current.path,
+				(doc) => {
+					const t = findTask(doc, box.current.ref);
+					return [
+						...(newTitle.trim() !== t.title ? setTaskTitle(doc, box.current.ref, newTitle) : []),
+						...(newDesc !== t.description ? setTaskDescription(doc, box.current.ref, newDesc) : []),
+					];
+				},
+				box,
+			),
 		);
 	}, 400);
 
@@ -185,17 +193,27 @@ export function TaskEditor({
 		const found = recognised(typed);
 		const rest = stripRanges(typed, [found.match, found.mention, found.repeat].filter((r) => r !== null));
 		if (!rest || rest === typed.trim()) return;
-		void workspace.run(box.current.path, (doc) => setTaskTitle(doc, box.current.ref, rest), box);
+		track(workspace.run(box.current.path, (doc) => setTaskTitle(doc, box.current.ref, rest), box));
 		const date = found.match?.date;
-		if (date) void workspace.run(box.current.path, (doc) => setTaskDate(doc, box.current.ref, date), box);
+		if (date) track(workspace.run(box.current.path, (doc) => setTaskDate(doc, box.current.ref, date), box));
 		const rule = found.repeat?.rule;
-		if (rule) void workspace.run(box.current.path, (doc) => setTaskRepeat(doc, box.current.ref, rule, today, weekStart()), box);
+		if (rule) track(workspace.run(box.current.path, (doc) => setTaskRepeat(doc, box.current.ref, rule, today, weekStart()), box));
 		const target = found.mention && targets[found.mention.project];
-		if (target) void workspace.moveTask(box, target.path, target.heading && { line: target.heading.line, text: target.heading.text });
+		if (target) track(workspace.moveTask(box, target.path, target.heading && { line: target.heading.line, text: target.heading.text }));
 	};
 
-	// Collapsing unmounts the editor: save whatever is still pending.
-	useEffect(() => () => finish.current(), []);
+	// Collapsing unmounts the editor: save whatever is still pending, then keep it all as one undo.
+	useEffect(
+		() => () => {
+			finish.current();
+			const label = `Edited ${quoted(original.current || latest.current.title)}`;
+			void Promise.all(written.current).then((results) => {
+				const changes = mergeChanges(results.flatMap((r) => (r.ok ? (r.changes ?? []) : [])));
+				if (changes?.length) workspace.remember(label, { ok: true, changes });
+			});
+		},
+		[],
+	);
 	useEffect(() => titleInput.current?.focus(), []);
 	useOutsideClick(wrap, onCollapse, popover === null);
 	useDepth(wrap, item.depth);
@@ -317,7 +335,7 @@ export function TaskEditor({
 								onPick={(date) =>
 									pick(() => {
 										drop(match);
-										void workspace.run(box.current.path, (doc) => setTaskDate(doc, box.current.ref, date), box);
+										track(workspace.run(box.current.path, (doc) => setTaskDate(doc, box.current.ref, date), box));
 									})
 								}
 							/>
@@ -341,7 +359,7 @@ export function TaskEditor({
 								onPick={(rule, close) => {
 									const apply = (): void => {
 										drop(repeat);
-										void workspace.run(box.current.path, (doc) => setTaskRepeat(doc, box.current.ref, rule, today, weekStart()), box);
+										track(workspace.run(box.current.path, (doc) => setTaskRepeat(doc, box.current.ref, rule, today, weekStart()), box));
 									};
 									if (close) pick(apply);
 									else apply();
@@ -371,7 +389,7 @@ export function TaskEditor({
 								onPick={(path, heading) =>
 									pick(() => {
 										drop(mention);
-										void workspace.moveTask(box, path, heading);
+										track(workspace.moveTask(box, path, heading));
 									})
 								}
 							/>

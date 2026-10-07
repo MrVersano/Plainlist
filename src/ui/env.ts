@@ -23,7 +23,13 @@ export interface Env {
 	prompt: (title: string, placeholder: string, initial?: string, cta?: string) => Promise<string | null>;
 	/** Desktop: "Press N…" hint; null on mobile. */
 	hint: () => { hotkey: string | null } | null;
-	sidebar: { load: () => SidebarLayout; save: (layout: SidebarLayout) => void };
+	sidebar: {
+		load: () => SidebarLayout;
+		save: (layout: SidebarLayout) => void;
+		/** Names of the areas folded closed. Kept per device. */
+		collapsed: () => string[];
+		setCollapsed: (names: string[]) => void;
+	};
 	/**
 	 * The saved Today order, as `todayKey`s, and whether Today is grouped by project.
 	 * `subscribe` hears changes to either, made anywhere.
@@ -36,12 +42,15 @@ export interface Env {
 	};
 	/** Calls `fn` for each "go to this to-do" request, starting with one made before it subscribed. */
 	onReveal: (fn: (target: TaskRef) => void) => () => void;
-	/** Calls `fn` for each "Move selected to-dos" or "Schedule selected to-dos" command. */
-	onSelectionCommand: (fn: (command: SelectionCommand) => void) => () => void;
+	/** Calls `fn` for each "Move selected to-dos", "Schedule selected to-dos" or "Undo" command. */
+	onCommand: (fn: (command: ViewCommand) => void) => () => void;
 }
 
 /** A command that acts on the selected to-dos, or on the highlighted one when none is selected. */
 export type SelectionCommand = 'move' | 'schedule';
+
+/** A palette command the view's list carries out. */
+export type ViewCommand = SelectionCommand | 'undo';
 
 export const EnvContext = createContext<Env | null>(null);
 

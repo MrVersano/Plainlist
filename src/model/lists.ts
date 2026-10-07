@@ -2,7 +2,7 @@
 // today's date. Nothing here is stored.
 
 import { completedGroup, upcomingGroup } from '../dates/format';
-import type { Doc, Task } from './types';
+import type { Area, Doc, Task } from './types';
 
 export interface ProjectInfo {
 	/** Path of the project note, or the link target when the note is missing. */
@@ -15,6 +15,8 @@ export interface ProjectInfo {
 	exists: boolean;
 	done: boolean;
 	doneDate: string | null;
+	/** The sidebar area the project is in, or none. */
+	area?: Area | null;
 }
 
 /** A note Plainlist reads: the task file (project null) or a project note. */
@@ -270,17 +272,23 @@ export interface Counts {
 	today: number;
 	/** Open to-dos per project path. */
 	projects: Record<string, number>;
+	/** Completed to-dos per project path. */
+	projectsDone: Record<string, number>;
 }
 
 export function computeCounts(sources: Source[], projects: ProjectInfo[], today: string): Counts {
-	const open = allItems(sources).filter((i) => !i.task.done && !i.project?.done);
+	const items = allItems(sources);
+	const open = items.filter((i) => !i.task.done && !i.project?.done);
 	const counts: Record<string, number> = {};
-	for (const p of projects) counts[p.path] = 0;
+	const done: Record<string, number> = {};
+	for (const p of projects) counts[p.path] = done[p.path] = 0;
 	for (const i of open) if (i.project) counts[i.project.path] = (counts[i.project.path] ?? 0) + 1;
+	for (const i of items) if (i.project && i.task.done) done[i.project.path] = (done[i.project.path] ?? 0) + 1;
 	return {
 		inbox: open.filter(isInInbox).length,
 		today: open.filter((i) => isInToday(i.task, today)).length,
 		projects: counts,
+		projectsDone: done,
 	};
 }
 

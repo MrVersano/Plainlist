@@ -6,6 +6,8 @@ A project is an ordinary note. Every checkbox in it, nested ones included, is on
 
 Click **Open note ↗** under the title to open the note itself.
 
+In the sidebar, a small ring before each project's name fills up as its to-dos get done. A completed project's ring is full.
+
 ## Adding a project
 
 Click **+ New project** at the bottom of the sidebar and type:
@@ -16,6 +18,8 @@ Click **+ New project** at the bottom of the sidebar and type:
 - part of an existing note's name, then pick the note to add it as a project. Plainlist only adds a link to the task file. The note itself is not changed until you edit one of its to-dos.
 
 New to-dos for a project go after the last to-do in its note, or above its first heading if it has headings.
+
+A new project goes at the end of the projects that aren't in an [area](#areas).
 
 ## Adding projects by tag
 
@@ -35,13 +39,26 @@ Headings in a project note group its to-dos. The project view shows each heading
 
 In the project picker and the `@` list in [quick capture](quick-capture.md#picking-a-project), each project lists its headings. Pick one to add or move a to-do under it. You can also type `@Project/Heading`.
 
+## Areas
+
+Areas group projects in the sidebar, for example **Work** and **Home**. Projects that aren't in an area come first, then each area with its projects under it.
+
+![Areas in the sidebar](../assets/areas.png)
+
+- Click **+ New area** at the bottom of the sidebar and type its name.
+- To put a project in an area, drag it onto the area's name, or among the area's projects. Or right-click it and choose **Move to area…**, which also offers **No area**.
+- Click an area's name to fold it away, and again to unfold it. A folded area shows how many open to-dos its projects have. Plainlist remembers which areas are folded on each device.
+- Right-click an area to **Rename** it or **Remove area**. Removing an area, after you confirm, removes only its name: its projects stay in Plainlist and join the list above it.
+
+In the task file, an area is a heading under `# Projects`, with its projects' links below it; see the [file format](file-format.md#the-task-file). A heading there with to-dos under it, rather than links, is not an area.
+
 ## Renaming, reordering and removing
 
-Right-click a project in the sidebar to **Open note**, **Rename** or **Remove from Plainlist**.
+Right-click a project in the sidebar to **Open note**, **Rename**, **Move to area…** (once you have areas) or **Remove from Plainlist**.
 
 - **Rename** renames the note, and Obsidian updates links to it as usual. You can also click the project's title in its view to rename it.
 - **Remove from Plainlist** removes the link from the task file only. The note and its checkboxes stay as they are.
-- Drag projects in the sidebar to change their order.
+- Drag projects in the sidebar to change their order, within an area or into another one.
 
 ## Completing a project
 

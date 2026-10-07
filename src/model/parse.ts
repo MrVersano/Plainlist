@@ -3,7 +3,7 @@
 // the task file and project notes; only the task file uses `# Inbox` / `# Projects`.
 
 import { isTaskLine, parseTaskLine } from './taskLine';
-import type { Doc, Heading, LineKind, ProjectLink, Section, Task } from './types';
+import type { Area, Doc, Heading, LineKind, ProjectLink, Section, Task } from './types';
 
 const HEADING_RE = /^(#{1,6})(?:[ \t]+(.*?))?[ \t]*$/;
 const FENCE_RE = /^[ \t]*(`{3,}|~{3,})/;
@@ -143,6 +143,7 @@ export function parse(text: string): Doc {
 	let heading: Heading | null = null;
 	const tasks: Task[] = [];
 	const projectLinks: ProjectLink[] = [];
+	const areas: Area[] = [];
 	let inbox: Section | null = null;
 	let projectsSection: Section | null = null;
 	let ctx: 'none' | 'inbox' | 'projects' | 'other' = 'none';
@@ -184,6 +185,8 @@ export function parse(text: string): Doc {
 				if (h.level === 1 || ctx === 'inbox') ctx = 'other';
 				heading = { line: i, text: line, level: h.level, name: h.name, end: n };
 				grouping.push(heading);
+				// Below `# Projects`, a heading may be an area, grouping the projects after it (decided below).
+				if (ctx === 'projects') areas.push({ line: i, text: line, name: h.name, end: n });
 			}
 			continue;
 		}
@@ -192,7 +195,7 @@ export function parse(text: string): Doc {
 			const link = parseProjectLink(line);
 			if (link) {
 				kinds[i] = 'projectLink';
-				projectLinks.push({ line: i, text: line, ...link });
+				projectLinks.push({ line: i, text: line, ...link, area: null });
 				continue;
 			}
 		}
@@ -235,6 +238,20 @@ export function parse(text: string): Doc {
 		headings.find((h) => h.line > after && h.level <= maxLevel)?.line ?? n;
 	if (inbox) inbox.end = nextHeading(inbox.line, 6);
 	if (projectsSection) projectsSection.end = nextHeading(projectsSection.line, 1);
+
+	// A heading with to-dos under it is an ordinary heading (an older way of writing the
+	// task file); without, it's an area, and its projects belong to it.
+	const kept: Area[] = [];
+	for (const a of areas) {
+		const end = nextHeading(a.line, 6);
+		if (tasks.some((t) => t.line > a.line && t.line < end)) continue;
+		kinds[a.line] = 'section';
+		const at = grouping.findIndex((g) => g.line === a.line);
+		if (at !== -1) grouping.splice(at, 1);
+		kept.push(a);
+	}
+	kept.forEach((a, k) => (a.end = kept[k + 1]?.line ?? projectsSection?.end ?? n));
+	for (const link of projectLinks) link.area = kept.filter((a) => a.line < link.line).pop() ?? null;
 	for (const h of grouping) h.end = nextHeading(h.line, 6);
 
 	// A note's title, its only level-1 heading and its first heading, does not group to-dos.
@@ -255,6 +272,7 @@ export function parse(text: string): Doc {
 		inbox,
 		projectsSection,
 		projectLinks,
+		areas: kept,
 		tasks,
 		headings: grouping,
 	};

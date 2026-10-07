@@ -41,9 +41,11 @@ import {
 } from '../../model/patch';
 import { setDate } from '../../model/taskLine';
 import type { Doc, Task, TaskDate } from '../../model/types';
-import { locateLine, type TaskRef, type TrackBox } from '../../store';
-import { useEnv, useToday, useWorkspace, type SelectionCommand } from '../env';
+import { locateLine, type RunResult, type TaskRef, type TrackBox } from '../../store';
+import { quoted, type UndoEntry } from '../../undo';
+import { useEnv, useToday, useWorkspace, type SelectionCommand, type ViewCommand } from '../env';
 import { themeCheckboxRadius } from '../obsidian';
+import { AreaSuggestModal } from '../AreaSuggestModal';
 import { ProjectSuggestModal } from '../ProjectSuggestModal';
 import { useReorder } from '../reorder';
 import { Checkbox } from './bits';
@@ -307,6 +309,28 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		return () => window.clearTimeout(timer);
 	}, [toast]);
 
+	/** Shows a toast whose Undo undoes `entry`, which Mod+Z can also undo until then. */
+	const undoToast = (message: string, entry: UndoEntry | null): void =>
+		setToast({ message, undo: entry ? () => void (workspace.undo.take(entry) && entry.undo()) : undefined });
+
+	/** Keeps an undo of its own, as an action with a toast has, for Mod+Z. */
+	const keepUndo = (label: string, undo: () => void): UndoEntry =>
+		workspace.undo.push(label, () => {
+			undo();
+			return Promise.resolve(true);
+		});
+
+	/** Lets Mod+Z put back what an action wrote. */
+	const remember = (label: string, res: Promise<RunResult>): Promise<RunResult> =>
+		res.then((r) => {
+			workspace.remember(label, r);
+			return r;
+		});
+
+	const undoLast = (): void => {
+		void workspace.undoLast().then((label) => label && setToast({ message: `Undone: ${label}` }));
+	};
+
 	const stopLinger = (key: string): void => {
 		for (const t of lingerTimers.current.get(key) ?? []) window.clearTimeout(t);
 		lingerTimers.current.delete(key);
@@ -424,13 +448,14 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 	/** Re-nests a to-do and keeps it selected. */
 	const relocate = (item: Item, makeEdits: (d: Doc) => Relocation): void => {
 		const landed: { at: TaskRef | null } = { at: null };
-		void workspace
-			.run(item.path, (d) => {
+		void remember(
+			`Moved ${quoted(item.task.title)}`,
+			workspace.run(item.path, (d) => {
 				const r = makeEdits(d);
 				landed.at = { path: item.path, ref: r.landed };
 				return r.edits;
-			})
-			.then((res) => res.ok && landed.at && setFollow(landed.at));
+			}),
+		).then((res) => res.ok && landed.at && setFollow(landed.at));
 	};
 
 	const indent = (item: Item): void => {
@@ -470,10 +495,13 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		if (repeats) {
 			void workspace
 				.completeRepeating(item.path, refOf(task), today, env.weekStart(), box)
-				.then((r) => r && setToast({ message: `Next one: ${metaDate(r.date, today)}`, undo: r.undo }));
+				.then((r) => r && undoToast(`Next one: ${metaDate(r.date, today)}`, keepUndo(`Completed ${quoted(task.title)}`, r.undo)));
 			return;
 		}
-		void workspace.run(item.path, (d) => setTaskDone(d, box ? box.current.ref : refOf(item.task), !item.task.done, today), box);
+		void remember(
+			`${task.done ? 'Reopened' : 'Completed'} ${quoted(task.title)}`,
+			workspace.run(item.path, (d) => setTaskDone(d, box ? box.current.ref : refOf(item.task), !item.task.done, today), box),
+		);
 	};
 
 	const remove = async (item: Item): Promise<void> => {
@@ -486,7 +514,7 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		});
 		const removed = holder.removed;
 		if (res.ok && removed) {
-			setToast({ message: 'Deleted', undo: () => void workspace.run(item.path, (d) => restoreLines(d, removed)) });
+			undoToast('Deleted', keepUndo(`Deleted ${quoted(item.task.title)}`, () => void workspace.run(item.path, (d) => restoreLines(d, removed))));
 		}
 	};
 
@@ -537,9 +565,9 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		setExpanded(null);
 		setPicker(command);
 	};
-	const selectionCommand = useRef<(command: SelectionCommand) => void>(() => {});
-	selectionCommand.current = (command) => openPicker(command);
-	useLayoutEffect(() => env.onSelectionCommand((command) => selectionCommand.current(command)), []);
+	const viewCommand = useRef<(command: ViewCommand) => void>(() => {});
+	viewCommand.current = (command) => (command === 'undo' ? undoLast() : openPicker(command));
+	useLayoutEffect(() => env.onCommand((command) => viewCommand.current(command)), []);
 
 	const refocus = (): void => {
 		window.requestAnimationFrame(() => root.current?.focus({ preventScroll: true }));
@@ -574,12 +602,13 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		);
 		if (!results.some((r) => r.ok)) return;
 		const count = ran.reduce((n, r) => n + r.done.changed.length + r.done.repeated.length, 0);
-		setToast({
-			message: `${done ? 'Completed' : 'Reopened'} ${todos(count)}`,
-			undo: () => {
+		const message = `${done ? 'Completed' : 'Reopened'} ${todos(count)}`;
+		undoToast(
+			message,
+			keepUndo(message, () => {
 				for (const r of ran) void workspace.run(r.path, (d) => undoComplete(d, r.done));
-			},
-		});
+			}),
+		);
 	};
 
 	const removeAll = async (items: Item[]): Promise<void> => {
@@ -600,12 +629,13 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 			),
 		);
 		if (!results.some((r) => r.ok)) return;
-		setToast({
-			message: `Deleted ${todos(items.length)}`,
-			undo: () => {
+		const message = `Deleted ${todos(items.length)}`;
+		undoToast(
+			message,
+			keepUndo(message, () => {
 				for (const r of ran) void workspace.run(r.path, (d) => restoreAll(d, r.removed));
-			},
-		});
+			}),
+		);
 	};
 
 	const scheduleAll = async (items: Item[], date: TaskDate | null): Promise<void> => {
@@ -626,12 +656,12 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		);
 		if (!results.some((r) => r.ok)) return;
 		const n = todos(items.length);
-		setToast({
-			message: date === null ? `Removed the date from ${n}` : `${n}: ${metaDate(date, today)}`,
-			undo: () => {
+		undoToast(
+			date === null ? `Removed the date from ${n}` : `${n}: ${metaDate(date, today)}`,
+			keepUndo(`Scheduled ${n}`, () => {
 				for (const b of before) void workspace.run(b.path, (d) => setTaskDate(d, b.ref, b.date));
-			},
-		});
+			}),
+		);
 	};
 
 	const moveAll = async (items: Item[], projectPath: string | null, heading: { line: number; text: string } | null): Promise<void> => {
@@ -643,7 +673,9 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 			heading,
 		);
 		const name = projectPath === null ? 'the Inbox' : (projects.find((p) => p.path === projectPath)?.name ?? 'the project');
-		if (res.ok) setToast({ message: `Moved ${todos(items.length)} to ${name}` });
+		const message = `Moved ${todos(items.length)} to ${name}`;
+		workspace.remember(message, res);
+		if (res.ok) undoToast(message, res.changes?.length ? workspace.undo.peek() : null);
 	};
 
 	const rowActions: RowActions = {
@@ -755,6 +787,9 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		canDrop,
 		onDrop: reorderTo,
 		onMenu: rowMenu,
+		// Not while picking several to-dos, nor on the one being edited.
+		canSwipe: (item) => !marks.size && !isBoxed(expanded, item),
+		onSwipe: (item, dir) => (dir === 'right' ? toggle(item) : openPicker('schedule', item)),
 	});
 
 	/** The dragged row's sub-tasks move with it, so they look lifted too. */
@@ -798,7 +833,7 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		complete: (p) => {
 			const open = workspace.openTaskCount(p);
 			const go = (): void => {
-				void workspace.completeProject(p, today).then((undo) => undo && setToast({ message: 'Completed', undo }));
+				void workspace.completeProject(p, today).then((undo) => undo && undoToast('Completed', keepUndo(`Completed ${quoted(p.name)}`, undo)));
 			};
 			if (!open) return go();
 			void env
@@ -806,7 +841,16 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 				.then((ok) => ok && go());
 		},
 		reopen: (p) => void workspace.reopenProject(p),
-		move: (p, target, place) => void workspace.moveProject(p, target, place),
+		move: (p, target, place) => void remember(`Moved ${quoted(p.name)}`, workspace.moveProject(p, target, place)),
+		moveToArea: (p, area) => void remember(`Moved ${quoted(p.name)}`, workspace.moveProjectToArea(p, area)),
+		chooseArea: (p) => new AreaSuggestModal(app, workspace.areas, (area) => projectActions.moveToArea(p, area)).open(),
+		addArea: (name) => void remember(`Added the area ${quoted(name)}`, workspace.addArea(name)),
+		renameArea: (area, name) => void remember(`Renamed the area ${quoted(area.name)}`, workspace.renameArea(area, name)),
+		removeArea: (area) => {
+			void env
+				.confirm(`Remove the area “${area.name}”?`, 'Its projects stay in Plainlist, and join the list above it.', 'Remove')
+				.then((ok) => ok && void remember(`Removed the area ${quoted(area.name)}`, workspace.removeArea(area)));
+		},
 	};
 
 	const addProject = (): void => {
@@ -835,6 +879,9 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 			if (e.shiftKey && !mod) markRange(selected < 0 ? next : selected, next);
 			else if (marks.size) clearMarks();
 			setSelected(next);
+		} else if ((e.key === 'z' || e.key === 'Z') && mod && !e.altKey && !e.shiftKey) {
+			e.preventDefault();
+			if (!expanded) undoLast();
 		} else if ((e.key === 'a' || e.key === 'A') && mod && !e.altKey && !e.shiftKey) {
 			e.preventDefault();
 			if (expanded || !rows.length) return;
@@ -879,7 +926,7 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		e.preventDefault();
 		const date = list.kind === 'today' ? today : list.kind === 'someday' ? 'someday' : null;
 		const dated = tasks.map((t) => ({ ...t, date: t.date ?? date }));
-		void workspace.addTasks(list.kind === 'project' ? list.path : null, dated).then((res) => {
+		void remember(`Pasted ${todos(dated.length)}`, workspace.addTasks(list.kind === 'project' ? list.path : null, dated)).then((res) => {
 			if (res.ok) new Notice(`Added ${dated.length} to-do${dated.length === 1 ? '' : 's'}`);
 		});
 	};
@@ -973,9 +1020,14 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 							aria-label="Project actions"
 							onClick={(e) => {
 								const p = project;
-								projectMenu(p, projectActions, () => {
-									void env.prompt('Rename project', 'Project name', p.name, 'Rename').then((name) => name && projectActions.rename(p, name));
-								}).showAtMouseEvent(e);
+								projectMenu(
+									p,
+									projectActions,
+									() => {
+										void env.prompt('Rename project', 'Project name', p.name, 'Rename').then((name) => name && projectActions.rename(p, name));
+									},
+									workspace.areas.length > 0,
+								).showAtMouseEvent(e);
 							}}
 						>
 							•••
@@ -989,6 +1041,7 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 							list={list}
 							counts={counts}
 							projects={projects}
+							areas={workspace.areas}
 							masterPath={workspace.masterPath}
 							onSelect={setList}
 							actions={projectActions}

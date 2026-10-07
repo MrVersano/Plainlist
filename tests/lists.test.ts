@@ -175,7 +175,12 @@ describe('lists', () => {
 
 describe('counts', () => {
 	it('counts open Inbox (someday excluded), Today and per-project to-dos (undated included)', () => {
-		expect(computeCounts(sources, projects, TODAY)).toEqual({ inbox: 4, today: 3, projects: { 'Office.md': 5, 'Garden.md': 3 } });
+		expect(computeCounts(sources, projects, TODAY)).toEqual({
+			inbox: 4,
+			today: 3,
+			projects: { 'Office.md': 5, 'Garden.md': 3 },
+			projectsDone: { 'Office.md': 2, 'Garden.md': 0 },
+		});
 	});
 });
 

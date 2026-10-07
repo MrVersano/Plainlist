@@ -10,7 +10,7 @@ Today
 
 ![A Today list inside a note](../assets/embed.png)
 
-It shows Today's to-dos, and you can tick, edit, drag (the same order as the Today list) and right-click them as in the view. Completed to-dos stay in the list too, crossed off, below the open ones, so it also shows what you've done today. One you've just ticked stays in its place for a few seconds before it moves down.
+It shows Today's to-dos, and you can tick, edit, drag (the same order as the Today list), right-click and [swipe](todos.md#swiping-on-touch-screens) them as in the view. Completed to-dos stay in the list too, crossed off, below the open ones, so it also shows what you've done today. One you've just ticked stays in its place for a few seconds before it moves down.
 
 Click **New to-do** under the list to add one for that day.
 

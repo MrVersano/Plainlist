@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import type { Counts, ListId, ProjectInfo } from '../../model/lists';
 import { sameList } from '../../model/lists';
 import type { Place } from '../../model/patch';
+import type { Area } from '../../model/types';
 import { useEnv, type SidebarLayout } from '../env';
 import { useReorder } from '../reorder';
 
@@ -25,6 +26,13 @@ export interface ProjectActions {
 	reopen: (project: ProjectInfo) => void;
 	/** Moves a project just before or after another in the sidebar. */
 	move: (project: ProjectInfo, target: ProjectInfo, place: Place) => void;
+	/** Moves a project to the end of an area, or out of all areas. */
+	moveToArea: (project: ProjectInfo, area: Area | null) => void;
+	/** Asks which area to move a project to. */
+	chooseArea: (project: ProjectInfo) => void;
+	addArea: (name: string) => void;
+	renameArea: (area: Area, name: string) => void;
+	removeArea: (area: Area) => void;
 }
 
 export function listLabel(list: ListId, projects: ProjectInfo[]): string {
@@ -32,7 +40,7 @@ export function listLabel(list: ListId, projects: ProjectInfo[]): string {
 	return LISTS.find((l) => l.id.kind === list.kind)?.label ?? '';
 }
 
-export function projectMenu(project: ProjectInfo, actions: ProjectActions, onRename: () => void): Menu {
+export function projectMenu(project: ProjectInfo, actions: ProjectActions, onRename: () => void, hasAreas = false): Menu {
 	const menu = new Menu();
 	menu.addItem((i) =>
 		project.done
@@ -42,6 +50,9 @@ export function projectMenu(project: ProjectInfo, actions: ProjectActions, onRen
 	if (project.exists) {
 		menu.addItem((i) => i.setTitle('Open note').setIcon('file-text').onClick(() => actions.open(project)));
 		menu.addItem((i) => i.setTitle('Rename').setIcon('pencil').onClick(onRename));
+	}
+	if (hasAreas && !project.done) {
+		menu.addItem((i) => i.setTitle('Move to area…').setIcon('folder-input').onClick(() => actions.chooseArea(project)));
 	}
 	menu.addItem((i) =>
 		i
@@ -53,7 +64,28 @@ export function projectMenu(project: ProjectInfo, actions: ProjectActions, onRen
 	return menu;
 }
 
-function NameInput({ initial, onDone }: { initial: string; onDone: (name: string | null) => void }) {
+function areaMenu(area: Area, actions: ProjectActions, onRename: () => void): Menu {
+	const menu = new Menu();
+	menu.addItem((i) => i.setTitle('Rename').setIcon('pencil').onClick(onRename));
+	menu.addItem((i) =>
+		i
+			.setTitle('Remove area')
+			.setIcon('x')
+			.setWarning(true)
+			.onClick(() => actions.removeArea(area)),
+	);
+	return menu;
+}
+
+function NameInput({
+	initial,
+	onDone,
+	label = 'Project name',
+}: {
+	initial: string;
+	onDone: (name: string | null) => void;
+	label?: string;
+}) {
 	const [value, setValue] = useState(initial);
 	const finished = useRef(false);
 	const input = useRef<HTMLInputElement>(null);
@@ -67,8 +99,8 @@ function NameInput({ initial, onDone }: { initial: string; onDone: (name: string
 		<input
 			class="pl-nav-input"
 			type="text"
-			aria-label="Project name"
-			placeholder="Project name"
+			aria-label={label}
+			placeholder={label}
 			value={value}
 			ref={input}
 			onInput={(e) => setValue(e.currentTarget.value)}
@@ -192,9 +224,34 @@ function AddProject({ exclude, actions, onDone }: { exclude: Set<string>; action
 	);
 }
 
+/** A small pie of how much of a project is done: full once the project is completed. */
+export function ProgressRing({ open, done, complete }: { open: number; done: number; complete: boolean }) {
+	const total = open + done;
+	const share = complete ? 1 : total ? done / total : 0;
+	const r = 5;
+	const c = 2 * Math.PI * r;
+	return (
+		<svg class={`pl-ring${complete ? ' is-complete' : ''}`} viewBox="0 0 14 14" width="14" height="14" aria-hidden="true">
+			<circle class="pl-ring-track" cx="7" cy="7" r="6" />
+			{share > 0 && (
+				<circle
+					class="pl-ring-fill"
+					cx="7"
+					cy="7"
+					r={r / 2}
+					stroke-width={r}
+					stroke-dasharray={`${(share * c) / 2} ${c}`}
+					transform="rotate(-90 7 7)"
+				/>
+			)}
+		</svg>
+	);
+}
+
 function ProjectItem({
 	project,
 	count,
+	doneCount,
 	selected,
 	renaming,
 	onSelect,
@@ -204,6 +261,7 @@ function ProjectItem({
 }: {
 	project: ProjectInfo;
 	count: number;
+	doneCount: number;
 	selected: boolean;
 	renaming: boolean;
 	onSelect: () => void;
@@ -232,8 +290,43 @@ function ProjectItem({
 			onClick={onSelect}
 			{...drag.props}
 		>
+			<ProgressRing open={project.done ? 0 : count} done={doneCount} complete={project.done} />
 			<span class="pl-nav-label">{project.name}</span>
 			{selected && count > 0 && <span class="pl-nav-count">{count}</span>}
+		</button>
+	);
+}
+
+/** A row the sidebar's projects list can drag or drop on: a project, or an area's header. */
+type Entry = { kind: 'project'; project: ProjectInfo } | { kind: 'area'; area: Area };
+
+const areaKey = (a: Area): string => `\u0000area:${a.line}`;
+
+function AreaHeader({
+	area,
+	collapsed,
+	count,
+	onToggle,
+	drag,
+}: {
+	area: Area;
+	collapsed: boolean;
+	/** Open to-dos in the area's projects, shown while it is folded. */
+	count: number;
+	onToggle: () => void;
+	drag: { props: Record<string, unknown>; cls: string };
+}) {
+	return (
+		<button
+			type="button"
+			class={`pl-nav-area${collapsed ? ' is-collapsed' : ''}${drag.cls}`}
+			aria-expanded={!collapsed}
+			onClick={onToggle}
+			{...drag.props}
+		>
+			<span class="pl-nav-chevron" aria-hidden="true" />
+			<span class="pl-nav-label">{area.name}</span>
+			{collapsed && count > 0 && <span class="pl-nav-count">{count}</span>}
 		</button>
 	);
 }
@@ -242,6 +335,7 @@ export function Sidebar({
 	list,
 	counts,
 	projects,
+	areas,
 	masterPath,
 	onSelect,
 	actions,
@@ -249,11 +343,13 @@ export function Sidebar({
 	list: ListId;
 	counts: Counts;
 	projects: ProjectInfo[];
+	areas: Area[];
 	masterPath: string;
 	onSelect: (list: ListId) => void;
 	actions: ProjectActions;
 }) {
-	const [adding, setAdding] = useState(false);
+	const env = useEnv();
+	const [adding, setAdding] = useState<'project' | 'area' | null>(null);
 	const open = projects.filter((p) => !p.done);
 	const done = projects.filter((p) => p.done);
 	const [showDone, setShowDone] = useState(false);
@@ -262,22 +358,48 @@ export function Sidebar({
 	useEffect(() => {
 		if (viewingDone) setShowDone(true);
 	}, [viewingDone]);
+	const [collapsed, setCollapsed] = useState(() => new Set(env.sidebar.collapsed()));
+	const toggleArea = (a: Area): void => {
+		const next = new Set(collapsed);
+		if (!next.delete(a.name)) next.add(a.name);
+		setCollapsed(next);
+		env.sidebar.setCollapsed([...next]);
+	};
 	const countOf = (id: ListId): number => (id.kind === 'inbox' ? counts.inbox : id.kind === 'today' ? counts.today : 0);
-	/** Path of the project being renamed inline. */
+	/** Path of the project, or key of the area, being renamed inline. */
 	const [renaming, setRenaming] = useState<string | null>(null);
-	// Open projects can be dragged into a new order; completed ones only have the menu.
-	const reorder = useReorder<ProjectInfo>({
-		entries: projects.map((p) => ({ key: p.path, item: p })),
-		canDrag: (p) => !p.done,
-		canDrop: (a, b) => !a.done && !b.done,
-		onDrop: actions.move,
-		onMenu: (p, pos) => projectMenu(p, actions, () => setRenaming(p.path)).showAtPosition(pos),
+
+	const inArea = (a: Area | null) => open.filter((p) => (p.area?.line ?? null) === (a?.line ?? null));
+	/** Open projects in sidebar order, each area's header before its projects. */
+	const entries: Entry[] = [
+		...inArea(null).map((p): Entry => ({ kind: 'project', project: p })),
+		...areas.flatMap((a): Entry[] => [{ kind: 'area', area: a }, ...inArea(a).map((p): Entry => ({ kind: 'project', project: p }))]),
+		...done.map((p): Entry => ({ kind: 'project', project: p })),
+	];
+	const keyOf = (e: Entry): string => (e.kind === 'area' ? areaKey(e.area) : e.project.path);
+
+	// Open projects can be dragged into a new order, or onto an area's header; completed ones only have the menu.
+	const reorder = useReorder<Entry>({
+		entries: entries.map((e) => ({ key: keyOf(e), item: e })),
+		canDrag: (e) => e.kind === 'project' && !e.project.done,
+		canDrop: (a, b) => a.kind === 'project' && !a.project.done && (b.kind === 'area' || !b.project.done),
+		onDrop: (a, b, place) => {
+			if (a.kind !== 'project') return;
+			if (b.kind === 'area') actions.moveToArea(a.project, b.area);
+			else actions.move(a.project, b.project, place);
+		},
+		onMenu: (e, pos) =>
+			(e.kind === 'area'
+				? areaMenu(e.area, actions, () => setRenaming(areaKey(e.area)))
+				: projectMenu(e.project, actions, () => setRenaming(e.project.path), areas.length > 0)
+			).showAtPosition(pos),
 	});
-	const item = (p: ProjectInfo, count: number) => (
+	const item = (p: ProjectInfo) => (
 		<ProjectItem
 			key={p.path}
 			project={p}
-			count={count}
+			count={p.done ? 0 : (counts.projects[p.path] ?? 0)}
+			doneCount={counts.projectsDone[p.path] ?? 0}
 			selected={list.kind === 'project' && list.path === p.path}
 			renaming={renaming === p.path}
 			onSelect={() => onSelect({ kind: 'project', path: p.path })}
@@ -286,6 +408,35 @@ export function Sidebar({
 			actions={actions}
 		/>
 	);
+	const area = (a: Area) => {
+		const key = areaKey(a);
+		const projectsIn = inArea(a);
+		const folded = collapsed.has(a.name);
+		const header =
+			renaming === key ? (
+				<NameInput
+					key={key}
+					label="Area name"
+					initial={a.name}
+					onDone={(name) => {
+						setRenaming(null);
+						if (name && name !== a.name) actions.renameArea(a, name);
+					}}
+				/>
+			) : (
+				<AreaHeader
+					key={key}
+					area={a}
+					collapsed={folded}
+					count={projectsIn.reduce((n, p) => n + (counts.projects[p.path] ?? 0), 0)}
+					onToggle={() => toggleArea(a)}
+					drag={{ props: reorder.rowProps(key), cls: reorder.rowClass(key) }}
+				/>
+			);
+		// A folded area still shows the project being viewed.
+		const shown = folded ? projectsIn.filter((p) => list.kind === 'project' && list.path === p.path) : projectsIn;
+		return [header, ...shown.map(item)];
+	};
 
 	return (
 		<nav class="pl-sidebar" aria-label="Lists" {...reorder.scopeProps}>
@@ -306,24 +457,39 @@ export function Sidebar({
 				);
 			})}
 			<div class="pl-nav-header">Projects</div>
-			{open.map((p) => item(p, counts.projects[p.path] ?? 0))}
-			{adding ? (
+			{inArea(null).map(item)}
+			{areas.flatMap(area)}
+			{adding === 'project' ? (
 				<AddProject
 					exclude={new Set([masterPath, ...projects.map((p) => p.path)])}
 					actions={actions}
-					onDone={() => setAdding(false)}
+					onDone={() => setAdding(null)}
+				/>
+			) : adding === 'area' ? (
+				<NameInput
+					label="Area name"
+					initial=""
+					onDone={(name) => {
+						setAdding(null);
+						if (name) actions.addArea(name);
+					}}
 				/>
 			) : (
-				<button type="button" class="pl-nav-add" onClick={() => setAdding(true)}>
-					+ New project
-				</button>
+				<div class="pl-nav-adds">
+					<button type="button" class="pl-nav-add" onClick={() => setAdding('project')}>
+						+ New project
+					</button>
+					<button type="button" class="pl-nav-add" onClick={() => setAdding('area')}>
+						+ New area
+					</button>
+				</div>
 			)}
 			{done.length > 0 && (
 				<button type="button" class="pl-nav-completed" aria-expanded={showDone} onClick={() => setShowDone(!showDone)}>
 					{showDone ? 'Hide completed' : `${done.length} completed`}
 				</button>
 			)}
-			{showDone && done.map((p) => item(p, 0))}
+			{showDone && done.map(item)}
 		</nav>
 	);
 }

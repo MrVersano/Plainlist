@@ -5,12 +5,14 @@ import type { ListId } from '../model/lists';
 import type PlainlistPlugin from '../main';
 import { Workspace, type TaskRef } from '../store';
 import { App } from './components/App';
-import { EnvContext, type Env, type SelectionCommand, type SidebarLayout } from './env';
+import { EnvContext, type Env, type SidebarLayout, type ViewCommand } from './env';
 import { confirmModal, promptModal } from './modals';
 import { hotkeyLabel } from './obsidian';
 
 const SIDEBAR_KEY = 'plainlist-sidebar';
-const SIDEBAR_WIDTH = 220;
+/** Wide enough on desktop for "+ New project" and "+ New area" side by side. */
+const SIDEBAR_WIDTH = Platform.isMobile ? 220 : 250;
+const AREAS_KEY = 'plainlist-areas-collapsed';
 
 function loadSidebar(app: ObsidianApp): SidebarLayout {
 	const saved = app.loadLocalStorage(SIDEBAR_KEY) as Partial<SidebarLayout> | null;
@@ -35,7 +37,7 @@ export class PlainlistView extends FileView {
 	/** A reveal made before the UI was mounted, handed to it when it subscribes. */
 	private pendingReveal: TaskRef | null = null;
 	private revealListener: ((target: TaskRef) => void) | null = null;
-	private selectionListener: ((command: SelectionCommand) => void) | null = null;
+	private commandListener: ((command: ViewCommand) => void) | null = null;
 
 	constructor(
 		leaf: WorkspaceLeaf,
@@ -133,8 +135,8 @@ export class PlainlistView extends FileView {
 	}
 
 	/** Opens the picker for moving or scheduling the selected to-dos. */
-	selectionCommand(command: SelectionCommand): void {
-		this.selectionListener?.(command);
+	runCommand(command: ViewCommand): void {
+		this.commandListener?.(command);
 	}
 
 	private mount(workspace: Workspace): void {
@@ -152,6 +154,11 @@ export class PlainlistView extends FileView {
 			sidebar: {
 				load: () => loadSidebar(this.app),
 				save: (layout) => this.app.saveLocalStorage(SIDEBAR_KEY, layout),
+				collapsed: () => {
+					const saved: unknown = this.app.loadLocalStorage(AREAS_KEY);
+					return Array.isArray(saved) ? saved.filter((n): n is string => typeof n === 'string') : [];
+				},
+				setCollapsed: (names) => this.app.saveLocalStorage(AREAS_KEY, names),
 			},
 			todayOrder: {
 				get: () => this.plugin.settings.todayOrder,
@@ -169,10 +176,10 @@ export class PlainlistView extends FileView {
 					if (this.revealListener === fn) this.revealListener = null;
 				};
 			},
-			onSelectionCommand: (fn) => {
-				this.selectionListener = fn;
+			onCommand: (fn) => {
+				this.commandListener = fn;
 				return () => {
-					if (this.selectionListener === fn) this.selectionListener = null;
+					if (this.commandListener === fn) this.commandListener = null;
 				};
 			},
 		};
@@ -195,7 +202,7 @@ export class PlainlistView extends FileView {
 	private unmount(): void {
 		// Preact may run the old UI's effect cleanups later; it must not take reveals meanwhile.
 		this.revealListener = null;
-		this.selectionListener = null;
+		this.commandListener = null;
 		if (!this.root) return;
 		render(null, this.root);
 		this.root.remove();

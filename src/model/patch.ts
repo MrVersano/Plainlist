@@ -5,7 +5,7 @@ import { mapLine } from './apply';
 import { headingOf, isBlank, projectLinkTarget } from './parse';
 import { firstOccurrence, nextOccurrence, parseRepeat } from '../dates/repeat';
 import { formatTaskLine, parseTaskLine, setDate, setDone, setRepeat, setTitle } from './taskLine';
-import type { Doc, Heading, LineEdit, ProjectLink, Task, TaskDate } from './types';
+import type { Area, Doc, Heading, LineEdit, ProjectLink, Section, Task, TaskDate } from './types';
 
 export class PatchConflict extends Error {}
 
@@ -48,6 +48,10 @@ export function findHeading(doc: Doc, ref: LineRef): Heading {
 
 export function findProjectLink(doc: Doc, ref: LineRef): ProjectLink {
 	return locate(doc.projectLinks, ref, 'Project');
+}
+
+export function findArea(doc: Doc, ref: LineRef): Area {
+	return locate(doc.areas, ref, 'Area');
 }
 
 function replaceLine(at: number, oldText: string, newText: string): LineEdit[] {
@@ -529,7 +533,18 @@ export function moveTasksToHeading(doc: Doc, refs: LineRef[], heading: LineRef |
 
 // --- Project links in the task file ---------------------------------------
 
-/** Adds `- <link>` to the end of the project list, creating `# Projects` if needed. */
+/**
+ * Where a link goes to come last in an area, or last among the projects before any area (`area` null),
+ * and whether it needs a blank line after it to keep a heading below at arm's length.
+ */
+function areaEnd(doc: Doc, section: Section, area: Area | null): { at: number; gap: boolean } {
+	const last = doc.projectLinks.filter((p) => p.line > section.line && p.line < section.end && (p.area?.line ?? null) === (area?.line ?? null)).pop();
+	const at = last ? last.line + 1 : (area ?? section).line + 1;
+	const next = doc.lines[at];
+	return { at, gap: !last && next !== undefined && !isBlank(next) };
+}
+
+/** Adds `- <link>` to the end of the project list, before any area, creating `# Projects` if needed. */
 export function addProjectLink(doc: Doc, link: string): LineEdit[] {
 	const target = projectLinkTarget(`- ${link}`);
 	if (!target) throw new PatchConflict(`Not a link: ${link}`);
@@ -537,14 +552,14 @@ export function addProjectLink(doc: Doc, link: string): LineEdit[] {
 	const item = `- ${link}`;
 	const section = doc.projectsSection;
 	if (section) {
-		const last = doc.projectLinks.filter((p) => p.line > section.line && p.line < section.end).pop();
-		if (last) return [{ at: last.line + 1, delete: 0, insert: [item] }];
-		const at = section.line + 1;
-		const next = doc.lines[at];
-		const gap = next !== undefined && !isBlank(next) ? [''] : [];
-		return [{ at, delete: 0, insert: [item, ...gap] }];
+		const { at, gap } = areaEnd(doc, section, null);
+		return [{ at, delete: 0, insert: gap ? [item, ''] : [item] }];
 	}
-	// No `# Projects` yet: add it after the Inbox (before the next level-1 heading), or at the end.
+	return addProjectsSection(doc, [item]);
+}
+
+/** Adds a `# Projects` section holding `content`: after the Inbox (before the next level-1 heading), or at the end. */
+function addProjectsSection(doc: Doc, content: string[]): LineEdit[] {
 	let at = doc.lines.length;
 	if (doc.inbox) {
 		const inboxLine = doc.inbox.line;
@@ -554,7 +569,7 @@ export function addProjectLink(doc: Doc, link: string): LineEdit[] {
 		if (next !== -1) at = next;
 		at = beforeBlanks(doc, at, inboxLine + 1);
 	}
-	return [{ at, delete: 0, insert: block(doc, at, ['# Projects', item]).lines }];
+	return [{ at, delete: 0, insert: block(doc, at, ['# Projects', ...content]).lines }];
 }
 
 export function removeProjectLink(doc: Doc, ref: LineRef): LineEdit[] {
@@ -579,6 +594,47 @@ export function replaceProjectLink(doc: Doc, ref: LineRef, link: string): LineEd
 	const p = findProjectLink(doc, ref);
 	const marker = /^[ \t]*[-*+][ \t]+/.exec(p.text)?.[0] ?? '- ';
 	return replaceLine(p.line, p.text, `${marker}${link}`);
+}
+
+/** Moves a project's link to the end of an area, or of the projects before any area when `area` is null. */
+export function moveProjectToArea(doc: Doc, ref: LineRef, area: LineRef | null): LineEdit[] {
+	const p = findProjectLink(doc, ref);
+	const a = area ? findArea(doc, area) : null;
+	const section = doc.projectsSection;
+	if (!section || (p.area?.line ?? null) === (a?.line ?? null)) return [];
+	const { at, gap } = areaEnd(doc, section, a);
+	return [
+		{ at: p.line, delete: 1, insert: [] },
+		{ at, delete: 0, insert: gap ? [p.text, ''] : [p.text] },
+	];
+}
+
+/** Adds `## name` at the end of `# Projects`, creating the section if needed. */
+export function addArea(doc: Doc, name: string): LineEdit[] {
+	const title = name.trim();
+	if (!title) throw new PatchConflict('An area needs a name');
+	if (doc.areas.some((a) => a.name.toLowerCase() === title.toLowerCase())) throw new PatchConflict(`Already an area: ${title}`);
+	const section = doc.projectsSection;
+	if (!section) return addProjectsSection(doc, ['', `## ${title}`]);
+	const at = beforeBlanks(doc, section.end, section.line + 1);
+	return [{ at, delete: 0, insert: block(doc, at, [`## ${title}`]).lines }];
+}
+
+/** Renames an area, keeping its heading level. */
+export function renameArea(doc: Doc, ref: LineRef, name: string): LineEdit[] {
+	const a = findArea(doc, ref);
+	const title = name.trim();
+	if (!title) throw new PatchConflict('An area needs a name');
+	const prefix = /^[ \t]*#+[ \t]+/.exec(a.text)?.[0] ?? '## ';
+	return replaceLine(a.line, a.text, `${prefix}${title}`);
+}
+
+/** Removes an area's heading. Its projects stay, and join the area above (or none). */
+export function removeArea(doc: Doc, ref: LineRef): LineEdit[] {
+	const a = findArea(doc, ref);
+	// Don't leave two blank lines where the heading was.
+	const blankAround = isBlank(doc.lines[a.line - 1] ?? 'x') && isBlank(doc.lines[a.line + 1] ?? 'x');
+	return [{ at: a.line, delete: blankAround ? 2 : 1, insert: [] }];
 }
 
 /** Marks a project complete (`- [x] [[Note]] [done:: today]`) or open again (`- [[Note]]`). */

@@ -26,6 +26,10 @@ import {
 	addSubtask,
 	moveTaskNextTo,
 	moveProjectLink,
+	addArea,
+	renameArea,
+	removeArea,
+	moveProjectToArea,
 } from '../src/model/patch';
 import type { Doc, LineEdit } from '../src/model/types';
 import { changedLines, fixture, rng } from './helpers';
@@ -282,6 +286,68 @@ describe('project links', () => {
 		const renamed = run(example, (d) => replaceProjectLink(d, refOf(q4), '[[Q4 planning and review]]'));
 		expect(changedLines(example, renamed)).toEqual([10]);
 		expect(parse(renamed).projectLinks[1]!.target).toBe('Q4 planning and review');
+	});
+});
+
+describe('areas', () => {
+	const text = '# Inbox\n- [ ] a\n\n# Projects\n- [[Loose]]\n\n## Work\n- [[Q4]]\n- [[Site]]\n\n## Home\n\n# Archive\nold\n';
+
+	it('reads headings under # Projects as areas, and which area each project is in', () => {
+		const doc = parse(text);
+		expect(doc.areas.map((a) => [a.name, a.line, a.end])).toEqual([
+			['Work', 6, 10],
+			['Home', 10, 12],
+		]);
+		expect(doc.projectLinks.map((p) => [p.target, p.area?.name ?? null])).toEqual([
+			['Loose', null],
+			['Q4', 'Work'],
+			['Site', 'Work'],
+		]);
+		expect(doc.headings).toEqual([expect.objectContaining({ name: 'Archive' })]);
+	});
+
+	it('keeps a heading with to-dos under it as a heading, not an area', () => {
+		const doc = parse('# Projects\n- [[A]]\n\n## Old style\n- [ ] a to-do\n\n## Area\n- [[B]]\n');
+		expect(doc.areas.map((a) => a.name)).toEqual(['Area']);
+		expect(doc.tasks[0]!.heading?.name).toBe('Old style');
+		expect(doc.projectLinks.map((p) => p.area?.name ?? null)).toEqual([null, 'Area']);
+	});
+
+	it('adds a new project before the first area', () => {
+		expect(run(text, (d) => addProjectLink(d, '[[New]]'))).toBe(text.replace('- [[Loose]]\n', '- [[Loose]]\n- [[New]]\n'));
+		const noLoose = '# Projects\n## Work\n- [[Q4]]\n';
+		expect(run(noLoose, (d) => addProjectLink(d, '[[New]]'))).toBe('# Projects\n- [[New]]\n\n## Work\n- [[Q4]]\n');
+	});
+
+	it('adds an area at the end of # Projects', () => {
+		expect(run(text, (d) => addArea(d, 'Side'))).toBe(text.replace('## Home\n\n', '## Home\n\n## Side\n\n'));
+		expect(run('# Inbox\n- [ ] a\n', (d) => addArea(d, 'Work'))).toBe('# Inbox\n- [ ] a\n\n# Projects\n\n## Work\n');
+		expect(() => run(text, (d) => addArea(d, 'work'))).toThrow(PatchConflict);
+	});
+
+	it('renames an area, keeping its level', () => {
+		const out = run('# Projects\n### Work\n- [[A]]\n', (d) => renameArea(d, refOf(d.areas[0]!), 'Job'));
+		expect(out).toBe('# Projects\n### Job\n- [[A]]\n');
+	});
+
+	it('removes an area heading, leaving its projects', () => {
+		expect(run(text, (d) => removeArea(d, refOf(d.areas[0]!)))).toBe(text.replace('## Work\n', ''));
+		expect(run(text, (d) => removeArea(d, refOf(d.areas[1]!)))).toBe(text.replace('## Home\n\n', ''));
+	});
+
+	it('moves a project to the end of an area, or out of all areas', () => {
+		const doc = parse(text);
+		const [loose, q4] = doc.projectLinks;
+		expect(run(text, (d) => moveProjectToArea(d, refOf(loose!), refOf(d.areas[0]!)))).toBe(
+			text.replace('- [[Loose]]\n', '').replace('- [[Site]]\n', '- [[Site]]\n- [[Loose]]\n'),
+		);
+		expect(run(text, (d) => moveProjectToArea(d, refOf(q4!), null))).toBe(
+			text.replace('- [[Q4]]\n', '').replace('- [[Loose]]\n', '- [[Loose]]\n- [[Q4]]\n'),
+		);
+		expect(run(text, (d) => moveProjectToArea(d, refOf(q4!), refOf(d.areas[1]!)))).toBe(
+			text.replace('- [[Q4]]\n', '').replace('## Home\n', '## Home\n- [[Q4]]\n'),
+		);
+		expect(run(text, (d) => moveProjectToArea(d, refOf(q4!), refOf(d.areas[0]!)))).toBe(text);
 	});
 });
 
