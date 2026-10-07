@@ -14,6 +14,8 @@ It shows Today's to-dos, and you can tick, edit, drag (the same order as the Tod
 
 Click **New to-do** under the list to add one for that day.
 
+With **Group Today by project** on in [Settings](settings.md), the list shows a heading for each project, as the Today list does; completed to-dos go to the bottom of their project's group.
+
 The block reads the task file set under [Settings](settings.md).
 
 ## Using the keyboard

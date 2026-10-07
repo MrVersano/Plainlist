@@ -14,6 +14,8 @@ export interface PlainlistSettings {
 	quickEntryShortcut: string;
 	/** "Search to-dos" also finds completed to-dos. */
 	searchCompleted: boolean;
+	/** Today, in the view and in notes, shows a group per project instead of one list. */
+	groupTodayByProject: boolean;
 	/** The order the user dragged Today's to-dos into, as `todayKey`s. Not shown in the settings tab. */
 	todayOrder: string[];
 }
@@ -26,6 +28,7 @@ export const DEFAULT_SETTINGS: PlainlistSettings = {
 	quickEntryEnabled: false,
 	quickEntryShortcut: DEFAULT_SHORTCUT,
 	searchCompleted: false,
+	groupTodayByProject: false,
 	todayOrder: [],
 };
 
@@ -50,6 +53,7 @@ export class PlainlistSettingTab extends PluginSettingTab {
 			this.plugin.quickEntry?.apply();
 			this.update();
 		}
+		if (key === 'groupTodayByProject') this.plugin.todayChanged();
 	}
 
 	getSettingDefinitions(): SettingDefinitionItem[] {
@@ -81,6 +85,11 @@ export class PlainlistSettingTab extends PluginSettingTab {
 					defaultValue: DEFAULT_SETTINGS.weekStart,
 					options: { locale: `Locale default (${localeDay})`, sunday: 'Sunday', monday: 'Monday' },
 				},
+			},
+			{
+				name: 'Group Today by project',
+				desc: 'Show Today\'s to-dos under a heading for each project, with Inbox to-dos first. Lists in notes too.',
+				control: { type: 'toggle', key: 'groupTodayByProject', defaultValue: DEFAULT_SETTINGS.groupTodayByProject },
 			},
 			{
 				name: 'Search completed to-dos',

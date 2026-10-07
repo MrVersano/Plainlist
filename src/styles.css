@@ -1344,6 +1344,30 @@ body.pl-quick-entry-body {
 	font-size: 1.25em;
 }
 
+/* Group headers are h2s inside the note, so they need to outrank its heading styles. */
+.pl-embed .pl-group + .pl-group,
+.pl-embed .pl-group-header {
+	margin-top: 16px;
+}
+
+.pl-embed .pl-group:first-of-type .pl-group-header {
+	margin-top: 4px;
+}
+
+.pl-embed .pl-group-header {
+	margin-bottom: 0;
+	font-family: inherit;
+	font-size: 14px;
+	font-weight: 600;
+	line-height: 1.4;
+	color: var(--pl-muted);
+}
+
+/* The note gives whatever follows a heading a top margin. */
+.pl-embed .pl-group-header + .pl-rows {
+	margin-top: 0;
+}
+
 .pl-root.pl-embed button.pl-add-mobile {
 	margin-top: 6px;
 	min-height: 36px;

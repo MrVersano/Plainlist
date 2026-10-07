@@ -99,7 +99,7 @@ Selecting several to-dos works in the Plainlist view, not in [lists inside notes
 
 Drag a to-do to a new place. On touch screens, hold it, then drag. With the keyboard, select it and press `Alt+↑` / `Alt+↓`.
 
-- **In Today,** put to-dos in any order. Plainlist remembers it in its own data, not in your notes.
+- **In Today,** put to-dos in any order. Plainlist remembers it in its own data, not in your notes. With [Group Today by project](lists.md#today) on, a to-do moves within its project's group.
 - **Everywhere else,** the to-do's lines move in its note. So it moves among the to-dos of its own note, next to others with the same parent.
 
 Drag projects in the sidebar to reorder them.

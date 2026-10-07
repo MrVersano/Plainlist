@@ -82,11 +82,13 @@ const EMPTY: Record<ListId['kind'], string> = {
 	project: 'No to-dos in this note yet.',
 };
 
-function meta(list: ListId, item: Item, today: string): { text: string; cls?: string } {
+function meta(list: ListId, item: Item, today: string, byProject: boolean): { text: string; cls?: string } {
 	const { task } = item;
 	switch (list.kind) {
 		case 'today':
-			return isOverdue(task, today) ? { text: overdueLabel(task.date ?? today, today), cls: 'is-overdue' } : { text: placeLabel(item) };
+			return isOverdue(task, today)
+				? { text: overdueLabel(task.date ?? today, today), cls: 'is-overdue' }
+				: { text: placeLabel(item, byProject) };
 		case 'upcoming':
 		case 'someday':
 		case 'completed':
@@ -237,6 +239,7 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 	const [orderVersion, setOrderVersion] = useState(0);
 	useEffect(() => env.todayOrder.subscribe(() => setOrderVersion((v) => v + 1)), []);
 	const todayOrder = env.todayOrder.get();
+	const todayByProject = env.todayOrder.byProject();
 	const root = useRef<HTMLDivElement>(null);
 
 	const sources = useMemo(() => workspace.sources(), [version]);
@@ -332,8 +335,8 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 	useEffect(() => clearLingering, []);
 
 	const view = useMemo(
-		() => withLingering(sources, lingering, (s) => computeList(s, projects, list, today, todayOrder)),
-		[sources, lingering, list, today, todayOrder, orderVersion],
+		() => withLingering(sources, lingering, (s) => computeList(s, projects, list, today, todayOrder, todayByProject)),
+		[sources, lingering, list, today, todayOrder, todayByProject, orderVersion],
 	);
 	const counts = useMemo(() => computeCounts(sources, projects, today), [sources, today]);
 
@@ -720,13 +723,13 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 	};
 
 	/**
-	 * Today's order is free and saved by Plainlist. Elsewhere a to-do moves among its siblings
+	 * Today's order is free and saved by Plainlist, within each project when grouped. Elsewhere a to-do moves among its siblings
 	 * in its note, within its group (anywhere in a project).
 	 */
 	const groupOf = new Map(view.groups.flatMap((g) => g.items.map((i) => [i, g.key] as const)));
 	const canDrop = (a: Item, b: Item): boolean => {
 		if (!groupOf.has(a) || !groupOf.has(b) || a.task.done || b.task.done || a === b) return false;
-		if (list.kind === 'today') return true;
+		if (list.kind === 'today') return !todayByProject || groupOf.get(a) === groupOf.get(b);
 		return (
 			list.kind !== 'completed' &&
 			a.path === b.path &&
@@ -915,7 +918,7 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 				/>
 			);
 		}
-		const m = meta(list, item, today);
+		const m = meta(list, item, today, todayByProject);
 		return (
 			<TaskRow
 				key={itemKey(item)}

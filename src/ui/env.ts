@@ -24,8 +24,16 @@ export interface Env {
 	/** Desktop: "Press N…" hint; null on mobile. */
 	hint: () => { hotkey: string | null } | null;
 	sidebar: { load: () => SidebarLayout; save: (layout: SidebarLayout) => void };
-	/** The saved Today order, as `todayKey`s. `subscribe` hears changes made anywhere. */
-	todayOrder: { get: () => string[]; set: (keys: string[]) => void; subscribe: (fn: () => void) => () => void };
+	/**
+	 * The saved Today order, as `todayKey`s, and whether Today is grouped by project.
+	 * `subscribe` hears changes to either, made anywhere.
+	 */
+	todayOrder: {
+		get: () => string[];
+		set: (keys: string[]) => void;
+		byProject: () => boolean;
+		subscribe: (fn: () => void) => () => void;
+	};
 	/** Calls `fn` for each "go to this to-do" request, starting with one made before it subscribed. */
 	onReveal: (fn: (target: TaskRef) => void) => () => void;
 	/** Calls `fn` for each "Move selected to-dos" or "Schedule selected to-dos" command. */

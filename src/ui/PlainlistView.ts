@@ -156,6 +156,7 @@ export class PlainlistView extends FileView {
 			todayOrder: {
 				get: () => this.plugin.settings.todayOrder,
 				set: (keys) => this.plugin.setTodayOrder(keys),
+				byProject: () => this.plugin.settings.groupTodayByProject,
 				subscribe: (fn) => this.plugin.onTodayOrderChange(fn),
 			},
 			hint: () => (Platform.isMobile ? null : { hotkey: hotkeyLabel(this.app, NEW_TODO_COMMAND) }),

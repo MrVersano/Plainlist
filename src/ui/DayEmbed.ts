@@ -152,6 +152,7 @@ export class DayEmbed extends MarkdownRenderChild {
 			todayOrder: {
 				get: () => this.plugin.settings.todayOrder,
 				set: (keys) => this.plugin.setTodayOrder(keys),
+				byProject: () => this.plugin.settings.groupTodayByProject,
 				subscribe: (fn) => this.plugin.onTodayOrderChange(fn),
 			},
 			onReveal: () => () => {},

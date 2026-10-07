@@ -1,7 +1,7 @@
 import { Keymap, Menu, Scope } from 'obsidian';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { headerDate, metaDate, overdueLabel } from '../../dates/format';
-import { computeDay, isOverdue, moveInOrder, placeLabel, todayKey, type Item } from '../../model/lists';
+import { byProject, computeDay, isOverdue, moveInOrder, placeLabel, todayKey, type Group, type Item } from '../../model/lists';
 import { deleteTask, refOf, restoreLines, setTaskDone, type Place, type Removed } from '../../model/patch';
 import { locateLine, type TaskRef, type TrackBox } from '../../store';
 import { useEnv, useToday, useWorkspace } from '../env';
@@ -55,10 +55,15 @@ export function DayList({ date, onAdd, onExit }: { date: string | null; onAdd: (
 	/** Just-completed to-dos, by settleKey, still in place among the open ones. */
 	const [settling, setSettling] = useState<ReadonlySet<string>>(new Set());
 	const settleTimers = useRef(new Map<string, number>());
-	const rows = useMemo(
-		() => computeDay(sources, projects, day, today, env.todayOrder.get(), (i) => settling.has(settleKey(i))),
-		[sources, day, today, orderVersion, settling],
-	);
+	const grouped = env.todayOrder.byProject();
+	/** One unlabelled group, or one per project when Today is grouped by project. */
+	const groups = useMemo((): Group[] => {
+		const items = computeDay(sources, projects, day, today, env.todayOrder.get(), (i) => settling.has(settleKey(i)));
+		if (grouped) return byProject(projects, items);
+		return items.length ? [{ key: 'all', label: '', items }] : [];
+	}, [sources, day, today, orderVersion, settling, grouped]);
+	/** The rows in the order shown, for the keyboard. */
+	const rows = useMemo(() => groups.flatMap((g) => g.items), [groups]);
 
 	const unsettle = (key: string): void => {
 		window.clearTimeout(settleTimers.current.get(key));
@@ -221,9 +226,12 @@ export function DayList({ date, onAdd, onExit }: { date: string | null; onAdd: (
 			.showAtPosition(pos);
 	};
 
-	// Dragging sets Today's order, shared with the Today list, so only today's list can.
+	// Dragging sets Today's order, shared with the Today list, so only today's list can. When
+	// grouped by project, a to-do moves within its project's group.
 	const reorderable = day === today;
-	const canDrop = (a: Item, b: Item): boolean => reorderable && a !== b && !a.task.done && !b.task.done;
+	const groupOf = new Map(groups.flatMap((g) => g.items.map((i) => [i, g.key] as const)));
+	const canDrop = (a: Item, b: Item): boolean =>
+		reorderable && a !== b && !a.task.done && !b.task.done && groupOf.get(a) === groupOf.get(b);
 	const reorderTo = (item: Item, target: Item, place: Place): void => {
 		env.todayOrder.set(moveInOrder(rows.map(todayKey), todayKey(item), todayKey(target), place));
 		setFollow({ path: item.path, ref: refOf(item.task) });
@@ -296,7 +304,7 @@ export function DayList({ date, onAdd, onExit }: { date: string | null; onAdd: (
 	};
 
 	const meta = (item: Item): { text: string; cls?: string } =>
-		isOverdue(item.task, today) ? { text: overdueLabel(item.task.date ?? today, today), cls: 'is-overdue' } : { text: placeLabel(item) };
+		isOverdue(item.task, today) ? { text: overdueLabel(item.task.date ?? today, today), cls: 'is-overdue' } : { text: placeLabel(item, grouped) };
 
 	const renderRow = (item: Item) => {
 		if (expanded && isAt(expanded.box.current, item)) {
@@ -336,7 +344,21 @@ export function DayList({ date, onAdd, onExit }: { date: string | null; onAdd: (
 					<span class="pl-title">{day === today ? 'Today' : headerDate(day)}</span>
 					<span class="pl-header-date">{day === today ? headerDate(today) : past ? 'Completed' : 'Planned'}</span>
 				</header>
-				{rows.length ? <div class="pl-rows">{rows.map(renderRow)}</div> : <p class="pl-empty">{empty}</p>}
+				{!rows.length && <p class="pl-empty">{empty}</p>}
+				{grouped
+					? groups.map((g) => (
+							<section class="pl-group" key={g.key}>
+								<h2 class="pl-group-header">
+									<span class="pl-group-label">{g.label}</span>
+								</h2>
+								<div class="pl-rows">{g.items.map(renderRow)}</div>
+							</section>
+						))
+					: groups.map((g) => (
+							<div class="pl-rows" key={g.key}>
+								{g.items.map(renderRow)}
+							</div>
+						))}
 				{!past && (
 					<button type="button" class="pl-add-mobile" onClick={() => onAdd(day)}>
 						New to-do

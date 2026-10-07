@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { allItems, computeCounts, computeDay, computeList, homeList, moveInOrder, placeLabel, type ListId, type ProjectInfo, type Source } from '../src/model/lists';
+import { allItems, byProject, computeCounts, computeDay, computeList, homeList, moveInOrder, placeLabel, type ListId, type ProjectInfo, type Source } from '../src/model/lists';
 import { parse } from '../src/model/parse';
 
 const TODAY = '2026-10-04';
@@ -76,6 +76,19 @@ describe('lists', () => {
 			'Today in project',
 			'Inbox today',
 			'Overdue',
+		]);
+	});
+
+	it('Today grouped by project: Inbox first, then projects in sidebar order, saved order within each', () => {
+		const shown = (order: string[]) =>
+			computeList(sources, projects, { kind: 'today' }, TODAY, order, true).groups.map((g) => [g.label, g.items.map((i) => i.task.title)]);
+		expect(shown([])).toEqual([
+			['Inbox', ['Inbox today']],
+			['Office', ['Overdue', 'Today in project']],
+		]);
+		expect(shown(['Office.md\u0000Today in project'])).toEqual([
+			['Inbox', ['Inbox today']],
+			['Office', ['Today in project', 'Overdue']],
 		]);
 	});
 
@@ -231,6 +244,14 @@ describe('a day embedded in a note', () => {
 		]);
 	});
 
+	it('today grouped by project: each group keeps open to-dos before completed ones', () => {
+		const items = computeDay(sources, projects, TODAY, TODAY);
+		expect(byProject(projects, items).map((g) => [g.label, g.items.map((i) => i.task.title)])).toEqual([
+			['Inbox', ['Inbox today', 'Inbox done today']],
+			['Office', ['Overdue', 'Today in project']],
+		]);
+	});
+
 	it('an earlier day: only what was completed that day', () => {
 		expect(day('2026-10-01')).toEqual(['Inbox done earlier']);
 		expect(day('2026-10-02')).toEqual([]);
@@ -269,6 +290,7 @@ describe('headings in a project', () => {
 	it('labels a to-do with its project and heading', () => {
 		const item = computeList(sources, [p], { kind: 'today' }, TODAY).groups[0]!.items.find((i) => i.task.title === 'Tiles')!;
 		expect(placeLabel(item)).toBe('Office › Floor');
+		expect(placeLabel(item, true)).toBe('Floor');
 	});
 });
 

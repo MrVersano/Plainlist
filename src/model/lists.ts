@@ -65,10 +65,14 @@ const isDated = (t: Task): boolean => !!t.date && t.date !== 'someday';
 /** Open task-file to-dos belong in the Inbox, except those set aside for Someday. */
 const isInInbox = (i: Item): boolean => !i.project && i.task.date !== 'someday';
 
-/** Where a to-do lives, for row meta: `Project › Heading`, or just the project. Blank for the task file. */
-export function placeLabel(item: Item): string {
+/**
+ * Where a to-do lives, for row meta: `Project › Heading`, or just the project. Blank for the
+ * task file. Under a project's group header, only the heading.
+ */
+export function placeLabel(item: Item, inProjectGroup = false): string {
 	if (!item.project) return '';
 	const heading = item.task.heading?.name;
+	if (inProjectGroup) return heading ?? '';
 	return heading ? `${item.project.name} › ${heading}` : item.project.name;
 }
 
@@ -76,8 +80,8 @@ export function allItems(sources: Source[]): Item[] {
 	return sources.flatMap((s) => s.doc.tasks.map((task) => ({ task, path: s.path, project: s.project })));
 }
 
-/** Groups items by project in sidebar order, with Inbox items first. */
-function byProject(projects: ProjectInfo[], items: Item[]): Group[] {
+/** Groups items by project in sidebar order, with Inbox items first. Keeps their order within each group. */
+export function byProject(projects: ProjectInfo[], items: Item[]): Group[] {
 	const groups: Group[] = [];
 	const inbox = items.filter((i) => !i.project);
 	if (inbox.length) groups.push({ key: 'inbox', label: INBOX_GROUP, items: inbox });
@@ -168,6 +172,8 @@ export function computeList(
 	today: string,
 	/** Saved Today order, as `todayKey`s. */
 	todayOrder: string[] = [],
+	/** Today only: one group per project, in sidebar order, instead of a single list. */
+	todayByProject = false,
 ): ListView {
 	const items = allItems(sources);
 	const rank = sourceOrder(projects);
@@ -182,7 +188,8 @@ export function computeList(
 		case 'today': {
 			const all = open.filter((i) => isInToday(i.task, today));
 			const usual = [...all.filter((i) => isOverdue(i.task, today)), ...all.filter((i) => !isOverdue(i.task, today))];
-			return flat(inTodayOrder(usual, todayOrder));
+			const ordered = inTodayOrder(usual, todayOrder);
+			return todayByProject ? { groups: byProject(projects, ordered), completed: [] } : flat(ordered);
 		}
 		case 'upcoming': {
 			const future = open

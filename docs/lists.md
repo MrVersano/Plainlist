@@ -23,6 +23,8 @@ Today has everything due today. Each to-do shows its project on the right.
 
 **Your order:** drag to-dos in Today into any order. Plainlist remembers it in its own data, not in your notes, so it doesn't move lines around in your project notes. See [Reordering](todos.md#reordering).
 
+**Group by project:** turn on **Group Today by project** in [Settings](settings.md) to show Today's to-dos under a heading for each project, with Inbox to-dos first and projects in sidebar order. A to-do then shows only its heading on the right, and you can drag it only within its project. Lists in notes are grouped the same way.
+
 ## Upcoming
 
 ![Upcoming](../assets/upcoming.png)

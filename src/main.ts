@@ -307,6 +307,11 @@ export default class PlainlistPlugin extends Plugin {
 	setTodayOrder(keys: string[]): void {
 		this.settings.todayOrder = keys;
 		void this.saveSettings();
+		this.todayChanged();
+	}
+
+	/** Tells every Today list, in the view and in notes, that its order or grouping changed. */
+	todayChanged(): void {
 		for (const fn of this.todayOrderListeners) fn();
 	}
 
