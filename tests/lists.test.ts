@@ -59,9 +59,9 @@ const titles = (list: ListId) =>
 	computeList(sources, projects, list, TODAY).groups.map((g) => [g.label, g.items.map((i) => i.task.title)]);
 
 describe('lists', () => {
-	it('Inbox: open task-file to-dos (any date), loose ones included', () => {
+	it('Inbox: open task-file to-dos (any date but someday), loose ones included', () => {
 		expect(titles({ kind: 'inbox' })).toEqual([
-			['', ['Inbox undated', 'Inbox today', 'Inbox next week', 'Inbox someday', 'Loose to-do']],
+			['', ['Inbox undated', 'Inbox today', 'Inbox next week', 'Loose to-do']],
 		]);
 	});
 
@@ -161,8 +161,8 @@ describe('lists', () => {
 });
 
 describe('counts', () => {
-	it('counts open Inbox, Today and per-project to-dos (undated included)', () => {
-		expect(computeCounts(sources, projects, TODAY)).toEqual({ inbox: 5, today: 3, projects: { 'Office.md': 5, 'Garden.md': 3 } });
+	it('counts open Inbox (someday excluded), Today and per-project to-dos (undated included)', () => {
+		expect(computeCounts(sources, projects, TODAY)).toEqual({ inbox: 4, today: 3, projects: { 'Office.md': 5, 'Garden.md': 3 } });
 	});
 });
 

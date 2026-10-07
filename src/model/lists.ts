@@ -62,6 +62,9 @@ export const INBOX_GROUP = 'Inbox';
 
 const isDated = (t: Task): boolean => !!t.date && t.date !== 'someday';
 
+/** Open task-file to-dos belong in the Inbox, except those set aside for Someday. */
+const isInInbox = (i: Item): boolean => !i.project && i.task.date !== 'someday';
+
 /** Where a to-do lives, for row meta: `Project › Heading`, or just the project. Blank for the task file. */
 export function placeLabel(item: Item): string {
 	if (!item.project) return '';
@@ -175,7 +178,7 @@ export function computeList(
 
 	switch (list.kind) {
 		case 'inbox':
-			return flat(nested(open.filter((i) => !i.project)));
+			return flat(nested(open.filter(isInInbox)));
 		case 'today': {
 			const all = open.filter((i) => isInToday(i.task, today));
 			const usual = [...all.filter((i) => isOverdue(i.task, today)), ...all.filter((i) => !isOverdue(i.task, today))];
@@ -268,7 +271,7 @@ export function computeCounts(sources: Source[], projects: ProjectInfo[], today:
 	for (const p of projects) counts[p.path] = 0;
 	for (const i of open) if (i.project) counts[i.project.path] = (counts[i.project.path] ?? 0) + 1;
 	return {
-		inbox: open.filter((i) => !i.project).length,
+		inbox: open.filter(isInInbox).length,
 		today: open.filter((i) => isInToday(i.task, today)).length,
 		projects: counts,
 	};
@@ -280,9 +283,10 @@ export function sameList(a: ListId, b: ListId): boolean {
 
 /**
  * The list that always shows a to-do: its project (behind "N completed" when done), the
- * Inbox for open to-dos in the task file, or Completed for done ones.
+ * Inbox (or Someday) for open to-dos in the task file, or Completed for done ones.
  */
 export function homeList(item: Item): ListId {
 	if (item.project) return { kind: 'project', path: item.project.path };
-	return item.task.done ? { kind: 'completed' } : { kind: 'inbox' };
+	if (item.task.done) return { kind: 'completed' };
+	return item.task.date === 'someday' ? { kind: 'someday' } : { kind: 'inbox' };
 }
