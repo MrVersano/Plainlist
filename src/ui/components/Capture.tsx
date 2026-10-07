@@ -22,6 +22,7 @@ export function Capture({
 	projects,
 	initialProject,
 	defaultDate,
+	initialText = '',
 	links,
 	closeList,
 	onSave,
@@ -32,6 +33,8 @@ export function Capture({
 	projects: PickerProject[];
 	initialProject: string | null;
 	defaultDate: string | null;
+	/** Text to start with, e.g. from an obsidian:// URL. */
+	initialText?: string;
 	/** Notes to suggest after `[[`. */
 	links?: LinkSource;
 	/** Filled in here so the modal's Escape handler can close an open list first. */
@@ -39,7 +42,7 @@ export function Capture({
 	onSave: (result: CaptureResult) => Promise<boolean>;
 	onClose: () => void;
 }) {
-	const [text, setText] = useState('');
+	const [text, setText] = useState(initialText);
 	const [project, setProject] = useState(initialProject);
 	const [heading, setHeading] = useState<LineRef | null>(null);
 	const [picking, setPicking] = useState(false);
@@ -50,7 +53,11 @@ export function Capture({
 	const names = targets.map((t) => t.label);
 	const suggest = useSuggest({ input, value: text, onChange: setText, projects: targets, links, enabled: !picking });
 
-	useEffect(() => input.current?.focus(), []);
+	useEffect(() => {
+		const el = input.current;
+		el?.focus();
+		el?.setSelectionRange(el.value.length, el.value.length);
+	}, []);
 	const syncScroll = (): void => {
 		if (backdrop.current && input.current) backdrop.current.scrollLeft = input.current.scrollLeft;
 	};

@@ -9,6 +9,7 @@ Plainlist turns your notes into a clean, minimal task manager in Obsidian. A tas
 - **Sub-tasks:** a checkbox indented under another checkbox is its sub-task, and shows indented under it. Press `Tab` / `Shift+Tab` to indent or outdent a to-do, or right-click it and choose **Add sub-task**.
 - **To-dos:** a title, a description, a date and a project. `#tags` and `[[links]]` work in both the title and the description, and typing `[[` suggests notes. Click a to-do to edit it in place; dates and `@project` typed into its title work as in quick capture.
 - **Quick capture:** the **New to-do** command opens a small palette that understands dates as you type: "today", "tonight", "fri", "next tue", "in 3 days", "oct 20", "someday". Type `@` to pick a project, e.g. `@House Renovation 2026`.
+- **Add from other apps:** opening an `obsidian://plainlist-add?title=…` link adds a to-do to the Inbox, or fills in the New to-do palette, and supports x-callback-url. Works with Shortcuts, Drafts, Alfred and Raycast. See [Adding from other apps](#adding-from-other-apps).
 - **Paste a list:** paste lines like `- [ ] Task`, `- [] Task`, `- Task` or `[ ] Task` into Plainlist and each one becomes a to-do in the list you are on. Indented lines become sub-tasks.
 - **Search:** the **Search to-dos** command fuzzy-finds any to-do by its title or project, from anywhere in Obsidian. Pick one to jump to it in its list. Completed to-dos are left out unless you turn on **Search completed to-dos** in the settings.
 - **Go to a list:** the **Go to Inbox**, **Go to Today**, **Go to Upcoming**, **Go to No Date** and **Go to Someday** commands open Plainlist on that list. Bind them to hotkeys to switch lists from anywhere in Obsidian.
@@ -40,6 +41,23 @@ Run **Plainlist: Open** from the command palette (or click the ribbon icon). It 
 Plainlist does not set hotkeys for you. To capture from anywhere in Obsidian, bind **Plainlist: New to-do** under **Settings → Hotkeys**; `Mod+Shift+N` works well. **Plainlist: Search to-dos** is worth a hotkey too. To jump straight to a list, bind **Plainlist: Go to Inbox**, **Go to Today**, **Go to Upcoming**, **Go to No Date** or **Go to Someday**.
 
 On desktop you can also capture from any other app. Turn on **System-wide quick entry** in Plainlist's settings, and a global shortcut (`Cmd+Option+N` / `Ctrl+Alt+N` by default) opens the same palette in a small floating window while Obsidian is running. Enter saves and closes it; Escape or clicking elsewhere dismisses it.
+
+## Adding from other apps
+
+Opening an `obsidian://plainlist-add` link adds a to-do to the Inbox, so Shortcuts, Drafts, Alfred, Raycast and similar apps can capture into Plainlist:
+
+```
+obsidian://plainlist-add?title=Buy%20milk
+```
+
+| Parameter | |
+| --- | --- |
+| `title` | The to-do, URL-encoded. It is added exactly as written; date phrases are not read. |
+| `palette=true` | Opens the New to-do palette with `title` filled in, for you to check and save. There, dates and `@project` work as usual. |
+| `vault` | The vault to add to, if you have more than one (Obsidian's own parameter). |
+| `x-success` | A URL to open once the to-do is added. |
+| `x-error` | A URL to open if it could not be added, with `errorMessage` appended. |
+| `x-cancel` | With `palette=true`, a URL to open if you close the palette without saving. |
 
 ## Projects
 

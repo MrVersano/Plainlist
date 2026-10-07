@@ -1,11 +1,12 @@
-import { Notice, Platform, Plugin, TFile, WorkspaceLeaf } from 'obsidian';
+import { Notice, type ObsidianProtocolData, Platform, Plugin, TFile, WorkspaceLeaf } from 'obsidian';
 import type { CaptureOptions } from './capture';
 import { Clock } from './clock';
 import { VIEW_ICON, VIEW_TYPE } from './constants';
 import type { QuickEntryService } from './desktop/QuickEntryService';
 import { allItems, type ListId } from './model/lists';
 import { DEFAULT_SETTINGS, firstDayOfWeek, PlainlistSettings, PlainlistSettingTab } from './settings';
-import { refOf } from './model/patch';
+import { patchText } from './model/apply';
+import { addTask, refOf } from './model/patch';
 import { Workspace } from './store';
 import { ensureTasksFile } from './tasksFile';
 import { CaptureModal } from './ui/CaptureModal';
@@ -13,6 +14,7 @@ import { BLOCK_LANGUAGE, DayEmbed, WorkspacePool } from './ui/DayEmbed';
 import { PlainlistView } from './ui/PlainlistView';
 import { TaskSearchModal } from './ui/TaskSearchModal';
 import { installViewSwitch } from './viewSwitch';
+import { withParams } from './xcallback';
 
 export default class PlainlistPlugin extends Plugin {
 	settings!: PlainlistSettings;
@@ -88,6 +90,9 @@ export default class PlainlistPlugin extends Plugin {
 				return true;
 			},
 		});
+
+		// obsidian://plainlist-add?title=…, with x-callback-url's x-success, x-error and x-cancel.
+		this.registerObsidianProtocolHandler('plainlist-add', (params) => void this.addFromUrl(params));
 
 		this.addRibbonIcon(VIEW_ICON, 'Open Plainlist', () => void this.openTasksFile());
 
@@ -228,6 +233,52 @@ export default class PlainlistPlugin extends Plugin {
 			new Notice(`Plainlist: could not open the tasks file. ${e instanceof Error ? e.message : String(e)}`);
 			return null;
 		}
+	}
+
+	/**
+	 * Adds `title` to the Inbox of the tasks file as typed, with no date, or with `palette=true`
+	 * opens the New to-do palette filled in with it. Then opens the caller's x-success, x-error
+	 * (with `errorMessage`) or x-cancel URL, if given.
+	 */
+	private async addFromUrl(params: ObsidianProtocolData): Promise<void> {
+		const callback = (key: 'x-success' | 'x-error' | 'x-cancel', extra?: Record<string, string>): void => {
+			const url = withParams(params[key], extra);
+			if (url) window.open(url);
+		};
+		const fail = (message: string): void => {
+			new Notice(`Plainlist: ${message}`);
+			callback('x-error', { errorMessage: message.charAt(0).toUpperCase() + message.slice(1) });
+		};
+		const title = (params.title ?? '').replace(/\s+/g, ' ').trim();
+
+		let file: TFile;
+		try {
+			file = await ensureTasksFile(this.app, this.settings.tasksFile);
+		} catch (e) {
+			fail(`could not open the tasks file. ${e instanceof Error ? e.message : String(e)}`);
+			return;
+		}
+
+		if (params.palette === 'true') {
+			new CaptureModal(this.app, this.captureOptions(file, { kind: 'inbox' }), {
+				initialText: title,
+				onDone: (saved) => callback(saved ? 'x-success' : 'x-cancel'),
+			}).open();
+			return;
+		}
+
+		if (!title) {
+			fail('the link has no title to add.');
+			return;
+		}
+		try {
+			await this.app.vault.process(file, (text) => patchText(text, (doc) => addTask(doc, { title, date: null }, 'inbox')));
+		} catch (e) {
+			fail(`could not save. ${e instanceof Error ? e.message : String(e)}`);
+			return;
+		}
+		new Notice(`Added to the Inbox: ${title}`);
+		callback('x-success');
 	}
 
 	async loadSettings(): Promise<void> {
