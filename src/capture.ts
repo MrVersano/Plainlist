@@ -42,7 +42,7 @@ export async function startCapture(app: App, options: CaptureOptions): Promise<C
 	const save = async (result: CaptureResult): Promise<boolean> => {
 		const note = result.project === null ? null : notes.get(result.project);
 		const file = note ?? options.file;
-		const task = { title: result.title, date: result.date };
+		const task = { title: result.title, date: result.date, repeat: result.repeat };
 		const dest = !note ? 'inbox' : result.heading ? { heading: result.heading } : 'note';
 		try {
 			await app.vault.process(file, (text) => patchText(text, (doc) => addTask(doc, task, dest)));

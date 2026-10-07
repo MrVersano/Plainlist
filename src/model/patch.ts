@@ -2,7 +2,8 @@
 // action does not own, and throw PatchConflict rather than guess at a target.
 
 import { headingOf, isBlank, projectLinkTarget } from './parse';
-import { formatTaskLine, setDate, setDone, setTitle } from './taskLine';
+import { firstOccurrence, nextOccurrence, parseRepeat } from '../dates/repeat';
+import { formatTaskLine, parseTaskLine, setDate, setDone, setRepeat, setTitle } from './taskLine';
 import type { Doc, Heading, LineEdit, ProjectLink, Task, TaskDate } from './types';
 
 export class PatchConflict extends Error {}
@@ -181,6 +182,8 @@ export function insertTaskLines(doc: Doc, lines: string[], dest: Destination): I
 export interface NewTask {
 	title: string;
 	date: TaskDate | null;
+	/** A `[repeat:: …]` rule. */
+	repeat?: string | null;
 	description?: string;
 	/** How deeply it is nested under the to-dos before it: 1 is a sub-task of the closest one at 0. */
 	depth?: number;
@@ -188,7 +191,7 @@ export interface NewTask {
 
 function newTaskLines(t: NewTask): string[] {
 	const indent = '\t'.repeat(t.depth ?? 0);
-	return [formatTaskLine(t.title, false, t.date, null, `${indent}- `), ...descriptionLines(t.description ?? '', indent)];
+	return [formatTaskLine(t.title, false, t.date, null, `${indent}- `, t.repeat ?? null), ...descriptionLines(t.description ?? '', indent)];
 }
 
 export function addTask(doc: Doc, task: NewTask, dest: Destination): LineEdit[] {
@@ -214,6 +217,19 @@ export function setTaskTitle(doc: Doc, ref: LineRef, title: string): LineEdit[] 
 export function setTaskDate(doc: Doc, ref: LineRef, date: TaskDate | null): LineEdit[] {
 	const t = findTask(doc, ref);
 	return replaceLine(t.line, t.text, setDate(t.text, date));
+}
+
+/**
+ * Sets or removes a to-do's repeat rule. A to-do given a rule without a date (or with
+ * "someday") gets the rule's first date, from today.
+ */
+export function setTaskRepeat(doc: Doc, ref: LineRef, repeat: string | null, today: string, weekStart: 0 | 1): LineEdit[] {
+	const t = findTask(doc, ref);
+	const rule = repeat ? parseRepeat(repeat) : null;
+	if (repeat && !rule) throw new PatchConflict(`Not a repeat rule: ${repeat}`);
+	let line = setRepeat(t.text, repeat);
+	if (rule && (!t.date || t.date === 'someday')) line = setDate(line, firstOccurrence(rule, today, weekStart));
+	return replaceLine(t.line, t.text, line);
 }
 
 export function setTaskDescription(doc: Doc, ref: LineRef, description: string): LineEdit[] {
@@ -434,15 +450,16 @@ export function setProjectDone(doc: Doc, ref: LineRef, done: boolean, today: str
 	return replaceLine(p.line, p.text, done ? `${marker}[x] ${p.link} [done:: ${today}]` : `${marker}${p.link}`);
 }
 
-/** Completes every open to-do in a note. Returns the edits and the completed lines, for undo. */
-export function completeOpenTasks(doc: Doc, today: string): { edits: LineEdit[]; completed: LineRef[] } {
+/** Completes every open to-do in a note. Returns the edits and, for undo, each completed line and its text before. */
+export function completeOpenTasks(doc: Doc, today: string): { edits: LineEdit[]; completed: Reopen[] } {
 	const edits: LineEdit[] = [];
-	const completed: LineRef[] = [];
+	const completed: Reopen[] = [];
 	for (const t of doc.tasks) {
 		if (t.done) continue;
-		const text = setDone(t.text, true, today);
+		// Without its rule, so completing the project doesn't schedule the next one.
+		const text = setRepeat(setDone(t.text, true, today), null);
 		edits.push({ at: t.line, delete: 1, insert: [text] });
-		completed.push({ line: t.line, text });
+		completed.push({ ref: { line: t.line, text }, before: t.text });
 	}
 	return { edits, completed };
 }
@@ -457,17 +474,97 @@ export function rollOverdueTasks(doc: Doc, today: string): LineEdit[] {
 	return edits;
 }
 
-/** Reopens the given to-dos, skipping any that changed or disappeared since. */
-export function reopenTasks(doc: Doc, refs: LineRef[]): LineEdit[] {
+/** A line `completeOpenTasks` completed, and its text before, to put back on undo. */
+export interface Reopen {
+	ref: LineRef;
+	before: string;
+}
+
+/** Reopens the given to-dos as they were, skipping any that changed or disappeared since. */
+export function reopenTasks(doc: Doc, items: Reopen[]): LineEdit[] {
 	const edits: LineEdit[] = [];
-	for (const ref of refs) {
+	for (const { ref, before } of items) {
 		let t: Task;
 		try {
 			t = findTask(doc, ref);
 		} catch {
 			continue;
 		}
-		if (!edits.some((e) => e.at === t.line)) edits.push(...replaceLine(t.line, t.text, setDone(t.text, false, '')));
+		if (!edits.some((e) => e.at === t.line)) edits.push(...replaceLine(t.line, t.text, before));
 	}
 	return edits;
+}
+
+// --- Repeating to-dos -------------------------------------------------------
+
+/** What completing a repeating to-do wrote, so undo can put the lines back. */
+export interface Repeated {
+	/** The new open to-do's title line. */
+	next: LineRef;
+	/** Its date. */
+	date: string;
+	/** The lines now in the note, from the new to-do to the end of the completed one's block. */
+	lines: string[];
+	/** The completed to-do's block as it was. */
+	before: string[];
+}
+
+/**
+ * Completes a to-do with a `[repeat:: …]` rule on `done`: it is ticked and loses its rule, any
+ * sub-tasks still open are ticked with it, and a fresh copy, sub-tasks open again, goes just
+ * above it with the rule and the next date. A to-do already ticked (by hand, in the note) keeps
+ * its own completion date. Returns null when the to-do has no rule.
+ */
+export function completeRepeating(doc: Doc, ref: LineRef, done: string, weekStart: 0 | 1): { edits: LineEdit[]; repeated: Repeated } | null {
+	const t = findTask(doc, ref);
+	const rule = t.repeat ? parseRepeat(t.repeat) : null;
+	if (!rule) return null;
+	const doneOn = t.done ? (t.doneDate ?? done) : done;
+	const date = nextOccurrence(rule, t.date, doneOn, weekStart);
+	const end = Math.max(t.end, t.subtreeEnd);
+	const before = doc.lines.slice(t.line, end);
+	const copy = before.map((l, i) => {
+		const open = parseTaskLine(l) ? setDone(l, false, '') : l;
+		return i === 0 ? setDate(open, date) : open;
+	});
+	const completed = before.map((l, i) => {
+		if (i > 0) return parseTaskLine(l) ? setDone(l, true, doneOn) : l;
+		// Ticked by hand without a completion date: give it one, so it shows in Completed.
+		const open = t.done && !t.doneDate ? setDone(l, false, '') : l;
+		return setRepeat(setDone(open, true, doneOn), null);
+	});
+	const edits: LineEdit[] = [{ at: t.line, delete: 0, insert: copy }];
+	completed.forEach((l, i) => edits.push(...replaceLine(t.line + i, before[i] ?? '', l)));
+	return {
+		edits,
+		repeated: { next: { line: t.line, text: copy[0] ?? '' }, date, lines: [...copy, ...completed], before },
+	};
+}
+
+/**
+ * Schedules the next one for each ticked to-do that still has its rule, which is how a to-do
+ * ticked by hand in the note looks. A to-do nested in another one handled here waits for the
+ * next pass.
+ */
+export function spawnRepeats(doc: Doc, today: string, weekStart: 0 | 1): LineEdit[] {
+	const edits: LineEdit[] = [];
+	let taken = -1;
+	for (const t of doc.tasks) {
+		if (!t.done || !t.repeat || t.line < taken) continue;
+		const r = completeRepeating(doc, refOf(t), today, weekStart);
+		if (!r) continue;
+		edits.push(...r.edits);
+		taken = Math.max(t.end, t.subtreeEnd);
+	}
+	return edits;
+}
+
+/** Undoes `completeRepeating`: removes the new to-do and puts the completed one back as it was. */
+export function undoRepeat(doc: Doc, repeated: Repeated): LineEdit[] {
+	const at = findTask(doc, repeated.next).line;
+	const now = doc.lines.slice(at, at + repeated.lines.length);
+	if (now.length !== repeated.lines.length || now.some((l, i) => l !== repeated.lines[i])) {
+		throw new PatchConflict('The repeating to-do changed since it was completed');
+	}
+	return [{ at, delete: repeated.lines.length, insert: repeated.before }];
 }

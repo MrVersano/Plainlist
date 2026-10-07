@@ -7,8 +7,11 @@ import {
 	addTask,
 	addTasks,
 	completeOpenTasks,
+	completeRepeating,
 	reopenTasks,
 	rollOverdueTasks,
+	spawnRepeats,
+	undoRepeat,
 	setProjectDone,
 	extractTask,
 	insertTaskLines,
@@ -21,6 +24,8 @@ import {
 	type LineRef,
 	type NewTask,
 	type Place,
+	type Reopen,
+	type Repeated,
 } from './model/patch';
 import type { Doc, LineEdit } from './model/types';
 import { notePath, projectNameError, resolveProjects } from './projects';
@@ -68,6 +73,9 @@ export class Workspace {
 	private disposers: (() => void)[] = [];
 	private resolving: Promise<void> | null = null;
 	private resolveAgain = false;
+	/** The day and week start `tidy` last ran with; notes changed elsewhere are tidied with them. */
+	private today = '';
+	private weekStart: 0 | 1 = 1;
 
 	constructor(
 		private app: App,
@@ -197,11 +205,41 @@ export class Workspace {
 		return job;
 	}
 
-	/** Moves overdue to-dos in every note to today, so the date in the note matches where they show. */
-	rollOverdue(today: string): void {
-		for (const s of this.sources()) {
-			if (rollOverdueTasks(s.doc, today).length) void this.run(s.path, (d) => rollOverdueTasks(d, today));
-		}
+	/**
+	 * Daily upkeep in every note: schedules the next one for repeating to-dos ticked by hand,
+	 * then moves overdue to-dos to today, so the date in the note matches where they show.
+	 */
+	tidy(today: string, weekStart: 0 | 1): void {
+		this.today = today;
+		this.weekStart = weekStart;
+		for (const s of this.sources()) this.tidyNote(s.path, s.doc, true);
+	}
+
+	private tidyNote(path: string, doc: Doc, roll: boolean): void {
+		const { today, weekStart } = this;
+		if (!today) return;
+		if (spawnRepeats(doc, today, weekStart).length) void this.run(path, (d) => spawnRepeats(d, today, weekStart));
+		if (roll && rollOverdueTasks(doc, today).length) void this.run(path, (d) => rollOverdueTasks(d, today));
+	}
+
+	/**
+	 * Completes a repeating to-do and adds the next one. Returns the next one's date and an
+	 * undo, or null when it failed or the to-do has no rule.
+	 */
+	async completeRepeating(path: string, ref: LineRef, today: string, weekStart: 0 | 1, box?: TrackBox): Promise<{ date: string; undo: () => void } | null> {
+		const holder: { repeated: Repeated | null } = { repeated: null };
+		const res = await this.run(
+			path,
+			(d) => {
+				const r = completeRepeating(d, box?.current.path === path ? box.current.ref : ref, today, weekStart);
+				holder.repeated = r?.repeated ?? null;
+				return r?.edits ?? [];
+			},
+			box,
+		);
+		const done = holder.repeated;
+		if (!res.ok || !done) return null;
+		return { date: done.date, undo: () => void this.run(path, (d) => undoRepeat(d, done)) };
 	}
 
 	// --- Projects -----------------------------------------------------------
@@ -240,7 +278,7 @@ export class Workspace {
 	 * Returns an undo that reopens the project and exactly the to-dos it completed.
 	 */
 	async completeProject(project: ProjectInfo, today: string): Promise<(() => void) | null> {
-		let completed: LineRef[] = [];
+		let completed: Reopen[] = [];
 		if (project.exists && this.openTaskCount(project) > 0) {
 			const res = await this.run(project.path, (d) => {
 				const r = completeOpenTasks(d, today);
@@ -362,6 +400,8 @@ export class Workspace {
 		state.doc = parse(text);
 		if (state === this.master) await this.resolve();
 		else this.notify();
+		// A repeating to-do ticked by hand gets its next one straight away.
+		this.tidyNote(f.path, state.doc, false);
 	}
 
 	private scheduleResolve(): void {

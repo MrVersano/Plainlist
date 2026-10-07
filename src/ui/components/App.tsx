@@ -425,10 +425,19 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 
 	const toggle = (item: Item): void => {
 		// Completed shows done to-dos anyway; elsewhere a completed one lingers, crossed off.
-		const key = lingerKey(item.path, item.task.line);
-		if (item.task.done) unlinger(key);
+		// A repeating one's next to-do goes above it, so it lingers that many lines further down.
+		const { task } = item;
+		const repeats = !task.done && task.repeat !== null;
+		const key = lingerKey(item.path, repeats ? Math.max(task.end, task.subtreeEnd) : task.line);
+		if (task.done) unlinger(key);
 		else if (list.kind !== 'completed') linger(key);
 		const box = isBoxed(expanded, item) ? (expanded ?? undefined) : undefined;
+		if (repeats) {
+			void workspace
+				.completeRepeating(item.path, refOf(task), today, env.weekStart(), box)
+				.then((r) => r && setToast({ message: `Next one: ${metaDate(r.date, today)}`, undo: r.undo }));
+			return;
+		}
 		void workspace.run(item.path, (d) => setTaskDone(d, box ? box.current.ref : refOf(item.task), !item.task.done, today), box);
 	};
 

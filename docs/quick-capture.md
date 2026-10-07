@@ -1,6 +1,6 @@
 # Quick capture
 
-The **Plainlist: New to-do** command opens a small palette for adding a to-do from anywhere in Obsidian. It understands dates and projects as you type. Bind it to a hotkey under **Settings → Hotkeys**; `Mod+Shift+N` works well.
+The **Plainlist: New to-do** command opens a small palette for adding a to-do from anywhere in Obsidian. It understands dates, repeat rules and projects as you type. Bind it to a hotkey under **Settings → Hotkeys**; `Mod+Shift+N` works well.
 
 ![Quick capture](../assets/capture.png)
 
@@ -26,6 +26,14 @@ Text inside `[[links]]`, `` `code` ``, URLs and `#tags` is never read as a date.
 
 The first day of the week comes from the **Week starts on** [setting](settings.md).
 
+## Repeating
+
+Type a rule starting with "every" to make the to-do [repeat](todos.md#repeating-to-dos). "Water plants every 3 days" becomes "Water plants", repeating every 3 days. Add "when done" to count from the day you complete it: "Check engine oil every month when done".
+
+The palette shows the rule it read. Without a date in the title, the to-do gets the rule's first date: today for "every 3 days", the next 2nd Monday of a month for "every 2nd monday". A date phrase sets the first date instead.
+
+See [Rules](todos.md#rules) for every rule Plainlist understands.
+
 ## Picking a project
 
 Type `@` to pick a project, e.g. `@House Renovation 2026`. A list appears as you type, with each project's headings under it:
@@ -38,7 +46,7 @@ Without a project, the to-do goes to the Inbox. When you open the palette from a
 
 ## The same parsing elsewhere
 
-Dates and `@project` also work when you edit a to-do's title in the view (see [Editing a to-do](todos.md#editing-a-to-do)).
+Dates, repeat rules and `@project` also work when you edit a to-do's title in the view (see [Editing a to-do](todos.md#editing-a-to-do)).
 
 ## System-wide quick entry
 

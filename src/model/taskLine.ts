@@ -1,11 +1,12 @@
 // Reading and rewriting a single to-do line, e.g.
-// `  - [x] Order cable trays #errands [date:: 2026-10-04] [done:: 2026-10-02]`.
+// `  - [x] Order cable trays #errands [date:: 2026-10-04] [repeat:: every week] [done:: 2026-10-02]`.
 // Any indent and list marker (`-`, `*`, `+`, `1.`, `1)`) is accepted and kept.
 
+import { parseRepeat } from '../dates/repeat';
 import type { TaskDate } from './types';
 
 const TASK_RE = /^([ \t]*)([-*+]|\d+[.)])[ \t]+\[([ xX])\](?:[ \t]+(.*))?$/;
-const FIELD_RE = /\[(date|done)::[ \t]*([^\]]*?)[ \t]*\]/gi;
+const FIELD_RE = /\[(date|repeat|done)::[ \t]*([^\]]*?)[ \t]*\]/gi;
 const ISO_RE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 
 export interface FieldMatch {
@@ -22,6 +23,8 @@ export interface TaskLine {
 	prefix: string;
 	title: string;
 	date: FieldMatch | null;
+	/** A `[repeat:: …]` field with a rule `parseRepeat` reads. */
+	repeat: FieldMatch | null;
 	doneField: FieldMatch | null;
 }
 
@@ -45,6 +48,7 @@ export function parseTaskLine(line: string): TaskLine | null {
 	const restStart = line.length - rest.length;
 	const prefix = line.slice(0, line.indexOf('['));
 	let date: FieldMatch | null = null;
+	let repeat: FieldMatch | null = null;
 	let doneField: FieldMatch | null = null;
 
 	for (const f of rest.matchAll(FIELD_RE)) {
@@ -56,18 +60,20 @@ export function parseTaskLine(line: string): TaskLine | null {
 		if (name === 'date' && !date) {
 			const value = normaliseDate(raw);
 			if (value) date = { start, end, value };
+		} else if (name === 'repeat' && !repeat) {
+			if (parseRepeat(raw)) repeat = { start, end, value: raw.trim().replace(/\s+/g, ' ') };
 		} else if (name === 'done' && !doneField && ISO_RE.test(raw)) {
 			doneField = { start, end, value: raw };
 		}
 	}
 
 	let title = line;
-	for (const f of [date, doneField].filter((x): x is FieldMatch => !!x).sort((a, b) => b.start - a.start)) {
+	for (const f of [date, repeat, doneField].filter((x): x is FieldMatch => !!x).sort((a, b) => b.start - a.start)) {
 		title = title.slice(0, f.start) + title.slice(f.end);
 	}
 	title = title.slice(restStart).trim();
 
-	return { done: m[3] !== ' ', indent: m[1] ?? '', prefix, title, date, doneField };
+	return { done: m[3] !== ' ', indent: m[1] ?? '', prefix, title, date, repeat, doneField };
 }
 
 export function formatTaskLine(
@@ -76,9 +82,11 @@ export function formatTaskLine(
 	date: TaskDate | null,
 	doneDate: string | null,
 	prefix = '- ',
+	repeat: string | null = null,
 ): string {
 	let line = `${prefix}[${done ? 'x' : ' '}] ${title.trim()}`;
 	if (date) line += ` [date:: ${date}]`;
+	if (repeat) line += ` [repeat:: ${repeat}]`;
 	if (done && doneDate) line += ` [done:: ${doneDate}]`;
 	return line.trimEnd();
 }
@@ -97,7 +105,7 @@ export function setDone(line: string, done: boolean, today: string): string {
 	return out;
 }
 
-/** Sets, replaces or removes the `date` field. A new field goes at the end, before any `done` field. */
+/** Sets, replaces or removes the `date` field. A new field goes at the end, before any `repeat` or `done` field. */
 export function setDate(line: string, date: TaskDate | null): string {
 	const t = parseTaskLine(line);
 	if (!t) return line;
@@ -106,13 +114,26 @@ export function setDate(line: string, date: TaskDate | null): string {
 		return line.slice(0, t.date.start) + field + line.slice(t.date.end);
 	}
 	if (!date) return line;
-	const at = t.doneField ? t.doneField.start : line.trimEnd().length;
+	const at = t.repeat?.start ?? t.doneField?.start ?? line.trimEnd().length;
 	return `${line.slice(0, at)} [date:: ${date}]${line.slice(at)}`;
+}
+
+/** Sets, replaces or removes the `repeat` field. A new field goes at the end, before any `done` field. */
+export function setRepeat(line: string, repeat: string | null): string {
+	const t = parseTaskLine(line);
+	if (!t) return line;
+	if (t.repeat) {
+		const field = repeat ? ` [repeat:: ${repeat}]` : '';
+		return line.slice(0, t.repeat.start) + field + line.slice(t.repeat.end);
+	}
+	if (!repeat) return line;
+	const at = t.doneField ? t.doneField.start : line.trimEnd().length;
+	return `${line.slice(0, at)} [repeat:: ${repeat}]${line.slice(at)}`;
 }
 
 /** Replaces the title, keeping the line's indent, marker and fields. */
 export function setTitle(line: string, title: string): string {
 	const t = parseTaskLine(line);
 	if (!t || t.title === title.trim()) return line;
-	return formatTaskLine(title, t.done, t.date?.value ?? null, t.doneField?.value ?? null, t.prefix);
+	return formatTaskLine(title, t.done, t.date?.value ?? null, t.doneField?.value ?? null, t.prefix, t.repeat?.value ?? null);
 }

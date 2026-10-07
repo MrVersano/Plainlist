@@ -539,6 +539,26 @@
 	color: var(--pl-muted);
 }
 
+.pl-row-repeat {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	height: 22px;
+	padding: 11px 0;
+	box-sizing: content-box;
+	color: var(--pl-faint);
+}
+
+.pl-repeat-icon {
+	width: 13px;
+	height: 13px;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 2;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
 .pl-tag {
 	color: var(--pl-accent);
 	cursor: pointer;
@@ -865,6 +885,16 @@
 
 .pl-root .pl-date-shortcuts button:not(.clickable-icon):hover {
 	background: var(--background-modifier-hover);
+}
+
+.pl-repeat-from-done {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 2px 2px;
+	font-size: 13px;
+	color: var(--pl-muted);
+	cursor: pointer;
 }
 
 .pl-project-options {

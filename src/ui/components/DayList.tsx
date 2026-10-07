@@ -1,6 +1,6 @@
 import { Keymap, Menu, Scope } from 'obsidian';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { headerDate, overdueLabel } from '../../dates/format';
+import { headerDate, metaDate, overdueLabel } from '../../dates/format';
 import { computeDay, isOverdue, moveInOrder, placeLabel, todayKey, type Item } from '../../model/lists';
 import { deleteTask, refOf, restoreLines, setTaskDone, type Place, type Removed } from '../../model/patch';
 import { locateLine, type TaskRef, type TrackBox } from '../../store';
@@ -148,9 +148,19 @@ export function DayList({ date, onAdd, onExit }: { date: string | null; onAdd: (
 	}, [expanded, expandedVisible]);
 
 	const toggle = (item: Item): void => {
-		if (item.task.done) unsettle(settleKey(item));
-		else settle(settleKey(item));
+		const { task } = item;
+		const repeats = !task.done && task.repeat !== null;
+		// A repeating one's next to-do goes above it, so it settles that many lines further down.
+		const key = repeats ? `${item.path}:${Math.max(task.end, task.subtreeEnd)}` : settleKey(item);
+		if (task.done) unsettle(key);
+		else settle(key);
 		const tracked = isAt(box?.current ?? null, item) ? (box ?? undefined) : undefined;
+		if (repeats) {
+			void workspace
+				.completeRepeating(item.path, refOf(task), today, env.weekStart(), tracked)
+				.then((r) => r && setToast({ message: `Next one: ${metaDate(r.date, today)}`, undo: r.undo }));
+			return;
+		}
 		void workspace.run(item.path, (d) => setTaskDone(d, tracked ? tracked.current.ref : refOf(item.task), !item.task.done, today), tracked);
 	};
 

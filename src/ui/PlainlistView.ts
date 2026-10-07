@@ -66,7 +66,7 @@ export class PlainlistView extends FileView {
 		this.addAction('file-text', 'Open as Markdown', () => void this.plugin.openAsMarkdown(this.leaf));
 		this.contentEl.addClass('pl-view');
 		// At midnight, yesterday's open to-dos move to the new day.
-		this.register(this.plugin.clock.subscribe(() => this.workspace?.rollOverdue(this.plugin.clock.today)));
+		this.register(this.plugin.clock.subscribe(() => this.workspace?.tidy(this.plugin.clock.today, this.plugin.weekStart())));
 		// Take keyboard focus when this tab becomes active, so N and the arrow keys work.
 		this.registerEvent(
 			this.app.workspace.on('active-leaf-change', (leaf) => {
@@ -80,7 +80,7 @@ export class PlainlistView extends FileView {
 	async onLoadFile(file: TFile): Promise<void> {
 		this.workspace = new Workspace(this.app, file);
 		await this.workspace.load();
-		this.workspace.rollOverdue(this.plugin.clock.today);
+		this.workspace.tidy(this.plugin.clock.today, this.plugin.weekStart());
 		this.mount(this.workspace);
 	}
 

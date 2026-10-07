@@ -54,7 +54,7 @@ const CUSTOM: Custom[] = [
 ];
 
 /** Ranges that must never be read as dates: [[links]], `code`, URLs and #tags. */
-function protectedRanges(text: string): [number, number][] {
+export function protectedRanges(text: string): [number, number][] {
 	const ranges: [number, number][] = [];
 	for (const re of [/\[\[[^\]]*\]\]/g, /`[^`]*`/g, /\b(?:https?:\/\/|www\.)\S+/gi, /#[^\s#]+/g]) {
 		for (const m of text.matchAll(re)) ranges.push([m.index ?? 0, (m.index ?? 0) + m[0].length]);
@@ -62,7 +62,7 @@ function protectedRanges(text: string): [number, number][] {
 	return ranges;
 }
 
-function blank(text: string, ranges: [number, number][]): string {
+export function blank(text: string, ranges: [number, number][]): string {
 	let out = text;
 	for (const [a, b] of ranges) out = out.slice(0, a) + ' '.repeat(b - a) + out.slice(b);
 	return out;

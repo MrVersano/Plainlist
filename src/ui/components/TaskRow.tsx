@@ -2,13 +2,13 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { addDays, longDate } from '../../dates/format';
 import { placeLabel, type Item, type ProjectInfo } from '../../model/lists';
 import { mentionTargets, stripRanges, targetName } from '../../mentions';
-import { findTask, setTaskDate, setTaskDescription, setTaskTitle } from '../../model/patch';
+import { findTask, setTaskDate, setTaskDescription, setTaskRepeat, setTaskTitle } from '../../model/patch';
 import { recogniseEdit } from '../../recognise';
 import type { TrackBox } from '../../store';
 import { useDebounced, useEnv, useOutsideClick } from '../env';
 import { noteLinks } from '../obsidian';
-import { AutoTextarea, Checkbox, MarkdownField, Title } from './bits';
-import { DatePopover, ProjectPicker } from './popovers';
+import { AutoTextarea, Checkbox, MarkdownField, RepeatIcon, Title } from './bits';
+import { DatePopover, ProjectPicker, RepeatPopover } from './popovers';
 import { highlighted, type Mark, useSuggest } from './suggest';
 
 export interface RowActions {
@@ -68,6 +68,11 @@ export function TaskRow({
 			<button type="button" class="pl-row-title" onClick={() => actions.onExpand(item)}>
 				{task.title ? <Title text={task.title} sourcePath={item.path} /> : <span class="pl-untitled">New to-do</span>}
 			</button>
+			{task.repeat && !task.done && (
+				<span class="pl-row-repeat" aria-label={`Repeats ${task.repeat}`}>
+					<RepeatIcon />
+				</span>
+			)}
 			{meta && <span class={`pl-row-meta ${metaClass ?? ''}`}>{meta}</span>}
 		</div>
 	);
@@ -109,7 +114,7 @@ export function TaskEditor({
 	const { task } = item;
 	const [title, setTitle] = useState(task.title);
 	const [description, setDescription] = useState(task.description);
-	const [popover, setPopover] = useState<'date' | 'project' | null>(null);
+	const [popover, setPopover] = useState<'date' | 'repeat' | 'project' | null>(null);
 	const wrap = useRef<HTMLDivElement>(null);
 	const titleInput = useRef<HTMLTextAreaElement>(null);
 	/** The title as the editor opened: dates and @projects already in it are plain text. */
@@ -128,7 +133,7 @@ export function TaskEditor({
 	};
 	const suggest = useSuggest({ input: titleInput, value: title, onChange: onTitle, projects: targets, links });
 	const recognised = (text: string) => recogniseEdit(text, original.current, names, today, weekStart());
-	const { match, mention } = recognised(title);
+	const { match, mention, repeat } = recognised(title);
 
 	const save = useDebounced(() => {
 		const { title: newTitle, description: newDesc } = latest.current;
@@ -152,11 +157,13 @@ export function TaskEditor({
 		if (onDiscard && !latest.current.title.trim() && !latest.current.description.trim()) return onDiscard();
 		const typed = latest.current.title;
 		const found = recognised(typed);
-		const rest = stripRanges(typed, [found.match, found.mention].filter((r) => r !== null));
+		const rest = stripRanges(typed, [found.match, found.mention, found.repeat].filter((r) => r !== null));
 		if (!rest || rest === typed.trim()) return;
 		void workspace.run(box.current.path, (doc) => setTaskTitle(doc, box.current.ref, rest), box);
 		const date = found.match?.date;
 		if (date) void workspace.run(box.current.path, (doc) => setTaskDate(doc, box.current.ref, date), box);
+		const rule = found.repeat?.rule;
+		if (rule) void workspace.run(box.current.path, (doc) => setTaskRepeat(doc, box.current.ref, rule, today, weekStart()), box);
 		const target = found.mention && targets[found.mention.project];
 		if (target) void workspace.moveTask(box, target.path, target.heading && { line: target.heading.line, text: target.heading.text });
 	};
@@ -182,8 +189,10 @@ export function TaskEditor({
 
 	const marks: Mark[] = [];
 	if (match) marks.push({ start: match.index, end: match.end, cls: 'pl-capture-date' });
+	if (repeat) marks.push({ start: repeat.index, end: repeat.end, cls: 'pl-capture-date' });
 	if (mention) marks.push({ start: mention.index, end: mention.end, cls: 'pl-capture-mention' });
 	const dateText = match ? dateLabel(match.date, today) : dateLabel(task.date, today);
+	const repeatText = repeat ? repeat.rule : task.repeat;
 	const mentioned = mention ? targets[mention.project] : undefined;
 	const projectName = mentioned ? targetName(mentioned) : placeLabel(item) || undefined;
 
@@ -277,6 +286,32 @@ export function TaskEditor({
 										void workspace.run(box.current.path, (doc) => setTaskDate(doc, box.current.ref, date), box);
 									})
 								}
+							/>
+						)}
+					</div>
+					<div class="pl-field">
+						<span class="pl-field-label">Repeat{repeat && <span class="pl-field-note"> · from “{repeat.text}”</span>}</span>
+						<button
+							type="button"
+							class={`pl-field-button${repeatText ? '' : ' is-empty'}`}
+							aria-haspopup="dialog"
+							aria-expanded={popover === 'repeat'}
+							onClick={() => setPopover(popover === 'repeat' ? null : 'repeat')}
+						>
+							{repeatText ?? 'Never'}
+						</button>
+						{popover === 'repeat' && (
+							<RepeatPopover
+								current={task.repeat}
+								onClose={() => setPopover(null)}
+								onPick={(rule, close) => {
+									const apply = (): void => {
+										drop(repeat);
+										void workspace.run(box.current.path, (doc) => setTaskRepeat(doc, box.current.ref, rule, today, weekStart()), box);
+									};
+									if (close) pick(apply);
+									else apply();
+								}}
 							/>
 						)}
 					</div>

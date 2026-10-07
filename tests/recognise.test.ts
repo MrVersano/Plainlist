@@ -43,3 +43,30 @@ describe('recogniseEdit', () => {
 		expect(edited('Today: plan, then today', 'Today: plan')).toEqual({ date: 'today', project: null });
 	});
 });
+
+describe('repeat rules', () => {
+	const rule = (text: string) => {
+		const { match, repeat } = recognise(text, NAMES, TODAY, 1);
+		return { date: match?.text ?? null, repeat: repeat?.rule ?? null };
+	};
+
+	it('finds the rule, and does not read its weekday as a date', () => {
+		expect(rule('Bins out every Mon')).toEqual({ date: null, repeat: 'every mon' });
+		expect(rule('Check engine oil every month when done')).toEqual({ date: null, repeat: 'every month when done' });
+		expect(rule('Book club every 2nd monday')).toEqual({ date: null, repeat: 'every 2nd monday' });
+		expect(rule('Backups every last sunday when done')).toEqual({ date: null, repeat: 'every last sunday when done' });
+	});
+
+	it('finds a date next to it', () => {
+		expect(rule('Water plants every 3 days from fri')).toEqual({ date: 'fri', repeat: 'every 3 days' });
+	});
+
+	it('leaves titles without "every" alone', () => {
+		expect(rule('Weekly review')).toEqual({ date: null, repeat: null });
+	});
+
+	it('only counts a rule typed during an edit', () => {
+		expect(recogniseEdit('Bins every mon', 'Bins every mon', NAMES, TODAY, 1).repeat).toBeNull();
+		expect(recogniseEdit('Bins every mon', 'Bins', NAMES, TODAY, 1).repeat?.rule).toBe('every mon');
+	});
+});

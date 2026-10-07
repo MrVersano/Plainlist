@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { longDate } from '../../dates/format';
+import { firstOccurrence, parseRepeat } from '../../dates/repeat';
 import { type Mention, mentionTargets, stripRanges, targetName } from '../../mentions';
 import { pastedTasks } from '../../model/paste';
 import { recognise } from '../../recognise';
@@ -10,6 +11,8 @@ import { highlighted, type LinkSource, type Mark, useSuggest } from './suggest';
 export interface CaptureResult {
 	title: string;
 	date: string | null;
+	/** A `[repeat:: …]` rule, or null. */
+	repeat: string | null;
 	/** Project note path, or null for the Inbox. */
 	project: string | null;
 	/** A heading in the project note to add the to-do under. */
@@ -63,8 +66,14 @@ export function Capture({
 	};
 	useEffect(syncScroll, [text]);
 
-	const { mention, match } = recognise(text, names, today, weekStart);
-	const date = match?.date ?? defaultDate;
+	/** The typed date; for a repeating to-do without one, the rule's first date; or the default. */
+	const dateFor = (found: ReturnType<typeof recognise>): string | null => {
+		const rule = found.repeat && parseRepeat(found.repeat.rule);
+		return found.match?.date ?? (rule ? firstOccurrence(rule, today, weekStart) : defaultDate);
+	};
+	const recognised = recognise(text, names, today, weekStart);
+	const { mention, match, repeat } = recognised;
+	const date = dateFor(recognised);
 	const mentioned = mention ? targets[mention.project] : undefined;
 	const chosen = mention ? (mentioned?.path ?? null) : project;
 	const chosenHeading = mention ? (mentioned?.heading ?? null) : heading;
@@ -92,8 +101,8 @@ export function Capture({
 		// Read the input itself: a fast Enter can arrive before the last keystroke re-renders.
 		const typed = input.current?.value ?? text;
 		const found = recognise(typed, names, today, weekStart);
-		const title = stripRanges(typed, [found.match, found.mention].filter((r) => r !== null));
-		const date = found.match?.date ?? defaultDate;
+		const title = stripRanges(typed, [found.match, found.mention, found.repeat].filter((r) => r !== null));
+		const date = dateFor(found);
 		const typedTarget = found.mention ? targets[found.mention.project] : undefined;
 		const target = found.mention ? (typedTarget?.path ?? null) : project;
 		const targetHeading = found.mention ? (typedTarget?.heading ?? null) : heading;
@@ -102,6 +111,7 @@ export function Capture({
 		const ok = await onSave({
 			title,
 			date,
+			repeat: found.repeat?.rule ?? null,
 			project: target,
 			heading: targetHeading && { line: targetHeading.line, text: targetHeading.text },
 		});
@@ -132,7 +142,7 @@ export function Capture({
 		busy.current = true;
 		const target = { project: chosen, heading: chosenHeading && { line: chosenHeading.line, text: chosenHeading.text } };
 		for (const t of tasks) {
-			if (!(await onSave({ title: t.title, date: t.date ?? defaultDate, ...target }))) {
+			if (!(await onSave({ title: t.title, date: t.date ?? defaultDate, repeat: null, ...target }))) {
 				busy.current = false;
 				return;
 			}
@@ -143,6 +153,7 @@ export function Capture({
 
 	const marks: Mark[] = [];
 	if (match) marks.push({ start: match.index, end: match.end, cls: 'pl-capture-date' });
+	if (repeat) marks.push({ start: repeat.index, end: repeat.end, cls: 'pl-capture-date' });
 	if (mention) marks.push({ start: mention.index, end: mention.end, cls: 'pl-capture-mention' });
 
 	return (
@@ -202,6 +213,13 @@ export function Capture({
 						<span class="pl-capture-value is-muted">No date</span>
 					)}
 				</div>
+				{repeat && (
+					<div class="pl-capture-row">
+						<span class="pl-capture-label">Repeat</span>
+						<span class="pl-capture-value">{repeat.rule}</span>
+						<span class="pl-capture-note">from “{repeat.text}”</span>
+					</div>
+				)}
 				<div class="pl-capture-row pl-capture-project">
 					<span class="pl-capture-label">Project</span>
 					<button
@@ -233,7 +251,7 @@ export function Capture({
 				</div>
 			</div>
 			<div class="pl-capture-footer">
-				<span class="pl-capture-try">Try: today, tonight, fri, in 3 days, oct 20, someday, @project</span>
+				<span class="pl-capture-try">Try: today, fri, in 3 days, oct 20, someday, every week, @project</span>
 				<span class="pl-capture-keys">
 					<kbd>↵</kbd> save
 					<kbd>esc</kbd> cancel

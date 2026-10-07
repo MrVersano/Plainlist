@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { addDays, longDate } from '../../dates/format';
 import { findDate } from '../../dates/parse';
+import { parseRepeat, withWhenDone } from '../../dates/repeat';
 import type { LineRef } from '../../model/patch';
 import { useOutsideClick } from '../env';
 
@@ -64,6 +65,94 @@ export function DatePopover({
 				<button type="button" onClick={() => onPick('someday')}>Someday</button>
 				<button type="button" onClick={() => onPick(null)}>Clear</button>
 			</div>
+		</div>
+	);
+}
+
+const REPEAT_PRESETS: [string, string][] = [
+	['Daily', 'every day'],
+	['Weekdays', 'every weekday'],
+	['Weekly', 'every week'],
+	['Monthly', 'every month'],
+	['Yearly', 'every year'],
+];
+
+/**
+ * Picks a repeat rule: a preset or a typed one ("every 2 weeks on mon"). "From completion"
+ * adds "when done", and changes the current rule straight away.
+ */
+export function RepeatPopover({
+	current,
+	onPick,
+	onClose,
+}: {
+	current: string | null;
+	/** `close` is false for a change made with the popover still open. */
+	onPick: (rule: string | null, close: boolean) => void;
+	onClose: () => void;
+}) {
+	const [text, setText] = useState('');
+	const [fromDone, setFromDone] = useState(current ? (parseRepeat(current)?.fromDone ?? false) : false);
+	const wrap = useRef<HTMLDivElement>(null);
+	const input = useAutoFocus<HTMLInputElement>();
+	useOutsideClick(wrap, onClose);
+	const typed = text.trim() ? withWhenDone(text.trim().replace(/\s+/g, ' ').toLowerCase(), fromDone) : '';
+	const valid = typed && parseRepeat(typed) ? typed : null;
+	const pick = (rule: string): void => onPick(withWhenDone(rule, fromDone), true);
+
+	return (
+		<div
+			ref={wrap}
+			class="pl-popover pl-date-popover"
+			onKeyDown={(e) => {
+				if (e.key === 'Escape') {
+					e.preventDefault();
+					e.stopPropagation();
+					onClose();
+				}
+			}}
+		>
+			<input
+				ref={input}
+				class="pl-popover-input"
+				type="text"
+				placeholder="every 2 weeks, every mon, thu"
+				aria-label="Repeat"
+				value={text}
+				onInput={(e) => setText(e.currentTarget.value)}
+				onKeyDown={(e) => {
+					if (e.key === 'Enter' && !e.isComposing) {
+						e.preventDefault();
+						e.stopPropagation();
+						if (valid) onPick(valid, true);
+					}
+				}}
+			/>
+			<div class="pl-date-preview" aria-live="polite">
+				{text.trim() ? (valid ? `Repeats ${valid}` : 'Not a repeat rule') : ' '}
+			</div>
+			<div class="pl-date-shortcuts">
+				{REPEAT_PRESETS.map(([label, rule]) => (
+					<button type="button" key={rule} onClick={() => pick(rule)}>
+						{label}
+					</button>
+				))}
+				<button type="button" onClick={() => onPick(null, true)}>
+					Never
+				</button>
+			</div>
+			<label class="pl-repeat-from-done">
+				<input
+					type="checkbox"
+					checked={fromDone}
+					onChange={(e) => {
+						const on = e.currentTarget.checked;
+						setFromDone(on);
+						if (current) onPick(withWhenDone(current, on), false);
+					}}
+				/>
+				Repeat from the day it's completed
+			</label>
 		</div>
 	);
 }

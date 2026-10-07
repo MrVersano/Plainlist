@@ -217,6 +217,7 @@ export function parse(text: string): Doc {
 				title: t.title,
 				date: t.date?.value ?? null,
 				doneDate: t.doneField?.value ?? null,
+				repeat: t.repeat?.value ?? null,
 				description: descriptionText(lines.slice(i + 1, end)),
 				end,
 				subtreeEnd,

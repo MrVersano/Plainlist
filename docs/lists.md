@@ -19,7 +19,7 @@ Inbox and Today show a count in the sidebar.
 
 Today has everything due today. Each to-do shows its project on the right.
 
-**Rollover:** open to-dos from past days move to today. At midnight, or when you open Plainlist, an open to-do dated before today has its date changed to today in its note. Nothing gets left behind on a day you've already passed.
+**Rollover:** open to-dos from past days move to today. At midnight, or when you open Plainlist, an open to-do dated before today has its date changed to today in its note. Nothing gets left behind on a day you've already passed. A [repeating to-do](todos.md#repeating-to-dos) rolls over too; a rule tied to a day, such as `every mon`, still comes back on that day.
 
 **Your order:** drag to-dos in Today into any order. Plainlist remembers it in its own data, not in your notes, so it doesn't move lines around in your project notes. See [Reordering](todos.md#reordering).
 

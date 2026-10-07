@@ -9,16 +9,17 @@ Plainlist turns your notes into a clean, minimal task manager in Obsidian. A tas
 - **[Lists](docs/lists.md):** Inbox, Today, Upcoming, No Date, Someday and Completed, plus one list per project. Open to-dos from past days move to today.
 - **[Projects are notes](docs/projects.md):** create a new project note, or turn an existing note into a project. Its checkboxes, nested ones included, become the project's to-dos, grouped by the note's headings.
 - **[To-dos](docs/todos.md):** a title, a description, a date and a project, with `#tags` and `[[links]]`. Click a to-do to edit it in place.
+  - **[Repeating](docs/todos.md#repeating-to-dos):** "every 2 weeks", "every last sunday", or "every month when done" to count from the day you complete it.
   - **[Sub-tasks](docs/todos.md#sub-tasks):** indent a checkbox under another, or press `Tab` / `Shift+Tab`.
   - **[Reorder](docs/todos.md#reordering):** drag to-dos, or press `Alt+↑` / `Alt+↓`. Today keeps any order you like.
   - **[Paste a list](docs/todos.md#pasting-a-list):** paste `- [ ] Task` lines and each one becomes a to-do.
-- **[Quick capture](docs/quick-capture.md):** a small palette that understands dates as you type ("fri", "next tue", "in 3 days", "someday") and `@project`.
+- **[Quick capture](docs/quick-capture.md):** a small palette that understands dates as you type ("fri", "next tue", "in 3 days", "someday"), repeat rules ("every mon") and `@project`.
 - **[System-wide quick entry](docs/quick-capture.md#system-wide-quick-entry):** on desktop, a global shortcut opens the palette from any app.
 - **[Add from other apps](docs/adding-from-other-apps.md):** `obsidian://plainlist-add` links, with x-callback-url, for Shortcuts, Drafts, Alfred and Raycast.
 - **[Search and navigation](docs/search-and-navigation.md):** fuzzy-find any to-do, and jump to any list with a command or hotkey.
 - **[Lists in notes](docs/lists-in-notes.md):** a `plainlist` code block shows Today's list inside any note, or a daily note's own day.
 - **[Keyboard shortcuts](docs/keyboard.md):** move, open, complete, indent and reorder to-dos without the mouse.
-- **[Plain Markdown](docs/file-format.md):** to-dos are ordinary checkboxes with `[date:: …]` fields. Plainlist only changes the lines it owns.
+- **[Plain Markdown](docs/file-format.md):** to-dos are ordinary checkboxes with `[date:: …]` and `[repeat:: …]` fields. Plainlist only changes the lines it owns.
 
 | Upcoming | Project |
 |---|---|

@@ -1,6 +1,7 @@
-// Reads a date phrase and an @project out of a to-do title.
+// Reads a date phrase, a repeat rule and an @project out of a to-do title.
 
 import { type DateMatch, findDate } from './dates/parse';
+import { findRepeat, type RepeatMatch } from './dates/repeat';
 import { findMention, type Mention } from './mentions';
 
 interface Range {
@@ -11,6 +12,7 @@ interface Range {
 export interface Recognised {
 	match: DateMatch | null;
 	mention: Mention | null;
+	repeat: RepeatMatch | null;
 }
 
 function blank(text: string, ranges: Range[]): string {
@@ -19,23 +21,29 @@ function blank(text: string, ranges: Range[]): string {
 	return out;
 }
 
-/** The date and @project in `text`, outside `ignore`. The mention is blanked out before looking for a date. */
+/**
+ * The date, repeat rule and @project in `text`, outside `ignore`. The mention, then the rule,
+ * are blanked out before looking for a date, so "every fri" is not read as Friday.
+ */
 export function recognise(text: string, names: string[], today: string, weekStart: 0 | 1, ignore: Range[] = []): Recognised {
 	const masked = blank(text, ignore);
 	const mention = findMention(masked, names);
-	const match = findDate(mention ? blank(masked, [mention]) : masked, today, weekStart);
+	const unmentioned = mention ? blank(masked, [mention]) : masked;
+	const repeat = findRepeat(unmentioned);
+	const match = findDate(repeat ? blank(unmentioned, [repeat]) : unmentioned, today, weekStart);
 	return {
 		mention: mention && { ...mention, text: text.slice(mention.index, mention.end) },
 		match: match && { ...match, text: text.slice(match.index, match.end) },
+		repeat: repeat && { ...repeat, text: text.slice(repeat.index, repeat.end) },
 	};
 }
 
-/** Every date phrase and @project in `text`, as typed. */
+/** Every date phrase, repeat rule and @project in `text`, as typed. */
 function allPhrases(text: string, names: string[], today: string, weekStart: 0 | 1): string[] {
-	const found: (DateMatch | Mention)[] = [];
+	const found: (DateMatch | Mention | RepeatMatch)[] = [];
 	for (;;) {
-		const { match, mention } = recognise(text, names, today, weekStart, found);
-		const next = [match, mention].filter((r) => r !== null);
+		const { match, mention, repeat } = recognise(text, names, today, weekStart, found);
+		const next = [match, mention, repeat].filter((r) => r !== null);
 		if (!next.length) return found.map((r) => r.text);
 		found.push(...next);
 	}
@@ -60,7 +68,7 @@ function locate(text: string, phrases: string[]): Range[] {
 
 /**
  * Like `recognise`, for an edited title: phrases already in `original` are left alone,
- * so only a date or @project typed during the edit counts.
+ * so only a date, repeat rule or @project typed during the edit counts.
  */
 export function recogniseEdit(
 	text: string,
