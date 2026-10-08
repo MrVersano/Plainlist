@@ -30,6 +30,7 @@ import {
 	renameArea,
 	removeArea,
 	moveProjectToArea,
+	moveArea,
 } from '../src/model/patch';
 import type { Doc, LineEdit } from '../src/model/types';
 import { changedLines, fixture, rng } from './helpers';
@@ -333,6 +334,26 @@ describe('areas', () => {
 	it('removes an area heading, leaving its projects', () => {
 		expect(run(text, (d) => removeArea(d, refOf(d.areas[0]!)))).toBe(text.replace('## Work\n', ''));
 		expect(run(text, (d) => removeArea(d, refOf(d.areas[1]!)))).toBe(text.replace('## Home\n\n', ''));
+	});
+
+	it('moves an area with its projects, keeping the blank lines in place', () => {
+		const three = '# Projects\n- [[Loose]]\n\n## Work\n- [[Q4]]\n\n## Home\n- [[Garden]]\n## Side\n- [[Blog]]\n\n# Archive\n';
+		const at = (d: Doc, i: number) => refOf(d.areas[i]!);
+		expect(run(three, (d) => moveArea(d, at(d, 2), at(d, 0), 'before'))).toBe(
+			'# Projects\n- [[Loose]]\n\n## Side\n- [[Blog]]\n\n## Work\n- [[Q4]]\n## Home\n- [[Garden]]\n\n# Archive\n',
+		);
+		expect(run(three, (d) => moveArea(d, at(d, 0), at(d, 1), 'after'))).toBe(
+			'# Projects\n- [[Loose]]\n\n## Home\n- [[Garden]]\n\n## Work\n- [[Q4]]\n## Side\n- [[Blog]]\n\n# Archive\n',
+		);
+		expect(run(three, (d) => moveArea(d, at(d, 0), at(d, 1), 'before'))).toBe(three);
+		expect(run(three, (d) => moveArea(d, at(d, 0), at(d, 0), 'after'))).toBe(three);
+		const moved = parse(run(three, (d) => moveArea(d, at(d, 0), at(d, 2), 'after')));
+		expect(moved.projectLinks.map((p) => [p.target, p.area?.name ?? null])).toEqual([
+			['Loose', null],
+			['Garden', 'Home'],
+			['Blog', 'Side'],
+			['Q4', 'Work'],
+		]);
 	});
 
 	it('moves a project to the end of an area, or out of all areas', () => {

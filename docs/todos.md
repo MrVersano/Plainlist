@@ -137,7 +137,7 @@ Undo covers what you do in the view:
 - reordering, indenting and outdenting;
 - pasting a list;
 - completing a project;
-- moving projects, and adding, renaming or removing areas.
+- moving projects, and adding, renaming, moving or removing areas.
 
 Everything you change while a to-do is open (its title, description, date, repeat rule and project) counts as one change, undone together once you've closed it. While the to-do is open, `Mod+Z` in its fields undoes typing, as usual.
 

@@ -2,6 +2,15 @@
 
 All notable changes to Plainlist, newest first. Each release is on [GitHub](https://github.com/MrVersano/Plainlist/releases).
 
+## 1.0.29
+
+*October 8, 2026*
+
+### New
+
+- You can change the order of areas. Drag an area's name above or below another area's name in the sidebar; on a touch screen, hold the name first, then drag. Areas fold while you drag, and a line shows where the area will land. An area moves with all its projects, and Undo puts it back.
+- An area's menu has **Move up** and **Move down**, in the sidebar and in the list picker on phones and in narrow panes.
+
 ## 1.0.28
 
 *October 8, 2026*

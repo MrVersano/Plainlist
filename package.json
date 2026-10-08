@@ -1,6 +1,6 @@
 {
 	"name": "plainlist",
-	"version": "1.0.28",
+	"version": "1.0.29",
 	"description": "Turn your notes into a minimal task manager, with an Inbox, Today and Upcoming lists, and projects that are ordinary notes.",
 	"main": "main.js",
 	"type": "module",

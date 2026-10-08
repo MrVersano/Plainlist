@@ -850,6 +850,7 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		chooseArea: (p) => new AreaSuggestModal(app, workspace.areas, (area) => projectActions.moveToArea(p, area)).open(),
 		addArea: (name) => void remember(`Added the area ${quoted(name)}`, workspace.addArea(name)),
 		renameArea: (area, name) => void remember(`Renamed the area ${quoted(area.name)}`, workspace.renameArea(area, name)),
+		moveArea: (area, target, place) => void remember(`Moved the area ${quoted(area.name)}`, workspace.moveArea(area, target, place)),
 		removeArea: (area) => {
 			void env
 				.confirm(`Remove the area “${area.name}”?`, 'Its projects stay in Plainlist, and join the list above it.', 'Remove')
@@ -1014,7 +1015,7 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 					.setTitle(a.name)
 					.setIcon('folder')
 					.onClick((e) =>
-						areaMenu(a, projectActions, () => {
+						areaMenu(a, workspace.areas, projectActions, () => {
 							void env.prompt('Rename area', 'Area name', a.name, 'Rename').then((name) => {
 								const next = name?.trim();
 								if (next && next !== a.name) projectActions.renameArea(a, next);

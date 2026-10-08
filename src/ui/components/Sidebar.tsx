@@ -32,6 +32,8 @@ export interface ProjectActions {
 	chooseArea: (project: ProjectInfo) => void;
 	addArea: (name: string) => void;
 	renameArea: (area: Area, name: string) => void;
+	/** Moves an area, with its projects, just before or after another. */
+	moveArea: (area: Area, target: Area, place: Place) => void;
 	removeArea: (area: Area) => void;
 }
 
@@ -64,9 +66,14 @@ export function projectMenu(project: ProjectInfo, actions: ProjectActions, onRen
 	return menu;
 }
 
-export function areaMenu(area: Area, actions: ProjectActions, onRename: () => void): Menu {
+export function areaMenu(area: Area, areas: Area[], actions: ProjectActions, onRename: () => void): Menu {
 	const menu = new Menu();
 	menu.addItem((i) => i.setTitle('Rename').setIcon('pencil').onClick(onRename));
+	const at = areas.findIndex((a) => a.line === area.line);
+	const above = areas[at - 1];
+	const below = areas[at + 1];
+	if (above) menu.addItem((i) => i.setTitle('Move up').setIcon('arrow-up').onClick(() => actions.moveArea(area, above, 'before')));
+	if (below) menu.addItem((i) => i.setTitle('Move down').setIcon('arrow-down').onClick(() => actions.moveArea(area, below, 'after')));
 	menu.addItem((i) =>
 		i
 			.setTitle('Remove area')
@@ -250,6 +257,7 @@ export function ProgressRing({ open, done, complete }: { open: number; done: num
 
 function ProjectItem({
 	project,
+	inArea,
 	count,
 	doneCount,
 	selected,
@@ -260,6 +268,8 @@ function ProjectItem({
 	actions,
 }: {
 	project: ProjectInfo;
+	/** Listed under an area's header. */
+	inArea: boolean;
 	count: number;
 	doneCount: number;
 	selected: boolean;
@@ -284,7 +294,7 @@ function ProjectItem({
 	return (
 		<button
 			type="button"
-			class={`pl-nav-item${selected ? ' is-active' : ''}${project.exists ? '' : ' is-missing'}${project.done ? ' is-done' : ''}${drag.cls}`}
+			class={`pl-nav-item${selected ? ' is-active' : ''}${project.exists ? '' : ' is-missing'}${project.done ? ' is-done' : ''}${inArea ? ' is-in-area' : ''}${drag.cls}`}
 			aria-current={selected ? 'page' : undefined}
 			title={project.exists ? project.path : `Note not found: ${project.path}`}
 			onClick={onSelect}
@@ -379,23 +389,27 @@ export function Sidebar({
 	const keyOf = (e: Entry): string => (e.kind === 'area' ? areaKey(e.area) : e.project.path);
 
 	// Open projects can be dragged into a new order, or onto an area's header; completed ones only have the menu.
+	// Areas can be dragged before or after another area; their projects fold away while one moves.
 	const reorder = useReorder<Entry>({
 		entries: entries.map((e) => ({ key: keyOf(e), item: e })),
-		canDrag: (e) => e.kind === 'project' && !e.project.done,
-		canDrop: (a, b) => a.kind === 'project' && !a.project.done && (b.kind === 'area' || !b.project.done),
+		canDrag: (e) => (e.kind === 'project' ? !e.project.done : areas.length > 1),
+		canDrop: (a, b) =>
+			a.kind === 'area' ? b.kind === 'area' : !a.project.done && (b.kind === 'area' || !b.project.done),
 		onDrop: (a, b, place) => {
-			if (a.kind !== 'project') return;
-			if (b.kind === 'area') actions.moveToArea(a.project, b.area);
+			if (a.kind === 'area') {
+				if (b.kind === 'area') actions.moveArea(a.area, b.area, place);
+			} else if (b.kind === 'area') actions.moveToArea(a.project, b.area);
 			else actions.move(a.project, b.project, place);
 		},
 		onMenu: (e, pos) =>
 			(e.kind === 'area'
-				? areaMenu(e.area, actions, () => setRenaming(areaKey(e.area)))
+				? areaMenu(e.area, areas, actions, () => setRenaming(areaKey(e.area)))
 				: projectMenu(e.project, actions, () => setRenaming(e.project.path), areas.length > 0)
 			).showAtPosition(pos),
 	});
 	const item = (p: ProjectInfo) => (
 		<ProjectItem
+			inArea={!p.done && !!p.area}
 			key={p.path}
 			project={p}
 			count={p.done ? 0 : (counts.projects[p.path] ?? 0)}

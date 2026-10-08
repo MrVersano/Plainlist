@@ -46,6 +46,6 @@ Plainlist does not set hotkeys for its commands. Bind the ones you use under **S
 
 ## Mouse and touch
 
-Right-click a to-do (or long-press it without moving, on mobile) to complete it, add a sub-task, indent or outdent it, schedule or move it, select it, or delete it. Right-click a project to open, rename, complete or remove it, or move it to an [area](projects.md#areas).
+Right-click a to-do (or long-press it without moving, on mobile) to complete it, add a sub-task, indent or outdent it, schedule or move it, select it, or delete it. Right-click a project to open, rename, complete or remove it, or move it to an [area](projects.md#areas). Right-click an area to rename it, move it up or down, or remove it.
 
 On touch screens, [swipe a to-do](todos.md#swiping-on-touch-screens) right to complete it, or left to schedule it.

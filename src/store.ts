@@ -19,6 +19,7 @@ import {
 	insertTaskLines,
 	moveProjectLink,
 	moveProjectToArea,
+	moveArea,
 	moveTaskToHeading,
 	moveTasksToHeading,
 	PatchConflict,
@@ -384,6 +385,11 @@ export class Workspace {
 
 	renameArea(area: Area, name: string): Promise<RunResult> {
 		return this.run(this.masterPath, (d) => renameArea(d, refOf(area), name));
+	}
+
+	/** Moves an area, with its projects, just before or after another. */
+	moveArea(area: Area, target: Area, place: Place): Promise<RunResult> {
+		return this.run(this.masterPath, (d) => moveArea(d, refOf(area), refOf(target), place));
 	}
 
 	removeArea(area: Area): Promise<RunResult> {

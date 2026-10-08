@@ -172,6 +172,47 @@ body:not(.is-mobile) .workspace-leaf-content[data-type='plainlist'] > .view-head
 	box-shadow: inset 0 0 0 1px var(--pl-accent);
 }
 
+/* Moving an area: every area folds, and a line shows where it would land. */
+.pl-sidebar.is-reordering:has(.pl-nav-area.is-dragging) .pl-nav-item.is-in-area {
+	display: none;
+}
+
+.pl-sidebar.is-reordering:has(.pl-nav-area.is-dragging) .pl-nav-chevron {
+	transform: rotate(-45deg);
+}
+
+.pl-root button.pl-nav-area.is-dragging {
+	opacity: 0.5;
+}
+
+.pl-sidebar:has(.pl-nav-area.is-dragging) button.pl-nav-area.is-drop-before,
+.pl-sidebar:has(.pl-nav-area.is-dragging) button.pl-nav-area.is-drop-after {
+	position: relative;
+	background: none;
+	box-shadow: none;
+}
+
+.pl-sidebar:has(.pl-nav-area.is-dragging) button.pl-nav-area.is-drop-before::before,
+.pl-sidebar:has(.pl-nav-area.is-dragging) button.pl-nav-area.is-drop-after::after {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	height: 2px;
+	border-radius: 1px;
+	background: var(--interactive-accent);
+	pointer-events: none;
+}
+
+/* In the gap above the header, which its top margin makes. */
+.pl-sidebar:has(.pl-nav-area.is-dragging) button.pl-nav-area.is-drop-before::before {
+	top: -7px;
+}
+
+.pl-sidebar:has(.pl-nav-area.is-dragging) button.pl-nav-area.is-drop-after::after {
+	bottom: -7px;
+}
+
 .pl-nav-chevron {
 	flex: none;
 	width: 8px;

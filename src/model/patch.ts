@@ -637,6 +637,31 @@ export function removeArea(doc: Doc, ref: LineRef): LineEdit[] {
 	return [{ at: a.line, delete: blankAround ? 2 : 1, insert: [] }];
 }
 
+/**
+ * Moves an area, with its heading and projects, to just before or after another area.
+ * Blank lines between areas stay where they were, so the file keeps its spacing.
+ */
+export function moveArea(doc: Doc, ref: LineRef, target: LineRef, place: Place): LineEdit[] {
+	const a = findArea(doc, ref);
+	const b = findArea(doc, target);
+	const order = doc.areas.filter((x) => x !== a);
+	const at = order.indexOf(b);
+	if (at === -1) return [];
+	order.splice(place === 'before' ? at : at + 1, 0, a);
+	const first = doc.areas[0];
+	const last = doc.areas[doc.areas.length - 1];
+	if (!first || !last) return [];
+	// Each area's lines without its trailing blanks, and those blanks, which keep their slot.
+	const parts = doc.areas.map((x) => {
+		let end = x.end;
+		while (end > x.line + 1 && isBlank(doc.lines[end - 1] ?? '')) end--;
+		return { area: x, content: doc.lines.slice(x.line, end), gap: doc.lines.slice(end, x.end) };
+	});
+	const content = (x: Area): string[] => parts.find((p) => p.area === x)?.content ?? [];
+	const next = parts.flatMap((p, i) => [...content(order[i] ?? p.area), ...p.gap]);
+	return replaceRange(first.line, doc.lines.slice(first.line, last.end), next);
+}
+
 /** Marks a project complete (`- [x] [[Note]] [done:: today]`) or open again (`- [[Note]]`). */
 export function setProjectDone(doc: Doc, ref: LineRef, done: boolean, today: string): LineEdit[] {
 	const p = findProjectLink(doc, ref);
