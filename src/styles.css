@@ -5,6 +5,12 @@
 	overflow: hidden;
 }
 
+/* The view header sits above the sidebar and makes it look cut off. Desktop only: on
+   mobile the header is the navigation bar. Its actions stay in the tab's context menu. */
+body:not(.is-mobile) .workspace-leaf-content[data-type='plainlist'] > .view-header {
+	display: none;
+}
+
 .pl-host,
 .pl-root {
 	height: 100%;

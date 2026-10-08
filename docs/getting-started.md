@@ -16,7 +16,7 @@ Run **Plainlist: Open** from the command palette (or click the ribbon icon). It 
 
 The sidebar on the left holds the [lists](lists.md) (Inbox, Today, Upcoming, No Date, Someday and Completed) and your [projects](projects.md). The main area shows the list you picked. On a phone, or in a narrow pane, the sidebar becomes a menu: tap the list's name at the top to switch lists, add a project or add an area.
 
-Any note with `plainlist: true` in its properties opens in the Plainlist view. To see the raw Markdown, click the page icon in the view's header or run **Plainlist: Switch between task list and Markdown**. Run it again to go back.
+Any note with `plainlist: true` in its properties opens in the Plainlist view. To see the raw Markdown, right-click the tab and choose **Open as Markdown**, or run **Plainlist: Switch between task list and Markdown**. Run the command again to go back. On desktop, Plainlist hides Obsidian's view header so the sidebar reaches the top of the tab; the tab's right-click menu still has the header's options.
 
 ## Adding your first to-do
 
