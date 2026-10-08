@@ -34,6 +34,7 @@ Plainlist does not set hotkeys for you. Under **Settings → Hotkeys**, search f
 | **New to-do** | `Mod+Shift+N` | Opens [quick capture](quick-capture.md) from anywhere in Obsidian |
 | **Search to-dos** | your choice | Finds any to-do by name; see [Search and navigation](search-and-navigation.md) |
 | **Move selected to-dos to a project**, **Schedule selected to-dos** | your choice | Moves or schedules the [selected to-dos](todos.md#working-on-several-to-dos-at-once) |
+| **Move task to next column**, **Move task to previous column** | your choice | Moves the selected to-do one [board](board.md) column; `⌘→` / `⌘←` already do this in a board |
 | **Undo** | your choice | [Undoes](todos.md#undo) the last change; `Mod+Z` already does this in the view |
 | **Go to Inbox**, **Go to Today**, **Go to Upcoming**, **Go to No Date**, **Go to Someday** | your choice | Opens Plainlist on that list |
 

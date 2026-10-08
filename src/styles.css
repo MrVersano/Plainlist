@@ -1683,3 +1683,455 @@ body.pl-quick-entry-body {
 	left: 100%;
 	background-position: left 16px center;
 }
+
+/* Board view --------------------------------------------------------------- */
+
+.pl-view-controls {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.pl-segmented {
+	display: flex;
+	padding: 3px;
+	border-radius: 9px;
+	background: var(--background-secondary);
+}
+
+.pl-root .pl-segmented button:not(.clickable-icon) {
+	padding: 5px 14px;
+	border-radius: 7px;
+	font-size: 14px;
+	color: var(--pl-muted);
+}
+
+.pl-root .pl-segmented button.is-active:not(.clickable-icon) {
+	background: var(--background-primary);
+	color: var(--text-normal);
+	font-weight: 600;
+	box-shadow: var(--shadow-s);
+}
+
+.pl-root button.pl-columns-button:not(.clickable-icon) {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 12px;
+	border: 1px solid var(--pl-hairline);
+	border-radius: 9px;
+	font-size: 14px;
+}
+
+.pl-root button.pl-columns-button:hover {
+	background: var(--background-modifier-hover);
+}
+
+.pl-columns-button svg {
+	width: 12px;
+	height: 12px;
+	fill: none;
+	stroke: var(--pl-muted);
+	stroke-width: 1.6;
+}
+
+.pl-content.is-board {
+	max-width: none;
+	padding-left: 40px;
+	padding-right: 40px;
+}
+
+.pl-root.is-narrow .pl-content.is-board {
+	padding-left: 16px;
+	padding-right: 16px;
+}
+
+.pl-board {
+	display: flex;
+	align-items: flex-start;
+	gap: 16px;
+	overflow-x: auto;
+	/* Room for the lifted card's shadow and the drop lines. */
+	padding: 4px 4px 16px;
+	margin: -4px -4px 0;
+}
+
+/* A popover or an open card's pickers near the bottom would be cut off by the sideways scroller. */
+.pl-board:has(.pl-popover) {
+	padding-bottom: 320px;
+	margin-bottom: -304px;
+}
+
+.pl-col {
+	position: relative;
+	flex: 0 0 280px;
+	display: flex;
+	flex-direction: column;
+	padding: 10px;
+	border-radius: 12px;
+	background: var(--background-secondary);
+}
+
+.pl-col.has-popover {
+	z-index: 2;
+}
+
+.pl-col-header {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-height: 30px;
+	padding: 0 2px 8px;
+	user-select: none;
+}
+
+.pl-col-handle {
+	display: flex;
+	align-items: center;
+	color: var(--pl-faint);
+	cursor: grab;
+	touch-action: none;
+}
+
+.pl-col-handle svg {
+	width: 8px;
+	height: 14px;
+	fill: currentColor;
+}
+
+.pl-col-name {
+	font-size: 15px;
+	font-weight: 600;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.pl-col-count {
+	font-size: 14px;
+	color: var(--pl-muted);
+	font-variant-numeric: tabular-nums;
+}
+
+.pl-col-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	padding: 1px 8px 1px 6px;
+	border-radius: 999px;
+	background: hsla(var(--interactive-accent-hsl), 0.12);
+	color: var(--pl-accent);
+	font-size: 12px;
+	white-space: nowrap;
+}
+
+.pl-col-badge svg {
+	width: 11px;
+	height: 11px;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 2;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
+.pl-col-actions {
+	display: flex;
+	gap: 2px;
+	margin-left: auto;
+}
+
+.pl-root button.pl-col-button:not(.clickable-icon) {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	border-radius: 7px;
+	color: var(--pl-muted);
+}
+
+.pl-root button.pl-col-button:not(.clickable-icon):hover,
+.pl-root button.pl-col-button[aria-expanded='true'] {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.pl-col-button svg {
+	width: 15px;
+	height: 15px;
+	fill: currentColor;
+	stroke: currentColor;
+	stroke-width: 1.5;
+	stroke-linecap: round;
+}
+
+/* The settings button shows on hover, like a section's •••; always on touch screens. */
+.pl-root button.pl-col-more:not(.clickable-icon) {
+	opacity: 0;
+}
+
+.pl-col-header:hover button.pl-col-more,
+.pl-root button.pl-col-more:focus-visible,
+.pl-root button.pl-col-more[aria-expanded='true'],
+.is-mobile .pl-root button.pl-col-more:not(.clickable-icon) {
+	opacity: 1;
+}
+
+.pl-popover.pl-col-popover {
+	left: auto;
+	right: -6px;
+	width: 300px;
+	padding: 14px;
+	gap: 12px;
+	cursor: default;
+}
+
+.pl-col-field {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	font-size: 13px;
+	color: var(--pl-muted);
+}
+
+.pl-col-options {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.pl-col-option {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	font-size: 14px;
+	line-height: 20px;
+	cursor: pointer;
+}
+
+.pl-col-option input {
+	flex: none;
+	margin: 2px 0 0;
+}
+
+.pl-col-option.is-disabled {
+	color: var(--pl-faint);
+	cursor: default;
+}
+
+.pl-col-footer {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding-top: 12px;
+	border-top: 1px solid var(--pl-hairline);
+	font-size: 14px;
+}
+
+.pl-root .pl-col-footer button.pl-col-delete:not(.clickable-icon) {
+	color: var(--text-error);
+}
+
+.pl-col-moves {
+	display: flex;
+	gap: 12px;
+	margin-left: auto;
+}
+
+.pl-root .pl-col-moves button:not(.clickable-icon) {
+	color: var(--pl-muted);
+}
+
+.pl-root .pl-col-footer button:not(.clickable-icon):hover {
+	text-decoration: underline;
+}
+
+.pl-col-cards {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.pl-col-empty {
+	min-height: 64px;
+	border-radius: 10px;
+	background: var(--background-modifier-hover);
+}
+
+.pl-card {
+	position: relative;
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	padding: 11px 12px;
+	border: 1px solid var(--pl-hairline);
+	border-radius: 10px;
+	background: var(--background-primary);
+	touch-action: manipulation;
+}
+
+.pl-root .pl-card button.pl-check {
+	margin-top: 2px;
+}
+
+.pl-card-body {
+	flex: 1;
+	min-width: 0;
+}
+
+.pl-root button.pl-card-title {
+	display: block;
+	width: 100%;
+	font-size: 15px;
+	line-height: 21px;
+	white-space: normal;
+	overflow-wrap: anywhere;
+	color: var(--text-normal);
+}
+
+.pl-card.is-done .pl-card-title {
+	color: var(--pl-faint);
+	text-decoration: line-through;
+}
+
+.pl-card-meta {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0 10px;
+	margin-top: 3px;
+	font-size: 13px;
+	line-height: 18px;
+	color: var(--pl-muted);
+}
+
+.pl-card-meta .is-today {
+	color: var(--pl-accent);
+}
+
+.pl-card-unknown {
+	color: var(--pl-faint);
+	font-style: italic;
+}
+
+.pl-card.is-selected {
+	border-color: var(--interactive-accent);
+	box-shadow: 0 0 0 1px var(--interactive-accent);
+}
+
+/* The card being dragged: lifted, tilted, following the pointer. */
+.pl-card.is-lifted {
+	z-index: 10;
+	transform: translate(var(--pl-lift-x, 0), var(--pl-lift-y, 0)) rotate(1.5deg);
+	border-color: hsla(var(--interactive-accent-hsl), 0.5);
+	box-shadow: var(--shadow-l);
+	pointer-events: none;
+}
+
+/* An accent line where it will land: before a card, or at the end of a column. */
+.pl-card.is-drop-before::before,
+.pl-col-cards.is-drop-end::after {
+	content: '';
+	height: 3px;
+	border-radius: 2px;
+	background: var(--interactive-accent);
+	pointer-events: none;
+}
+
+.pl-card.is-drop-before::before {
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: -6.5px;
+}
+
+.pl-col-cards.is-drop-end::after {
+	display: block;
+	margin-top: -2px;
+}
+
+.pl-col.is-lifted {
+	z-index: 10;
+	transform: translate(var(--pl-lift-x, 0), var(--pl-lift-y, 0)) rotate(1deg);
+	box-shadow: var(--shadow-l);
+	opacity: 0.95;
+	pointer-events: none;
+}
+
+.pl-col.is-drop-before::before,
+.pl-col.is-drop-after::after {
+	content: '';
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 3px;
+	border-radius: 2px;
+	background: var(--interactive-accent);
+}
+
+.pl-col.is-drop-before::before {
+	left: -9.5px;
+}
+
+.pl-col.is-drop-after::after {
+	right: -9.5px;
+}
+
+.pl-root button.pl-col-older:not(.clickable-icon) {
+	margin-top: 10px;
+	padding: 2px 4px;
+	font-size: 13px;
+	color: var(--pl-accent);
+}
+
+.pl-root button.pl-col-older:not(.clickable-icon):hover {
+	text-decoration: underline;
+}
+
+.pl-root button.pl-col-add:not(.clickable-icon) {
+	flex: 0 0 200px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	min-height: 50px;
+	border: 1.5px dashed var(--pl-hairline);
+	border-radius: 12px;
+	font-size: 14px;
+	color: var(--pl-muted);
+}
+
+.pl-root button.pl-col-add:not(.clickable-icon):hover {
+	color: var(--text-normal);
+	border-color: var(--pl-muted);
+}
+
+.pl-col-add svg {
+	width: 14px;
+	height: 14px;
+	stroke: currentColor;
+	stroke-width: 1.6;
+	stroke-linecap: round;
+}
+
+.pl-root .pl-col-name-input {
+	width: 100%;
+	font-size: 15px;
+	font-weight: 600;
+}
+
+/* A card opened for editing, in place. */
+.pl-card-editor .pl-row.is-expanded {
+	margin: 0;
+	padding: 4px 12px 14px;
+	border: 1px solid var(--pl-hairline);
+	border-radius: 10px;
+	background: var(--background-primary);
+}
+
+.pl-board.is-reordering .pl-card:not(.is-lifted):hover {
+	cursor: grabbing;
+}

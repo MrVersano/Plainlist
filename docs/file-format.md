@@ -53,6 +53,7 @@ The electrician is free Thursday mornings.
 | Description | Indented lines directly under a to-do that are not themselves checkboxes |
 | Date | `[date:: YYYY-MM-DD]` or `[date:: someday]` (Dataview inline-field syntax) |
 | Repeat | `[repeat:: every week]`, after the date; see [Rules](todos.md#rules) |
+| Board column | `[col:: Doing]`, last on the line; see [Board](board.md). No field means the first column, or Done for a completed to-do |
 | Completed | `[x]` plus `[done:: YYYY-MM-DD]`, added when you complete a to-do |
 | Tags | `#tag` anywhere in a title or description |
 | Heading | Any heading in a project note groups the to-dos under it; see [Headings](projects.md#headings) |
@@ -62,9 +63,9 @@ The electrician is free Thursday mornings.
 - To-dos elsewhere in the task file (under another heading, say) show up in the Inbox but are never moved.
 - Checkboxes inside code blocks and callouts are ignored.
 - Unknown inline fields such as `[priority:: high]` stay in the title, and so does a `[repeat:: …]` rule Plainlist can't read.
-- Completing a repeating to-do adds a new line above it with the rule and the next date, and takes the rule off the completed one. A ticked line that still has its rule (ticked by hand) gets its next one the same way.
+- Completing a repeating to-do adds a new line above it with the rule and the next date (and no `col` field), and takes the rule off the completed one. A ticked line that still has its rule (ticked by hand) gets its next one the same way.
 - Moving or deleting a to-do takes its sub-tasks with it.
 - Plainlist only changes the lines it owns. Headings, notes, tables and callouts it does not understand stay exactly as they are.
-- The custom order of the Today list is kept in Plainlist's own data, not in your notes.
+- The custom order of the Today list, and each project's board columns, are kept in Plainlist's own data, not in your notes.
 
 Because dates use Dataview's inline-field syntax, you can query your to-dos with [Dataview](https://github.com/blacksmithgu/obsidian-dataview) too.

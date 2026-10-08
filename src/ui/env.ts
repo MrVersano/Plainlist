@@ -4,6 +4,7 @@ import type { App, Component } from 'obsidian';
 import type { Clock } from '../clock';
 import type { ListId } from '../model/lists';
 import type { LineRef } from '../model/patch';
+import type { Boards } from '../boards';
 import type { TaskRef, Workspace } from '../store';
 
 /** The sidebar's width, and whether it is pulled closed. Kept per device. */
@@ -19,8 +20,12 @@ export interface Env {
 	/** Owner for rendered Markdown children. */
 	component: Component;
 	weekStart: () => 0 | 1;
-	/** Opens the "New to-do" palette for a list; for a project, optionally under one of its headings. */
-	openCapture: (list: ListId, heading?: LineRef | null) => void;
+	/** Opens the "New to-do" palette for a list; for a project, optionally under one of its headings or in a board column. */
+	openCapture: (list: ListId, heading?: LineRef | null, column?: string | null) => void;
+	/** Each project's board settings. Absent in lists inside notes. */
+	boards?: Boards;
+	/** Phones show projects only as lists. */
+	isPhone?: boolean;
 	confirm: (title: string, message: string, cta: string, destructive?: boolean) => Promise<boolean>;
 	prompt: (title: string, placeholder: string, initial?: string, cta?: string) => Promise<string | null>;
 	/** Desktop: "Press N…" hint; null on mobile. */
@@ -52,7 +57,7 @@ export interface Env {
 export type SelectionCommand = 'move' | 'schedule';
 
 /** A palette command the view's list carries out. */
-export type ViewCommand = SelectionCommand | 'undo';
+export type ViewCommand = SelectionCommand | 'undo' | 'column-prev' | 'column-next';
 
 export const EnvContext = createContext<Env | null>(null);
 

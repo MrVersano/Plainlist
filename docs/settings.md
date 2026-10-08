@@ -13,4 +13,15 @@ Open **Settings → Community plugins → Plainlist**.
 | **System-wide quick entry** | Desktop only. Add a to-do from any app with a global shortcut while Obsidian is running. See [System-wide quick entry](quick-capture.md#system-wide-quick-entry). | Off |
 | **Global shortcut** | Shown when system-wide quick entry is on. Click to record a new shortcut; it needs at least one of `Ctrl`, `Alt` or `⌘`. The reset button restores the default. | `Cmd+Option+N` / `Ctrl+Alt+N` |
 
+## Board
+
+For projects shown as a [board](board.md).
+
+| Setting | What it does | Default |
+|---|---|---|
+| **Auto-create columns from tasks** | A `[col:: …]` field in a project note that names no column adds that column to the project's board, before Done. When off, those to-dos show in the first column, marked "unknown column". | On |
+| **Show completed tasks in their column for** | How many days completed to-dos stay in their column. Older ones are behind **Show N older**. | 7 |
+| **Move to the next or previous column** | **Open hotkeys** shows the two commands, to give them keys. In a board, `⌘←` and `⌘→` work anyway. | |
+| **Default columns** | The columns a project's board starts with. Rename them, drag to reorder, add or delete them; the button on each sets its auto-check options. | To do, Doing, Done |
+
 Hotkeys for Plainlist's commands are set under **Settings → Hotkeys**, not here; see [Getting started](getting-started.md#hotkeys-worth-setting).

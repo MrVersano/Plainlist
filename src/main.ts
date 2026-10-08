@@ -1,12 +1,14 @@
 import { Notice, type ObsidianProtocolData, Platform, Plugin, TFile, WorkspaceLeaf } from 'obsidian';
 import type { CaptureOptions } from './capture';
 import { AutoProjects } from './autoProjects';
+import { Boards } from './boards';
 import { Clock } from './clock';
 import { VIEW_ICON, VIEW_TYPE } from './constants';
 import type { QuickEntryService } from './desktop/QuickEntryService';
 import { allItems, type ListId } from './model/lists';
 import { DEFAULT_SETTINGS, firstDayOfWeek, PlainlistSettings, PlainlistSettingTab } from './settings';
 import { patchText } from './model/apply';
+import { normaliseBoard } from './model/board';
 import { addTask, refOf, type LineRef } from './model/patch';
 import { Workspace } from './store';
 import { ensureTasksFile } from './tasksFile';
@@ -25,6 +27,11 @@ export default class PlainlistPlugin extends Plugin {
 	/** System-wide Quick Entry; desktop only, null until loaded or when unavailable. */
 	quickEntry: QuickEntryService | null = null;
 	autoProjects!: AutoProjects;
+	/** Each project's board, and the default columns. */
+	boards = new Boards(
+		() => this.settings.board,
+		() => void this.saveSettings(),
+	);
 	/** Lists showing Today's order: the view and lists in notes. */
 	private todayOrderListeners = new Set<() => void>();
 
@@ -36,7 +43,7 @@ export default class PlainlistPlugin extends Plugin {
 		this.registerView(VIEW_TYPE, (leaf) => new PlainlistView(leaf, this));
 		installViewSwitch(this);
 		// ```plainlist blocks in notes: `Today`, or `Note Title` in a daily note.
-		const pool = new WorkspacePool(this.app);
+		const pool = new WorkspacePool(this.app, (path) => this.boards.rules(path));
 		this.registerMarkdownCodeBlockProcessor(BLOCK_LANGUAGE, (source, el, ctx) => {
 			ctx.addChild(new DayEmbed(this, pool, source, el, ctx));
 		});
@@ -48,6 +55,8 @@ export default class PlainlistPlugin extends Plugin {
 				this.setTodayOrder(this.settings.todayOrder.map((k) => (k.startsWith(prefix) ? file.path + k.slice(oldPath.length) : k)));
 			}),
 		);
+		// A project's board follows its note.
+		this.registerEvent(this.app.vault.on('rename', (file, oldPath) => this.boards.rename(oldPath, file.path)));
 
 		this.addCommand({
 			id: 'open',
@@ -86,6 +95,11 @@ export default class PlainlistPlugin extends Plugin {
 			{ id: 'schedule-selected', name: 'Schedule selected to-dos', command: 'schedule' },
 			{ id: 'undo', name: 'Undo', command: 'undo' },
 		];
+		// Board columns. No default hotkeys; in the board itself, Mod+←/→ do the same.
+		viewCommands.push(
+			{ id: 'move-to-previous-column', name: 'Move task to previous column', command: 'column-prev' },
+			{ id: 'move-to-next-column', name: 'Move task to next column', command: 'column-next' },
+		);
 		for (const { id, name, command } of viewCommands) {
 			this.addCommand({
 				id,
@@ -192,7 +206,7 @@ export default class PlainlistPlugin extends Plugin {
 			return;
 		}
 		const shown = this.viewOf(file)?.workspace;
-		const workspace = shown ?? new Workspace(this.app, file);
+		const workspace = shown ?? new Workspace(this.app, file, (path) => this.boards.rules(path));
 		if (!shown) await workspace.load();
 		new TaskSearchModal(
 			this.app,
@@ -232,8 +246,8 @@ export default class PlainlistPlugin extends Plugin {
 		if (options) new CaptureModal(this.app, options).open();
 	}
 
-	openCapture(file: TFile, list: ListId, heading: LineRef | null = null): void {
-		new CaptureModal(this.app, { ...this.captureOptions(file, list), heading }).open();
+	openCapture(file: TFile, list: ListId, heading: LineRef | null = null, column: string | null = null): void {
+		new CaptureModal(this.app, { ...this.captureOptions(file, list), heading, column }).open();
 	}
 
 	captureOptions(file: TFile, list: ListId): CaptureOptions {
@@ -305,7 +319,8 @@ export default class PlainlistPlugin extends Plugin {
 	}
 
 	async loadSettings(): Promise<void> {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, (await this.loadData()) as Partial<PlainlistSettings>);
+		const data = (await this.loadData()) as Partial<PlainlistSettings> | null;
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, data, { board: normaliseBoard(data?.board) });
 	}
 
 	setTodayOrder(keys: string[]): void {

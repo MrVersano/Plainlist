@@ -82,7 +82,7 @@ export class PlainlistView extends FileView {
 	}
 
 	async onLoadFile(file: TFile): Promise<void> {
-		this.workspace = new Workspace(this.app, file);
+		this.workspace = new Workspace(this.app, file, (path) => this.plugin.boards.rules(path));
 		await this.workspace.load();
 		this.workspace.tidy(this.plugin.clock.today, this.plugin.weekStart());
 		this.mount(this.workspace);
@@ -124,9 +124,9 @@ export class PlainlistView extends FileView {
 		this.contentEl.querySelector<HTMLElement>('.pl-root')?.focus({ preventScroll: true });
 	}
 
-	openCapture(list: ListId = this.list, heading: LineRef | null = null): void {
+	openCapture(list: ListId = this.list, heading: LineRef | null = null, column: string | null = null): void {
 		if (!this.file) return;
-		this.plugin.openCapture(this.file, list, heading);
+		this.plugin.openCapture(this.file, list, heading, column);
 	}
 
 	/** Shows a to-do: switches to a list that has it, scrolls to it and highlights it briefly. */
@@ -149,7 +149,9 @@ export class PlainlistView extends FileView {
 			clock: this.plugin.clock,
 			component: this,
 			weekStart: () => this.plugin.weekStart(),
-			openCapture: (list, heading) => this.openCapture(list, heading),
+			openCapture: (list, heading, column) => this.openCapture(list, heading, column),
+			boards: this.plugin.boards,
+			isPhone: Platform.isPhone,
 			confirm: (title, message, cta, destructive) => confirmModal(this.app, title, message, cta, destructive),
 			prompt: (title, placeholder, initial, cta) => promptModal(this.app, title, placeholder, initial, cta),
 			sidebar: {

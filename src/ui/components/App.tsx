@@ -1,4 +1,4 @@
-import { Keymap, Menu, Notice } from 'obsidian';
+import { Keymap, Menu, Notice, Platform } from 'obsidian';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { headerDate, metaDate, overdueLabel } from '../../dates/format';
 import {
@@ -17,6 +17,7 @@ import {
 	type ProjectInfo,
 	type Source,
 } from '../../model/lists';
+import { columnOf, unknownColumns, withNewColumns, type BoardMode, type GroupBy } from '../../model/board';
 import { pastedTasks } from '../../model/paste';
 import {
 	addSubtask,
@@ -43,6 +44,7 @@ import {
 } from '../../model/patch';
 import { setDate } from '../../model/taskLine';
 import type { Area, Doc, Heading, Task, TaskDate } from '../../model/types';
+import type { ComponentChildren } from 'preact';
 import { locateLine, type RunResult, type TaskRef, type TrackBox } from '../../store';
 import { quoted, type UndoEntry } from '../../undo';
 import { useEnv, useToday, useWorkspace, type SelectionCommand, type ViewCommand } from '../env';
@@ -52,6 +54,7 @@ import { scheduleMenu } from '../scheduleMenu';
 import { ProjectSuggestModal } from '../ProjectSuggestModal';
 import { useReorder } from '../reorder';
 import { Checkbox } from './bits';
+import { Board, boardColumns, shiftCard, type BoardHandle } from './Board';
 import { DatePopover, ProjectPicker } from './popovers';
 import { areaMenu, LISTS, listLabel, NameInput, projectMenu, Sidebar, SidebarHandle, type ProjectActions } from './Sidebar';
 import { TaskEditor, TaskRow, type RowActions } from './TaskRow';
@@ -182,7 +185,7 @@ function withLingering(sources: Source[], lingering: Map<string, boolean>, compu
 	return { groups: view.groups.map((g) => ({ ...g, items: g.items.map(restore) })), completed: view.completed };
 }
 
-function ProjectHeader({ project, actions }: { project: ProjectInfo; actions: ProjectActions }) {
+function ProjectHeader({ project, actions, extra }: { project: ProjectInfo; actions: ProjectActions; extra?: ComponentChildren }) {
 	const [name, setName] = useState(project.name);
 	const focused = useRef(false);
 	useEffect(() => {
@@ -224,6 +227,7 @@ function ProjectHeader({ project, actions }: { project: ProjectInfo; actions: Pr
 						}
 					}}
 				/>
+				{extra}
 			</div>
 			{project.exists ? (
 				<button type="button" class="pl-open-note" onClick={() => actions.open(project)}>
@@ -296,6 +300,19 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 	const projects = workspace.projects;
 	const project = list.kind === 'project' ? projects.find((p) => p.path === list.path) : undefined;
 
+	// Board view, for projects. Phones show only lists.
+	const boards = env.boards;
+	const [boardVersion, setBoardVersion] = useState(0);
+	useEffect(() => boards?.subscribe(() => setBoardVersion((v) => v + 1)), []);
+	const boardEntry = project && boards ? boards.entry(project.path) : null;
+	const canBoard = !!project?.exists && !!boards && !env.isPhone;
+	const boardOn = canBoard && boardEntry?.view === 'board';
+	const groupBy: GroupBy = boardEntry?.groupBy ?? 'status';
+	/** A board project's columns when grouped by status: the list shows each to-do's column too. */
+	const statusColumns = project && boards ? boards.rules(project.path) : null;
+	const projectItems = useMemo(() => (project ? allItems(sources).filter((i) => i.path === project.path) : []), [sources, project?.path]);
+	const boardHandle = useRef<BoardHandle | null>(null);
+
 	const setList = (next: ListId): void => {
 		if (sameList(next, list)) return;
 		setListState(next);
@@ -329,6 +346,29 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 			setList({ kind: 'inbox' });
 		}
 	}, [version, list]);
+
+	// Fields naming no column create the column, when that's on.
+	useEffect(() => {
+		if (!project || !boards || !boards.settings.autoCreateColumns || boards.held(project.path)) return;
+		// Read now, not from the render: the settings may have changed since.
+		const columns = boards.rules(project.path);
+		const doc = workspace.doc(project.path);
+		const names = columns && doc ? unknownColumns(doc, columns) : [];
+		if (columns && names.length) boards.setColumns(project.path, withNewColumns(columns, names));
+	}, [version, boardVersion, list]);
+
+	const setBoardView = (view: BoardMode): void => {
+		if (!project || !boards || view === (boardOn ? 'board' : 'list')) return;
+		setExpanded(null);
+		setSelected(-1);
+		clearMarks();
+		boards.update(project.path, (e) => ({ ...e, view }));
+		refocus();
+	};
+
+	const setGroupBy = (next: GroupBy): void => {
+		if (project && boards && next !== groupBy) boards.update(project.path, (e) => ({ ...e, groupBy: next }));
+	};
 
 	useLayoutEffect(() => {
 		const el = root.current;
@@ -424,7 +464,7 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		}
 	}
 	const rows = [...view.groups.flatMap((g) => g.items), ...(showCompleted ? view.completed : [])];
-	const expandedVisible = rows.some((i) => isBoxed(expanded, i));
+	const expandedVisible = (boardOn ? projectItems : rows).some((i) => isBoxed(expanded, i));
 	useEffect(() => {
 		if (expanded && !expandedVisible) setExpanded(null);
 	}, [expanded, expandedVisible]);
@@ -616,12 +656,30 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		setPicker(command);
 	};
 	const viewCommand = useRef<(command: ViewCommand) => void>(() => {});
-	viewCommand.current = (command) => (command === 'undo' ? undoLast() : openPicker(command));
+	viewCommand.current = (command) => {
+		if (command === 'undo') undoLast();
+		else if (command === 'column-prev' || command === 'column-next') shiftColumn(command === 'column-next' ? 1 : -1);
+		else openPicker(command);
+	};
+
+	/** "Move task to next/previous column": the selected card, or in a list, the selected to-do of a board project. */
+	const shiftColumn = (step: 1 | -1): void => {
+		if (boardOn) return boardHandle.current?.shift(step);
+		const item = expanded ? rows.find((i) => isBoxed(expanded, i)) : rows[selected];
+		if (!project || !boards || !statusColumns || !item || item.path !== project.path || item.task.parent !== null) return;
+		const columns = boardColumns(boards, project.path, 'status', projectItems, env, today);
+		void shiftCard(env, boards, 'status', columns, item, step, today).then((r) => {
+			if (!r) return;
+			setToast({ message: `Moved to ${r.name}` });
+			if (r.at && !expanded) setFollow(r.at);
+		});
+	};
 	useLayoutEffect(() => env.onCommand((command) => viewCommand.current(command)), []);
 
 	const refocus = (): void => {
 		window.requestAnimationFrame(() => root.current?.focus({ preventScroll: true }));
 	};
+
 
 	/** Completes the to-dos, or reopens them when they all are done already. */
 	const toggleAll = async (items: Item[]): Promise<void> => {
@@ -804,6 +862,50 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 			.showAtPosition(pos);
 	};
 
+	/** The menu for a card on the board. */
+	const cardMenu = (item: Item, pos: { x: number; y: number }): void => {
+		const menu = new Menu().addItem((i) =>
+			i
+				.setTitle(item.task.done ? 'Mark as open' : 'Complete')
+				.setIcon('check')
+				.onClick(() => toggle(item)),
+		);
+		menu.addItem((i) => i.setTitle('Open').setIcon('pencil').onClick(() => rowActions.onExpand(item)));
+		menu.addItem((i) =>
+			i
+				.setTitle('Schedule…')
+				.setIcon('calendar')
+				.onClick(() =>
+					scheduleMenu(app, { current: item.task.date, today, weekStart: env.weekStart(), onPick: (date) => void scheduleAll([item], date) }).showAtPosition(pos),
+				),
+		);
+		if (project && boards && groupBy === 'status') {
+			const columns = boardColumns(boards, project.path, 'status', projectItems, env, today);
+			const from = columns.findIndex((c) => c.cards.includes(item) || c.older.includes(item));
+			for (const step of [-1, 1] as const) {
+				const to = columns[from + step];
+				if (from !== -1 && to) {
+					menu.addItem((i) =>
+						i
+							.setTitle(`Move to ${to.name}`)
+							.setIcon(step < 0 ? 'arrow-left' : 'arrow-right')
+							.onClick(() => boardHandle.current?.shift(step, item)),
+					);
+				}
+			}
+		}
+		menu
+			.addSeparator()
+			.addItem((i) =>
+				i
+					.setTitle('Delete')
+					.setIcon('trash')
+					.setWarning(true)
+					.onClick(() => void remove(item)),
+			)
+			.showAtPosition(pos);
+	};
+
 	/**
 	 * Today's order is free and saved by Plainlist, within each project when grouped. Elsewhere a to-do moves among its siblings
 	 * in its note, within its group (anywhere in a project).
@@ -967,6 +1069,10 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 	const onKeyDown = (e: KeyboardEvent): void => {
 		const target = e.target as HTMLElement | null;
 		if (e.isComposing || target?.closest('input, textarea, [contenteditable="true"], .pl-popover')) return;
+		if (boardOn) {
+			boardHandle.current?.keyDown(e);
+			return;
+		}
 		const mod = Keymap.isModEvent(e) === true || e.metaKey || e.ctrlKey;
 		const current = rows[selected];
 		/** The selected to-dos, or the highlighted one. */
@@ -1051,6 +1157,35 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		regainFocus();
 	};
 
+	const editorFor = (item: Item, box: TrackBox) => (
+		<TaskEditor
+			key={expansionKey(box)}
+			item={item}
+			box={box}
+			projects={projects.filter((p) => !p.done)}
+			today={today}
+			onCollapse={collapse}
+			onToggle={() => toggle(item)}
+			onDiscard={
+				fresh.current === box
+					? () => {
+							fresh.current = null;
+							void workspace.run(box.current.path, (d) => deleteTask(d, box.current.ref).edits);
+						}
+					: undefined
+			}
+		/>
+	);
+
+	/** A list row's meta: its date (or place), and in a board project, its column when not the first. */
+	const rowMeta = (item: Item): { text: string; cls?: string } => {
+		const m = meta(list, item, today, todayByProject);
+		if (list.kind !== 'project' || !statusColumns || item.task.done || item.task.parent !== null) return m;
+		const at = columnOf(statusColumns, item.task).index;
+		const name = at > 0 ? statusColumns[at]?.name : null;
+		return name ? { ...m, text: m.text ? `${m.text} · ${name}` : name } : m;
+	};
+
 	const renderRow = (item: Item) => {
 		if (expanded && isBoxed(expanded, item)) {
 			return (
@@ -1074,7 +1209,7 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 				/>
 			);
 		}
-		const m = meta(list, item, today, todayByProject);
+		const m = rowMeta(item);
 		return (
 			<TaskRow
 				key={itemKey(item)}
@@ -1207,10 +1342,52 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 					if (e.target === e.currentTarget) root.current?.focus({ preventScroll: true });
 				}}
 			>
-				<div class="pl-content" {...reorder.scopeProps}>
+				<div class={`pl-content${boardOn ? ' is-board' : ''}`} {...reorder.scopeProps}>
 					<header class="pl-header">
 						{project ? (
-							<ProjectHeader key={project.path} project={project} actions={projectActions} />
+							<ProjectHeader
+								key={project.path}
+								project={project}
+								actions={projectActions}
+								extra={
+									canBoard && (
+										<div class="pl-view-controls">
+											<div class="pl-segmented" role="group" aria-label="Show as">
+												{(['list', 'board'] as const).map((v) => (
+													<button
+														type="button"
+														key={v}
+														class={(v === 'board') === boardOn ? 'is-active' : ''}
+														aria-pressed={(v === 'board') === boardOn}
+														onClick={() => setBoardView(v)}
+													>
+														{v === 'list' ? 'List' : 'Board'}
+													</button>
+												))}
+											</div>
+											{boardOn && (
+												<button
+													type="button"
+													class="pl-columns-button"
+													aria-haspopup="menu"
+													onClick={(e) => {
+														const menu = new Menu();
+														menu.addItem((i) => i.setTitle('Status').setChecked(groupBy === 'status').onClick(() => setGroupBy('status')));
+														menu.addItem((i) => i.setTitle('Heading').setChecked(groupBy === 'heading').onClick(() => setGroupBy('heading')));
+														const r = e.currentTarget.getBoundingClientRect();
+														menu.showAtPosition({ x: r.left, y: r.bottom + 4 });
+													}}
+												>
+													Columns: {groupBy === 'status' ? 'Status' : 'Heading'}
+													<svg viewBox="0 0 16 16" aria-hidden="true">
+														<path d="M4 6l4 4 4-4" />
+													</svg>
+												</button>
+											)}
+										</div>
+									)
+								}
+							/>
 						) : (
 							<>
 								<h1 class="pl-title">{listLabel(list, projects)}</h1>
@@ -1219,11 +1396,30 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 						)}
 					</header>
 
-					{view.groups.length === 0 && !view.completed.length && (!project || project.exists) && (
+					{boardOn && project && (
+						<Board
+							key={`${project.path}:${groupBy}`}
+							project={project}
+							groupBy={groupBy}
+							items={projectItems}
+							today={today}
+							expanded={expanded}
+							renderEditor={(item) => (expanded ? editorFor(item, expanded) : <></>)}
+							onExpand={rowActions.onExpand}
+							onToggle={toggle}
+							onDelete={(item) => void remove(item)}
+							onMenu={cardMenu}
+							onUndo={undoLast}
+							toast={(message) => setToast({ message })}
+							handle={boardHandle}
+						/>
+					)}
+
+					{!boardOn && view.groups.length === 0 && !view.completed.length && (!project || project.exists) && (
 						<p class="pl-empty">{EMPTY[list.kind]}</p>
 					)}
 
-					{view.groups.map((g) => (
+					{!boardOn && view.groups.map((g) => (
 						<section class="pl-group" key={g.key}>
 							{g.heading && renamingSection === sectionKey(g.heading) ? (
 								<NameInput
@@ -1267,6 +1463,7 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 
 					{project?.exists &&
 						!project.done &&
+						!boardOn &&
 						(addingSection ? (
 							<section class="pl-group">
 								<NameInput
@@ -1286,7 +1483,7 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 							</button>
 						))}
 
-					{view.completed.length > 0 && (
+					{!boardOn && view.completed.length > 0 && (
 						<div class="pl-completed">
 							<button
 								type="button"
@@ -1321,7 +1518,12 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 						/>
 					)}
 
-					{hint ? (
+					{hint && boardOn ? (
+						<p class="pl-hint">
+							Press <kbd>N</kbd> to add a to-do · drag a card or a column header to reorder · <kbd>{Platform.isMacOS ? '⌘← / ⌘→' : 'Ctrl+← / Ctrl+→'}</kbd> moves the
+							selected card one column
+						</p>
+					) : hint ? (
 						<p class="pl-hint">
 							Press <kbd>N</kbd> to add a to-do
 							{hint.hotkey && (

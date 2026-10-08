@@ -4,7 +4,7 @@
 import { mapLine } from './apply';
 import { headingOf, isBlank, projectLinkTarget } from './parse';
 import { firstOccurrence, nextOccurrence, parseRepeat } from '../dates/repeat';
-import { formatTaskLine, parseTaskLine, setDate, setDone, setRepeat, setTitle } from './taskLine';
+import { formatTaskLine, parseTaskLine, setCol, setDate, setDone, setRepeat, setTitle } from './taskLine';
 import type { Area, Doc, Heading, LineEdit, ProjectLink, Section, Task, TaskDate } from './types';
 
 export class PatchConflict extends Error {}
@@ -106,7 +106,7 @@ export function descriptionLines(description: string, taskIndent = ''): string[]
 	return trimBlankEnds(description).map((l) => (isBlank(l) ? pad : pad + l));
 }
 
-function reindent(lines: string[], from: string, to: string): string[] {
+export function reindent(lines: string[], from: string, to: string): string[] {
 	return lines.map((l) => (isBlank(l) ? l : to + (l.startsWith(from) ? l.slice(from.length) : l.trimStart())));
 }
 
@@ -192,11 +192,13 @@ export interface NewTask {
 	description?: string;
 	/** How deeply it is nested under the to-dos before it: 1 is a sub-task of the closest one at 0. */
 	depth?: number;
+	/** A board column, written as `[col:: …]`. */
+	col?: string | null;
 }
 
 function newTaskLines(t: NewTask): string[] {
 	const indent = '\t'.repeat(t.depth ?? 0);
-	return [formatTaskLine(t.title, false, t.date, null, `${indent}- `, t.repeat ?? null), ...descriptionLines(t.description ?? '', indent)];
+	return [formatTaskLine(t.title, false, t.date, null, `${indent}- `, t.repeat ?? null, t.col ?? null), ...descriptionLines(t.description ?? '', indent)];
 }
 
 export function addTask(doc: Doc, task: NewTask, dest: Destination): LineEdit[] {
@@ -409,7 +411,7 @@ function findTasks(doc: Doc, refs: LineRef[]): Task[] {
 	return [...found.values()].sort((a, b) => a.line - b.line);
 }
 
-const blockEnd = (t: Task): number => Math.max(t.end, t.subtreeEnd);
+export const blockEnd = (t: Task): number => Math.max(t.end, t.subtreeEnd);
 
 /** Drops to-dos that sit inside the block of an earlier one in the list. */
 function outermost(tasks: Task[]): Task[] {
@@ -560,6 +562,14 @@ export function renameSection(doc: Doc, ref: LineRef, name: string): LineEdit[] 
 	const title = sectionName(doc, name, h);
 	const prefix = /^[ \t]*#+[ \t]+/.exec(h.text)?.[0] ?? `${'#'.repeat(h.level)} `;
 	return replaceLine(h.line, h.text, `${prefix}${title}`);
+}
+
+/** Removes a section's heading. Its to-dos and text stay, and join the section above (or none). */
+export function removeSection(doc: Doc, ref: LineRef): LineEdit[] {
+	const h = findHeading(doc, ref);
+	// Don't leave two blank lines where the heading was.
+	const blankAround = isBlank(doc.lines[h.line - 1] ?? 'x') && isBlank(doc.lines[h.line + 1] ?? 'x');
+	return [{ at: h.line, delete: blankAround ? 2 : 1, insert: [] }];
 }
 
 /** The section a section sits in: the closest heading above it at a higher level. */
@@ -804,22 +814,18 @@ export interface Repeated {
 }
 
 /**
- * Completes a to-do with a `[repeat:: …]` rule on `done`: it is ticked and loses its rule, any
- * sub-tasks still open are ticked with it, and a fresh copy, sub-tasks open again, goes just
- * above it with the rule and the next date. A to-do already ticked (by hand, in the note) keeps
- * its own completion date. Returns null when the to-do has no rule.
+ * The lines completing a repeating to-do writes for its block (`before`): a fresh copy, sub-tasks
+ * open again, with the rule and the next date, and the block completed, without its rule. The copy
+ * starts in a board's first column, so it has no `col` field. Null when the to-do has no rule.
  */
-export function completeRepeating(doc: Doc, ref: LineRef, done: string, weekStart: 0 | 1): { edits: LineEdit[]; repeated: Repeated } | null {
-	const t = findTask(doc, ref);
+export function repeatBlock(t: Task, before: string[], done: string, weekStart: 0 | 1): { copy: string[]; completed: string[]; date: string } | null {
 	const rule = t.repeat ? parseRepeat(t.repeat) : null;
 	if (!rule) return null;
 	const doneOn = t.done ? (t.doneDate ?? done) : done;
 	const date = nextOccurrence(rule, t.date, doneOn, weekStart);
-	const end = Math.max(t.end, t.subtreeEnd);
-	const before = doc.lines.slice(t.line, end);
 	const copy = before.map((l, i) => {
 		const open = parseTaskLine(l) ? setDone(l, false, '') : l;
-		return i === 0 ? setDate(open, date) : open;
+		return i === 0 ? setCol(setDate(open, date), null) : open;
 	});
 	const completed = before.map((l, i) => {
 		if (i > 0) return parseTaskLine(l) ? setDone(l, true, doneOn) : l;
@@ -827,6 +833,22 @@ export function completeRepeating(doc: Doc, ref: LineRef, done: string, weekStar
 		const open = t.done && !t.doneDate ? setDone(l, false, '') : l;
 		return setRepeat(setDone(open, true, doneOn), null);
 	});
+	return { copy, completed, date };
+}
+
+/**
+ * Completes a to-do with a `[repeat:: …]` rule on `done`: it is ticked and loses its rule, any
+ * sub-tasks still open are ticked with it, and a fresh copy, sub-tasks open again, goes just
+ * above it with the rule and the next date. A to-do already ticked (by hand, in the note) keeps
+ * its own completion date. Returns null when the to-do has no rule.
+ */
+export function completeRepeating(doc: Doc, ref: LineRef, done: string, weekStart: 0 | 1): { edits: LineEdit[]; repeated: Repeated } | null {
+	const t = findTask(doc, ref);
+	const end = Math.max(t.end, t.subtreeEnd);
+	const before = doc.lines.slice(t.line, end);
+	const r = repeatBlock(t, before, done, weekStart);
+	if (!r) return null;
+	const { copy, completed, date } = r;
 	const edits: LineEdit[] = [{ at: t.line, delete: 0, insert: copy }];
 	completed.forEach((l, i) => edits.push(...replaceLine(t.line + i, before[i] ?? '', l)));
 	return {

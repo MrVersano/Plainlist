@@ -1,12 +1,12 @@
 // Reading and rewriting a single to-do line, e.g.
-// `  - [x] Order cable trays #errands [date:: 2026-10-04] [repeat:: every week] [done:: 2026-10-02]`.
+// `  - [x] Order cable trays #errands [date:: 2026-10-04] [repeat:: every week] [done:: 2026-10-02] [col:: Done]`.
 // Any indent and list marker (`-`, `*`, `+`, `1.`, `1)`) is accepted and kept.
 
 import { parseRepeat } from '../dates/repeat';
 import type { TaskDate } from './types';
 
 const TASK_RE = /^([ \t]*)([-*+]|\d+[.)])[ \t]+\[([ xX])\](?:[ \t]+(.*))?$/;
-const FIELD_RE = /\[(date|repeat|done)::[ \t]*([^\]]*?)[ \t]*\]/gi;
+const FIELD_RE = /\[(date|repeat|done|col)::[ \t]*([^\]]*?)[ \t]*\]/gi;
 const ISO_RE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 
 export interface FieldMatch {
@@ -26,6 +26,8 @@ export interface TaskLine {
 	/** A `[repeat:: …]` field with a rule `parseRepeat` reads. */
 	repeat: FieldMatch | null;
 	doneField: FieldMatch | null;
+	/** The board column, `[col:: Doing]`; always written last on the line. */
+	col: FieldMatch | null;
 }
 
 export function isTaskLine(line: string): boolean {
@@ -50,6 +52,7 @@ export function parseTaskLine(line: string): TaskLine | null {
 	let date: FieldMatch | null = null;
 	let repeat: FieldMatch | null = null;
 	let doneField: FieldMatch | null = null;
+	let col: FieldMatch | null = null;
 
 	for (const f of rest.matchAll(FIELD_RE)) {
 		const name = (f[1] ?? '').toLowerCase();
@@ -64,16 +67,18 @@ export function parseTaskLine(line: string): TaskLine | null {
 			if (parseRepeat(raw)) repeat = { start, end, value: raw.trim().replace(/\s+/g, ' ') };
 		} else if (name === 'done' && !doneField && ISO_RE.test(raw)) {
 			doneField = { start, end, value: raw };
+		} else if (name === 'col' && !col && raw.trim()) {
+			col = { start, end, value: raw.trim() };
 		}
 	}
 
 	let title = line;
-	for (const f of [date, repeat, doneField].filter((x): x is FieldMatch => !!x).sort((a, b) => b.start - a.start)) {
+	for (const f of [date, repeat, doneField, col].filter((x): x is FieldMatch => !!x).sort((a, b) => b.start - a.start)) {
 		title = title.slice(0, f.start) + title.slice(f.end);
 	}
 	title = title.slice(restStart).trim();
 
-	return { done: m[3] !== ' ', indent: m[1] ?? '', prefix, title, date, repeat, doneField };
+	return { done: m[3] !== ' ', indent: m[1] ?? '', prefix, title, date, repeat, doneField, col };
 }
 
 export function formatTaskLine(
@@ -83,11 +88,13 @@ export function formatTaskLine(
 	doneDate: string | null,
 	prefix = '- ',
 	repeat: string | null = null,
+	col: string | null = null,
 ): string {
 	let line = `${prefix}[${done ? 'x' : ' '}] ${title.trim()}`;
 	if (date) line += ` [date:: ${date}]`;
 	if (repeat) line += ` [repeat:: ${repeat}]`;
 	if (done && doneDate) line += ` [done:: ${doneDate}]`;
+	if (col) line += ` [col:: ${col}]`;
 	return line.trimEnd();
 }
 
@@ -98,14 +105,15 @@ export function setDone(line: string, done: boolean, today: string): string {
 	const box = t.prefix.length;
 	let out = line.slice(0, box + 1) + (done ? 'x' : ' ') + line.slice(box + 2);
 	if (done) {
-		if (!t.doneField) out = `${out.trimEnd()} [done:: ${today}]`;
+		const at = t.col ? t.col.start : out.trimEnd().length;
+		if (!t.doneField) out = `${out.slice(0, at)} [done:: ${today}]${out.slice(at)}`;
 	} else if (t.doneField) {
 		out = out.slice(0, t.doneField.start) + out.slice(t.doneField.end);
 	}
 	return out;
 }
 
-/** Sets, replaces or removes the `date` field. A new field goes at the end, before any `repeat` or `done` field. */
+/** Sets, replaces or removes the `date` field. A new field goes at the end, before any `repeat`, `done` or `col` field. */
 export function setDate(line: string, date: TaskDate | null): string {
 	const t = parseTaskLine(line);
 	if (!t) return line;
@@ -114,11 +122,11 @@ export function setDate(line: string, date: TaskDate | null): string {
 		return line.slice(0, t.date.start) + field + line.slice(t.date.end);
 	}
 	if (!date) return line;
-	const at = t.repeat?.start ?? t.doneField?.start ?? line.trimEnd().length;
+	const at = t.repeat?.start ?? t.doneField?.start ?? t.col?.start ?? line.trimEnd().length;
 	return `${line.slice(0, at)} [date:: ${date}]${line.slice(at)}`;
 }
 
-/** Sets, replaces or removes the `repeat` field. A new field goes at the end, before any `done` field. */
+/** Sets, replaces or removes the `repeat` field. A new field goes at the end, before any `done` or `col` field. */
 export function setRepeat(line: string, repeat: string | null): string {
 	const t = parseTaskLine(line);
 	if (!t) return line;
@@ -127,7 +135,7 @@ export function setRepeat(line: string, repeat: string | null): string {
 		return line.slice(0, t.repeat.start) + field + line.slice(t.repeat.end);
 	}
 	if (!repeat) return line;
-	const at = t.doneField ? t.doneField.start : line.trimEnd().length;
+	const at = t.doneField?.start ?? t.col?.start ?? line.trimEnd().length;
 	return `${line.slice(0, at)} [repeat:: ${repeat}]${line.slice(at)}`;
 }
 
@@ -135,5 +143,14 @@ export function setRepeat(line: string, repeat: string | null): string {
 export function setTitle(line: string, title: string): string {
 	const t = parseTaskLine(line);
 	if (!t || t.title === title.trim()) return line;
-	return formatTaskLine(title, t.done, t.date?.value ?? null, t.doneField?.value ?? null, t.prefix, t.repeat?.value ?? null);
+	return formatTaskLine(title, t.done, t.date?.value ?? null, t.doneField?.value ?? null, t.prefix, t.repeat?.value ?? null, t.col?.value ?? null);
+}
+
+/** Sets, replaces or removes the `col` field (the board column). A new field goes at the very end. */
+export function setCol(line: string, col: string | null): string {
+	const t = parseTaskLine(line);
+	if (!t) return line;
+	const field = col ? ` [col:: ${col}]` : '';
+	if (t.col) return t.col.value === col ? line : line.slice(0, t.col.start) + field + line.slice(t.col.end);
+	return col ? `${line.trimEnd()}${field}` : line;
 }

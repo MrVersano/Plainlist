@@ -10,6 +10,7 @@ Plainlist turns your notes into a clean, minimal task manager in Obsidian. A tas
 - **[Projects are notes](docs/projects.md):** create a new project note, turn an existing note into a project, or have [notes with a tag](docs/projects.md#adding-projects-by-tag) such as `#project` added automatically. Its checkboxes, nested ones included, become the project's to-dos, grouped by the note's headings. A ring in the sidebar shows how much of each project is done.
   - **[Sections](docs/projects.md#adding-and-arranging-sections):** add sections to a project and drag them to reorder them; each is a heading in the note.
   - **[Areas](docs/projects.md#areas):** group projects in the sidebar under foldable areas such as Work and Home, and drag areas to reorder them.
+  - **[Board](docs/board.md):** show a project as columns, such as To do, Doing and Done, or one per heading. Drag cards between columns or press `⌘←` / `⌘→`; moving a card into Done completes it.
 - **[To-dos](docs/todos.md):** a title, a description, a date and a project, with `#tags` and `[[links]]`. Click a to-do to edit it in place.
   - **[Repeating](docs/todos.md#repeating-to-dos):** "every 2 weeks", "every last sunday", or "every month when done" to count from the day you complete it.
   - **[Sub-tasks](docs/todos.md#sub-tasks):** indent a checkbox under another, or press `Tab` / `Shift+Tab`.
@@ -24,7 +25,7 @@ Plainlist turns your notes into a clean, minimal task manager in Obsidian. A tas
 - **[Search and navigation](docs/search-and-navigation.md):** fuzzy-find any to-do, and jump to any list with a command or hotkey.
 - **[Lists in notes](docs/lists-in-notes.md):** a `plainlist` code block shows Today's list inside any note, or a daily note's own day.
 - **[Keyboard shortcuts](docs/keyboard.md):** move, open, complete, indent and reorder to-dos without the mouse.
-- **[Plain Markdown](docs/file-format.md):** to-dos are ordinary checkboxes with `[date:: …]` and `[repeat:: …]` fields. Plainlist only changes the lines it owns.
+- **[Plain Markdown](docs/file-format.md):** to-dos are ordinary checkboxes with `[date:: …]`, `[repeat:: …]` and `[col:: …]` fields. Plainlist only changes the lines it owns.
 
 | Upcoming | Project |
 |---|---|
@@ -46,6 +47,7 @@ Run **Plainlist: Open** from the command palette (or click the ribbon icon) to g
 - [Lists](docs/lists.md)
 - [To-dos](docs/todos.md)
 - [Projects](docs/projects.md)
+- [Board](docs/board.md)
 - [Quick capture](docs/quick-capture.md)
 - [Adding from other apps](docs/adding-from-other-apps.md)
 - [Search and navigation](docs/search-and-navigation.md)

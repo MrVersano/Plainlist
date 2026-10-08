@@ -1,6 +1,7 @@
 import { App, MarkdownPostProcessorContext, MarkdownRenderChild, MarkdownView, TFile } from 'obsidian';
 import { h, render } from 'preact';
 import { dailyNoteFormat, dateFromTitle } from '../dailyNote';
+import type { ColumnDef } from '../model/board';
 import type PlainlistPlugin from '../main';
 import { Workspace } from '../store';
 import { tasksFilePath } from '../tasksFile';
@@ -32,13 +33,16 @@ interface Shared {
 export class WorkspacePool {
 	private open = new Map<string, Shared>();
 
-	constructor(private app: App) {}
+	constructor(
+		private app: App,
+		private boardRules: (path: string) => ColumnDef[] | null,
+	) {}
 
 	acquire(file: TFile): { workspace: Workspace; loaded: Promise<void>; release: () => void } {
 		const key = file.path;
 		let shared = this.open.get(key);
 		if (!shared) {
-			const workspace = new Workspace(this.app, file);
+			const workspace = new Workspace(this.app, file, this.boardRules);
 			shared = { workspace, loaded: workspace.load(), users: 0 };
 			this.open.set(key, shared);
 		}

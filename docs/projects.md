@@ -4,7 +4,7 @@ A project is an ordinary note. Every checkbox in it, nested ones included, is on
 
 ![A project](../assets/project.png)
 
-Click **Open note ↗** under the title to open the note itself.
+Click **Open note ↗** under the title to open the note itself. **List | Board** at the right of the title shows the project as a [board](board.md) instead.
 
 In the sidebar, a small ring before each project's name fills up as its to-dos get done. A completed project's ring is full.
 

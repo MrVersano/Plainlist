@@ -2,6 +2,21 @@
 
 All notable changes to Plainlist, newest first. Each release is on [GitHub](https://github.com/MrVersano/Plainlist/releases).
 
+## 1.0.31
+
+*October 8, 2026*
+
+### New
+
+- A project can show as a board. Click **Board** at the right of its title for columns such as **To do**, **Doing** and **Done**; **List** switches back, and each project remembers its choice. Phones keep the list.
+- Drag cards between columns or up and down; on a touch screen, hold a card first. Or select a card and press `⌘→` / `⌘←` (`Ctrl` on Windows and Linux).
+- A card's column is a `[col:: Doing]` field at the end of its line, so the note stays a plain checklist. A to-do without one is in the first column.
+- Moving a card into Done completes it, and moving it out reopens it. Completing a to-do anywhere, in a list or in the note, moves it to Done. Each column's **•••** menu sets these options.
+- Rename, add, delete and reorder columns. Renaming a column updates every to-do in it. Typing `[col:: Waiting]` by hand adds a **Waiting** column.
+- **Columns: Heading** shows one column per heading in the note instead; moving a card moves it to that section.
+- New commands, **Move task to next column** and **Move task to previous column**, to give your own keys under **Settings → Hotkeys**. In a list they change the selected to-do's column, which its row now shows.
+- A **Board** section in settings, with the default columns for new boards.
+
 ## 1.0.30
 
 *October 8, 2026*

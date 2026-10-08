@@ -30,6 +30,8 @@ The keys in the first table, except `Mod+Z`, also work in a [list inside a note]
 
 `Mod` is `Cmd` on macOS and `Ctrl` elsewhere.
 
+In a [board](board.md), the arrow keys move between cards and `⌘←` / `⌘→` move the selected card one column; see [Board](board.md#keyboard).
+
 ## In quick capture
 
 | Key | Action |

@@ -19,13 +19,15 @@ export interface Task {
 	/** Leading whitespace of the title line. */
 	indent: string;
 	done: boolean;
-	/** Title text with the recognised `date`, `repeat` and `done` fields removed. */
+	/** Title text with the recognised `date`, `repeat`, `done` and `col` fields removed. */
 	title: string;
 	date: TaskDate | null;
 	/** Completion date, `YYYY-MM-DD`. */
 	doneDate: string | null;
 	/** The `[repeat:: …]` rule as written, e.g. `every 2 weeks`, or null. */
 	repeat: string | null;
+	/** The board column named by a `[col:: …]` field, trimmed, or null. */
+	col: string | null;
 	description: string;
 	/** Description lines are `[line + 1, end)`. */
 	end: number;

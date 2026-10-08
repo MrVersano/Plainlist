@@ -1,5 +1,6 @@
-import { App, moment, Platform, PluginSettingTab, Scope, Setting, SettingDefinitionItem } from 'obsidian';
+import { App, Menu, moment, Notice, Platform, PluginSettingTab, Scope, Setting, SettingDefinitionItem } from 'obsidian';
 import { acceleratorFromEvent, DEFAULT_SHORTCUT, formatAccelerator } from './accelerator';
+import { cleanColumnName, columnNameError, defaultBoard, moveColumn, setColumnFlag, type BoardSettings, type ColumnDef } from './model/board';
 import type PlainlistPlugin from './main';
 import { TagSuggest } from './ui/TagSuggest';
 
@@ -21,6 +22,8 @@ export interface PlainlistSettings {
 	projectTags: string;
 	/** The order the user dragged Today's to-dos into, as `todayKey`s. Not shown in the settings tab. */
 	todayOrder: string[];
+	/** Board view: options, default columns and each project's board. */
+	board: BoardSettings;
 }
 
 export const DEFAULT_SETTINGS: PlainlistSettings = {
@@ -34,7 +37,19 @@ export const DEFAULT_SETTINGS: PlainlistSettings = {
 	groupTodayByProject: false,
 	projectTags: '',
 	todayOrder: [],
+	board: defaultBoard(),
 };
+
+/** "Checks when moved here · …", for a default column's row. */
+function describeColumn(c: ColumnDef): string {
+	const parts = [
+		c.checkOnEnter && 'Checks to-dos moved here',
+		c.uncheckOnLeave && 'unchecks them when moved out',
+		c.receivesChecked && 'gets to-dos checked elsewhere',
+	].filter((p): p is string => !!p);
+	const text = parts.join(', ');
+	return text ? text.charAt(0).toUpperCase() + text.slice(1) + '.' : '';
+}
 
 /** 0 = Sunday, 1 = Monday. Locales that start on another day fall back to Monday. */
 export function firstDayOfWeek(weekStart: WeekStart): 0 | 1 {
@@ -51,7 +66,26 @@ export class PlainlistSettingTab extends PluginSettingTab {
 		super(app, plugin);
 	}
 
+	getControlValue(key: string): unknown {
+		const board = this.plugin.settings.board;
+		if (key === 'boardAutoCreate') return board.autoCreateColumns;
+		if (key === 'boardDoneDays') return board.doneDays;
+		return super.getControlValue(key);
+	}
+
 	async setControlValue(key: string, value: unknown): Promise<void> {
+		const board = this.plugin.settings.board;
+		if (key === 'boardAutoCreate') {
+			board.autoCreateColumns = value === true;
+			this.plugin.boards.changed();
+			return;
+		}
+		if (key === 'boardDoneDays') {
+			const days = Number(value);
+			board.doneDays = Number.isFinite(days) && days >= 0 ? Math.floor(days) : 7;
+			this.plugin.boards.changed();
+			return;
+		}
 		await super.setControlValue(key, value);
 		if (key === 'quickEntryEnabled') {
 			this.plugin.quickEntry?.apply();
@@ -123,7 +157,117 @@ export class PlainlistSettingTab extends PluginSettingTab {
 				visible: () => Platform.isDesktopApp && this.plugin.settings.quickEntryEnabled,
 				render: (setting) => this.renderShortcut(setting),
 			},
+			{
+				type: 'group',
+				heading: 'Board',
+				items: [
+					{
+						name: 'Auto-create columns from tasks',
+						desc: 'A [col:: …] field in a project note that names no column adds that column to its board. When off, those to-dos show in the first column.',
+						control: { type: 'toggle', key: 'boardAutoCreate', defaultValue: true },
+					},
+					{
+						name: 'Show completed tasks in their column for',
+						desc: 'Days. Older completed to-dos sit behind "Show older" at the bottom of the column.',
+						control: { type: 'number', key: 'boardDoneDays', defaultValue: 7, min: 0 },
+					},
+					{
+						name: 'Move to the next or previous column',
+						desc: 'In a board, ⌘← and ⌘→ (Ctrl on Windows and Linux) move the selected card. Set your own keys for "Move task to next column" and "Move task to previous column" under Hotkeys.',
+						render: (setting) => {
+							setting.addButton((b) => b.setButtonText('Open hotkeys').onClick(() => this.openHotkeys()));
+						},
+					},
+				],
+			},
+			{
+				type: 'list',
+				heading: 'Default columns',
+				emptyState: 'No columns.',
+				items: this.plugin.settings.board.defaultColumns.map((c, i) => ({
+					name: c.name,
+					desc: describeColumn(c),
+					render: (setting: Setting) => this.renderDefaultColumn(setting, i),
+				})),
+				onReorder: (from: number, to: number) => this.setDefaultColumns(moveColumn(this.plugin.settings.board.defaultColumns, from, to)),
+				onDelete: (index: number) => {
+					const columns = this.plugin.settings.board.defaultColumns;
+					if (columns.length <= 1) {
+						new Notice('A board needs at least one column.');
+						return;
+					}
+					this.setDefaultColumns(columns.filter((_, i) => i !== index));
+				},
+				addItem: {
+					name: 'Add column',
+					action: () => {
+						const columns = this.plugin.settings.board.defaultColumns;
+						let n = columns.length + 1;
+						while (columns.some((c) => c.name.toLowerCase() === `column ${n}`)) n++;
+						this.setDefaultColumns([...columns, { name: `Column ${n}` }]);
+					},
+				},
+			},
 		];
+	}
+
+	private setDefaultColumns(columns: ColumnDef[]): void {
+		this.plugin.settings.board.defaultColumns = columns;
+		this.plugin.boards.changed();
+		this.update();
+	}
+
+	/** A default column: its name, and a menu of its auto-check options. */
+	private renderDefaultColumn(setting: Setting, index: number): void {
+		const columns = (): ColumnDef[] => this.plugin.settings.board.defaultColumns;
+		const column = columns()[index];
+		if (!column) return;
+		setting.setName('');
+		setting.addText((text) => {
+			text.setValue(column.name).setPlaceholder('Column name');
+			text.inputEl.addEventListener('blur', () => {
+				const name = cleanColumnName(text.getValue());
+				if (name === column.name) return;
+				const error = columnNameError(columns(), name, index);
+				if (error) {
+					new Notice(error);
+					text.setValue(column.name);
+					return;
+				}
+				this.setDefaultColumns(columns().map((c, i) => (i === index ? { ...c, name } : c)));
+			});
+		});
+		setting.addExtraButton((button) =>
+			button
+				.setIcon('list-checks')
+				.setTooltip('Auto-check options')
+				.onClick(() => {
+					const flag = (key: 'checkOnEnter' | 'uncheckOnLeave' | 'receivesChecked', title: string, disabled = false) =>
+						menu.addItem((item) =>
+							item
+								.setTitle(title)
+								.setChecked(!!column[key])
+								.setDisabled(disabled)
+								.onClick(() => this.setDefaultColumns(setColumnFlag(columns(), index, key, !column[key]))),
+						);
+					const menu = new Menu();
+					flag('checkOnEnter', 'Check tasks when moved here');
+					flag('uncheckOnLeave', 'Uncheck tasks when moved out', !column.checkOnEnter);
+					flag('receivesChecked', 'Checking a task elsewhere moves it here');
+					const r = button.extraSettingsEl.getBoundingClientRect();
+					menu.showAtPosition({ x: r.left, y: r.bottom });
+				}),
+		);
+	}
+
+	/** Opens Settings → Hotkeys, filtered to the board's move commands. */
+	private openHotkeys(): void {
+		// Not in the public API; fall back to doing nothing if it changes.
+		const setting = (this.app as unknown as { setting?: { openTabById?: (id: string) => { searchComponent?: { inputEl?: HTMLInputElement } } | undefined } }).setting;
+		const input = setting?.openTabById?.('hotkeys')?.searchComponent?.inputEl;
+		if (!input) return;
+		input.value = 'Move task to';
+		input.dispatchEvent(new Event('input'));
 	}
 
 	/** A text box that completes tags from the vault as you type. */

@@ -1,5 +1,6 @@
 import { App, Notice, TAbstractFile, TFile } from 'obsidian';
 import { applyEdits, mapLine } from './model/apply';
+import { reconcileColumns, type ColumnDef } from './model/board';
 import type { ProjectInfo, Source } from './model/lists';
 import { parse } from './model/parse';
 import {
@@ -30,6 +31,7 @@ import {
 	removeProjectLink,
 	renameArea,
 	renameSection,
+	removeSection,
 	replaceProjectLink,
 	type LineRef,
 	type NewTask,
@@ -100,6 +102,8 @@ export class Workspace {
 	constructor(
 		private app: App,
 		masterFile: TFile,
+		/** A board project's columns, whose auto-check rules every change to its note follows; null for other notes. */
+		private boardRules: (path: string) => ColumnDef[] | null = () => null,
 	) {
 		this.master = { file: masterFile, text: '', doc: parse('') };
 		const { vault, metadataCache } = app;
@@ -404,6 +408,11 @@ export class Workspace {
 		return this.run(projectPath, (d) => renameSection(d, refOf(section), name));
 	}
 
+	/** Removes a section's heading; what was under it joins the section above. */
+	removeSection(projectPath: string, section: Heading): Promise<RunResult> {
+		return this.run(projectPath, (d) => removeSection(d, refOf(section)));
+	}
+
 	/** Moves a section, with everything under it, just before or after another in the same note. */
 	moveSection(projectPath: string, section: Heading, target: Heading, place: Place): Promise<RunResult> {
 		return this.run(projectPath, (d) => moveSection(d, refOf(section), refOf(target), place));
@@ -516,7 +525,7 @@ export class Workspace {
 				const doc = parse(text);
 				const edits = makeEdits(doc);
 				if (!edits.length) return text;
-				const next = applyEdits(doc, edits);
+				const next = this.withRules(path, doc, applyEdits(doc, edits));
 				if (track) {
 					const at = locateLine(doc, track);
 					const line = at === null ? null : mapLine(doc, edits, at);
@@ -542,6 +551,19 @@ export class Workspace {
 		}
 	}
 
+	/**
+	 * Applies a board's auto-check rules to a change, in the same write: a to-do checked
+	 * outside Done moves there, one unchecked in Done moves to the first column. They only
+	 * rewrite lines in place, so line numbers stay as they were.
+	 */
+	private withRules(path: string, before: Doc, text: string): string {
+		const columns = path === this.masterPath ? null : this.boardRules(path);
+		if (!columns) return text;
+		const after = parse(text);
+		const edits = reconcileColumns(before, after, columns, this.today);
+		return edits.length ? applyEdits(after, edits) : text;
+	}
+
 	private report(path: string, e: unknown): void {
 		if (e instanceof PatchConflict) {
 			new Notice(`${path.split('/').pop() ?? path} changed — please try again`);
@@ -558,8 +580,14 @@ export class Workspace {
 		const text = await this.app.vault.read(f);
 		// Our own writes are already applied; only re-render for changes made elsewhere.
 		if (text === state.text) return;
+		const before = state.doc;
 		state.text = text;
 		state.doc = parse(text);
+		// A to-do checked or unchecked by hand moves column, as one checked here does.
+		const columns = state === this.master ? null : this.boardRules(f.path);
+		if (columns && reconcileColumns(before, state.doc, columns, this.today).length) {
+			void this.run(f.path, (d) => reconcileColumns(before, d, columns, this.today));
+		}
 		if (state === this.master) await this.resolve();
 		else this.notify();
 		// A repeating to-do ticked by hand gets its next one straight away.
