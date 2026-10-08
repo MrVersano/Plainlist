@@ -2,6 +2,14 @@
 
 All notable changes to Plainlist, newest first. Each release is on [GitHub](https://github.com/MrVersano/Plainlist/releases).
 
+## 1.0.32
+
+*October 8, 2026*
+
+### Improvements
+
+- On a board with heading columns, completed to-dos are hidden. **Show N completed** at the bottom of a column shows them, in that column only.
+
 ## 1.0.31
 
 *October 8, 2026*

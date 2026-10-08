@@ -13,7 +13,7 @@ The **Columns** menu next to the switch chooses what the columns are:
 - **Status** (the default): columns you name yourself. A to-do's column is a `[col:: Doing]` field at the end of its line. A to-do without one is in the first column, or in Done when it's completed.
 - **Heading**: one column per heading in the note, plus one for to-dos above the first heading. Moving a card moves its to-do under that heading.
 
-Each column shows how many open to-dos it has. Completed to-dos from the last 7 days show in their column; older ones are behind **Show N older** at the bottom.
+Each column shows how many open to-dos it has. With status columns, completed to-dos from the last 7 days show in their column, and older ones are behind **Show N older** at the bottom. With heading columns, completed to-dos are hidden: **Show N completed** at the bottom of a column shows them, in that column only. A to-do you complete on the board stays in sight for a moment first.
 
 ## Cards
 

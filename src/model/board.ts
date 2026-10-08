@@ -367,7 +367,7 @@ export interface BoardColumn {
 	heading?: Heading | null;
 	/** Cards shown, in note order. */
 	cards: Item[];
-	/** Completed cards older than the window, behind "Show N older". */
+	/** Completed cards kept out of sight: by status, those older than the window, behind "Show N older"; by heading, all of them, behind "Show N completed". */
 	older: Item[];
 	/** Open cards. */
 	open: number;
@@ -403,8 +403,13 @@ export function statusBoard(items: Item[], columns: ColumnDef[], today: string, 
 	);
 }
 
-/** A board with a column per heading in the note, after one for to-dos above the first heading when there are any. */
-export function headingBoard(items: Item[], doc: Doc, today: string, days: number): BoardColumn[] {
+/**
+ * A board with a column per heading in the note, after one for to-dos above the first heading
+ * when there are any. Completed cards are all kept out of sight, column by column.
+ */
+export function headingBoard(items: Item[], doc: Doc, today: string): BoardColumn[] {
+	// No day counts as recent.
+	const days = 0;
 	const cards = cardsOf(items);
 	const out: BoardColumn[] = [];
 	const loose = cards.filter((i) => !i.task.heading);

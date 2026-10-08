@@ -53,7 +53,7 @@ const columnIndexOf = (columns: BoardColumn[], item: Item): number =>
 export function boardColumns(boards: Boards, path: string, groupBy: GroupBy, items: Item[], env: Env, today: string): BoardColumn[] {
 	const doc = env.workspace.doc(path);
 	const days = boards.settings.doneDays;
-	if (groupBy === 'heading') return doc ? headingBoard(items, doc, today, days) : [];
+	if (groupBy === 'heading') return doc ? headingBoard(items, doc, today) : [];
 	return statusBoard(items, boards.columns(path), today, days);
 }
 
@@ -126,6 +126,7 @@ export function Board({
 	onMenu,
 	onUndo,
 	toast,
+	lingers,
 	handle,
 }: {
 	project: ProjectInfo;
@@ -141,6 +142,8 @@ export function Board({
 	onMenu: (item: Item, pos: { x: number; y: number }) => void;
 	onUndo: () => void;
 	toast: (message: string) => void;
+	/** A to-do just completed here, which stays in sight a moment before it goes behind "Show completed". */
+	lingers: (item: Item) => boolean;
 	handle: { current: BoardHandle | null };
 }) {
 	const env = useEnv();
@@ -150,7 +153,7 @@ export function Board({
 	const columns = boardColumns(boards, path, groupBy, items, env, today);
 	const defs = boards.columns(path);
 	const doc = workspace.doc(path);
-	/** Columns showing their older completed cards. */
+	/** Columns showing their hidden completed cards. */
 	const [older, setOlder] = useState<ReadonlySet<string>>(new Set());
 	const [sel, setSel] = useState<{ col: number; row: number } | null>(null);
 	const [follow, setFollow] = useState<TaskRef | null>(null);
@@ -158,7 +161,11 @@ export function Board({
 	const [adding, setAdding] = useState(false);
 	const editable = project.exists && !project.done;
 
-	const shown = (c: BoardColumn): Item[] => (older.has(c.key) ? [...c.cards, ...c.older] : c.cards);
+	/** A column's cards, with its hidden completed ones when shown, or those just completed, which stay a moment. */
+	const shown = (c: BoardColumn): Item[] => {
+		const extra = older.has(c.key) ? c.older : c.older.filter(lingers);
+		return extra.length ? [...c.cards, ...extra].sort((a, b) => a.task.line - b.task.line) : c.cards;
+	};
 	const selected = sel ? shown(columns[sel.col] ?? columns[0]!)?.[sel.row] : undefined;
 	const isExpanded = (item: Item): boolean => isAt(expanded?.current ?? null, item);
 
@@ -541,7 +548,13 @@ export function Board({
 									setOlder(next);
 								}}
 							>
-								{older.has(c.key) ? 'Hide older' : `Show ${c.older.length} older`}
+								{groupBy === 'heading'
+									? older.has(c.key)
+										? 'Hide completed'
+										: `Show ${c.older.length} completed`
+									: older.has(c.key)
+										? 'Hide older'
+										: `Show ${c.older.length} older`}
 							</button>
 						)}
 					</section>

@@ -239,10 +239,11 @@ describe('the board', () => {
 		expect(board.map((c) => c.open)).toEqual([2, 2, 0]);
 	});
 
-	it('splits cards by heading', () => {
-		const board = headingBoard(items, doc, TODAY, 7);
+	it('splits cards by heading, with every completed card kept out of sight', () => {
+		const board = headingBoard(items, doc, TODAY);
 		expect(board.map((c) => c.name)).toEqual(['No section', 'Later']);
-		expect(board.map((c) => c.cards.map((i) => i.task.title))).toEqual([['A', 'B', 'C', 'E'], ['F']]);
+		expect(board.map((c) => c.cards.map((i) => i.task.title))).toEqual([['A', 'B', 'E'], ['F']]);
+		expect(board.map((c) => c.older.map((i) => i.task.title))).toEqual([['C', 'D'], []]);
 	});
 });
 

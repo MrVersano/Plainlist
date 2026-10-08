@@ -1411,6 +1411,7 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 							onMenu={cardMenu}
 							onUndo={undoLast}
 							toast={(message) => setToast({ message })}
+							lingers={(item) => item.task.done && lingering.has(lingerKey(item.path, item.task.line))}
 							handle={boardHandle}
 						/>
 					)}
