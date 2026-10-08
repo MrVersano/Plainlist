@@ -15,5 +15,6 @@ The file model (`src/model/`) and date parsing (`src/dates/`) have no Obsidian i
 
 ## Releasing
 
-1. `npm version patch` (or `minor` / `major`) updates `manifest.json`, `package.json` and `versions.json`.
-2. Push the commit and tag (`git push --follow-tags`). The release workflow builds the plugin and publishes a GitHub release with `main.js`, `manifest.json` and `styles.css`.
+1. Add an entry for the new version at the top of [CHANGELOG.md](../CHANGELOG.md), with the date and **New**, **Improvements** and **No longer broken** sections as needed.
+2. `npm version patch` (or `minor` / `major`) updates `manifest.json`, `package.json` and `versions.json`.
+3. Push the commit and tag (`git push --follow-tags`). The release workflow builds the plugin and publishes a GitHub release with `main.js`, `manifest.json` and `styles.css`.

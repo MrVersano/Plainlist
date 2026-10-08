@@ -53,3 +53,4 @@ Run **Plainlist: Open** from the command palette (or click the ribbon icon) to g
 - [File format](docs/file-format.md)
 - [Settings](docs/settings.md)
 - [Development and releasing](docs/development.md)
+- [Changelog](CHANGELOG.md)
