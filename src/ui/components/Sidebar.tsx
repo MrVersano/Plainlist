@@ -84,14 +84,17 @@ export function areaMenu(area: Area, areas: Area[], actions: ProjectActions, onR
 	return menu;
 }
 
-function NameInput({
+/** A name typed in place: Enter or leaving the field keeps it, Escape cancels. */
+export function NameInput({
 	initial,
 	onDone,
 	label = 'Project name',
+	cls = 'pl-nav-input',
 }: {
 	initial: string;
 	onDone: (name: string | null) => void;
 	label?: string;
+	cls?: string;
 }) {
 	const [value, setValue] = useState(initial);
 	const finished = useRef(false);
@@ -104,7 +107,7 @@ function NameInput({
 	};
 	return (
 		<input
-			class="pl-nav-input"
+			class={cls}
 			type="text"
 			aria-label={label}
 			placeholder={label}

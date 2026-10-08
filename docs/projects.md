@@ -37,7 +37,18 @@ Removing a tag from the setting, or clearing it, never removes projects on its o
 
 Headings in a project note group its to-dos. The project view shows each heading above the to-dos under it, and other lists show the to-do's place as **Project › Heading**. The note's title (a single `#` heading at the top) doesn't count.
 
+Every heading shows as a section, even one with no open to-dos yet.
+
 In the project picker and the `@` list in [quick capture](quick-capture.md#picking-a-project), each project lists its headings. Pick one to add or move a to-do under it. You can also type `@Project/Heading`.
+
+### Adding and arranging sections
+
+- Click **+ New section** below a project's to-dos and type its name. Plainlist adds a heading at the end of the note, at the level of its other sections (`##` if it has none). On a phone you can also tap **•••** at the top, then **New section**.
+- To change the order of sections, drag a section's name above or below another's; on a touch screen, hold the name first, then drag. Every section folds while you drag, so you can see where it will land. A section moves with everything under it in the note, including deeper headings. It can only move among the sections at its level inside the same section.
+- Drag a to-do onto a section's name to move it to the end of that section.
+- Right-click a section's name, hold it on a touch screen, or click **•••** next to it for **Add to-do**, **Rename**, **Move up** and **Move down**.
+
+Section names in a note must differ from each other.
 
 ## Areas
 

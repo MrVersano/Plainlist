@@ -43,6 +43,7 @@ export class CaptureModal extends Modal {
 				weekStart,
 				projects: session.projects,
 				initialProject: session.initialProject,
+				initialHeading: session.initialHeading,
 				defaultDate,
 				initialText: this.extras.initialText,
 				links: noteLinks(this.app, this.options.file.path),

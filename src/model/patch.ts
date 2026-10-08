@@ -531,6 +531,80 @@ export function moveTasksToHeading(doc: Doc, refs: LineRef[], heading: LineRef |
 	return [...out.edits, insertTaskLines(doc, out.lines, heading ? { heading } : 'note').edit];
 }
 
+// --- Sections in project notes -----------------------------------------------
+//
+// A section is a heading that groups to-dos (`Doc.headings`). Its block runs from the heading
+// to the next heading at its level or above, so it takes any deeper headings along with it.
+
+/** A section's name, checked: one line, not empty, and not the name of another section in the note. */
+function sectionName(doc: Doc, name: string, except: Heading | null = null): string {
+	const title = name.replace(/[\r\n]+/g, ' ').trim();
+	if (!title) throw new PatchConflict('A section needs a name');
+	if (doc.headings.some((h) => h !== except && h.name.toLowerCase() === title.toLowerCase())) {
+		throw new PatchConflict(`Already a section: ${title}`);
+	}
+	return title;
+}
+
+/** Adds a heading at the end of the note, at the level of its top sections (`##` when it has none). */
+export function addSection(doc: Doc, name: string): LineEdit[] {
+	const title = sectionName(doc, name);
+	const level = doc.headings.length ? Math.min(...doc.headings.map((h) => h.level)) : 2;
+	const at = beforeBlanks(doc, doc.lines.length, doc.frontmatterEnd);
+	return [{ at, delete: 0, insert: block(doc, at, [`${'#'.repeat(level)} ${title}`]).lines }];
+}
+
+/** Renames a section, keeping its heading level. */
+export function renameSection(doc: Doc, ref: LineRef, name: string): LineEdit[] {
+	const h = findHeading(doc, ref);
+	const title = sectionName(doc, name, h);
+	const prefix = /^[ \t]*#+[ \t]+/.exec(h.text)?.[0] ?? `${'#'.repeat(h.level)} `;
+	return replaceLine(h.line, h.text, `${prefix}${title}`);
+}
+
+/** The section a section sits in: the closest heading above it at a higher level. */
+function parentSection(doc: Doc, h: Heading): Heading | null {
+	return doc.headings.filter((x) => x.line < h.line && x.level < h.level).pop() ?? null;
+}
+
+/** The sections a section can trade places with, itself included: same level, in the same section. In file order. */
+export function sectionSiblings(doc: Doc, h: Heading): Heading[] {
+	const parent = parentSection(doc, h);
+	return doc.headings.filter((x) => x.level === h.level && parentSection(doc, x) === parent);
+}
+
+/** End of a section's block: the next heading at its level or above, or the end of the note. */
+function sectionEnd(doc: Doc, h: Heading): number {
+	return doc.headings.find((x) => x.line > h.line && x.level <= h.level)?.line ?? doc.lines.length;
+}
+
+/**
+ * Moves a section, with its to-dos and anything else under it, to just before or after a
+ * sibling. Blank lines between sections stay where they were, so the note keeps its spacing.
+ */
+export function moveSection(doc: Doc, ref: LineRef, target: LineRef, place: Place): LineEdit[] {
+	const a = findHeading(doc, ref);
+	const b = findHeading(doc, target);
+	const siblings = sectionSiblings(doc, a);
+	if (a === b) return [];
+	if (!siblings.includes(b)) throw new PatchConflict(`Cannot move ${a.text} next to ${b.text}`);
+	const order = siblings.filter((x) => x !== a);
+	order.splice(order.indexOf(b) + (place === 'before' ? 0 : 1), 0, a);
+	// Each section's lines without its trailing blanks, and those blanks, which keep their slot.
+	const parts = siblings.map((x) => {
+		const stop = sectionEnd(doc, x);
+		let end = stop;
+		while (end > x.line + 1 && isBlank(doc.lines[end - 1] ?? '')) end--;
+		return { section: x, content: doc.lines.slice(x.line, end), gap: doc.lines.slice(end, stop) };
+	});
+	const content = (x: Heading): string[] => parts.find((p) => p.section === x)?.content ?? [];
+	const first = siblings[0];
+	const last = siblings[siblings.length - 1];
+	if (!first || !last) return [];
+	const next = parts.flatMap((p, i) => [...content(order[i] ?? p.section), ...p.gap]);
+	return replaceRange(first.line, doc.lines.slice(first.line, sectionEnd(doc, last)), next);
+}
+
 // --- Project links in the task file ---------------------------------------
 
 /**

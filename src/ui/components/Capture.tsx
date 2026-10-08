@@ -24,6 +24,7 @@ export function Capture({
 	weekStart,
 	projects,
 	initialProject,
+	initialHeading = null,
 	defaultDate,
 	initialText = '',
 	links,
@@ -35,6 +36,8 @@ export function Capture({
 	weekStart: 0 | 1;
 	projects: PickerProject[];
 	initialProject: string | null;
+	/** A heading in the initial project's note to start with. */
+	initialHeading?: LineRef | null;
 	defaultDate: string | null;
 	/** Text to start with, e.g. from an obsidian:// URL. */
 	initialText?: string;
@@ -49,7 +52,7 @@ export function Capture({
 	/** Recognised phrases the user backspaced into, to keep as plain words. */
 	const [kept, setKept] = useState<string[]>([]);
 	const [project, setProject] = useState(initialProject);
-	const [heading, setHeading] = useState<LineRef | null>(null);
+	const [heading, setHeading] = useState<LineRef | null>(initialHeading);
 	const [picking, setPicking] = useState(false);
 	const input = useRef<HTMLInputElement>(null);
 	const backdrop = useRef<HTMLDivElement>(null);

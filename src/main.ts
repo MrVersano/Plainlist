@@ -7,7 +7,7 @@ import type { QuickEntryService } from './desktop/QuickEntryService';
 import { allItems, type ListId } from './model/lists';
 import { DEFAULT_SETTINGS, firstDayOfWeek, PlainlistSettings, PlainlistSettingTab } from './settings';
 import { patchText } from './model/apply';
-import { addTask, refOf } from './model/patch';
+import { addTask, refOf, type LineRef } from './model/patch';
 import { Workspace } from './store';
 import { ensureTasksFile } from './tasksFile';
 import { CaptureModal } from './ui/CaptureModal';
@@ -232,8 +232,8 @@ export default class PlainlistPlugin extends Plugin {
 		if (options) new CaptureModal(this.app, options).open();
 	}
 
-	openCapture(file: TFile, list: ListId): void {
-		new CaptureModal(this.app, this.captureOptions(file, list)).open();
+	openCapture(file: TFile, list: ListId, heading: LineRef | null = null): void {
+		new CaptureModal(this.app, { ...this.captureOptions(file, list), heading }).open();
 	}
 
 	captureOptions(file: TFile, list: ListId): CaptureOptions {

@@ -2,6 +2,21 @@
 
 All notable changes to Plainlist, newest first. Each release is on [GitHub](https://github.com/MrVersano/Plainlist/releases).
 
+## 1.0.30
+
+*October 8, 2026*
+
+### New
+
+- You can add sections to a project. Click **+ New section** below its to-dos, or on a phone tap **•••**, then **New section**. A section is a heading at the end of the project's note.
+- You can change the order of sections. Drag a section's name above or below another's; on a touch screen, hold the name first, then drag. Sections fold while you drag, and a section moves with everything under it in the note.
+- A section's menu has **Add to-do**, **Rename**, **Move up** and **Move down**. Right-click its name, hold it on a touch screen, or click the **•••** next to it.
+- Drag a to-do onto a section's name to move it into that section.
+
+### Improvements
+
+- A project shows every section, including ones with no open to-dos yet.
+
 ## 1.0.29
 
 *October 8, 2026*

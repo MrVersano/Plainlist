@@ -3,6 +3,7 @@ import { useContext, useEffect, useRef, useState } from 'preact/hooks';
 import type { App, Component } from 'obsidian';
 import type { Clock } from '../clock';
 import type { ListId } from '../model/lists';
+import type { LineRef } from '../model/patch';
 import type { TaskRef, Workspace } from '../store';
 
 /** The sidebar's width, and whether it is pulled closed. Kept per device. */
@@ -18,7 +19,8 @@ export interface Env {
 	/** Owner for rendered Markdown children. */
 	component: Component;
 	weekStart: () => 0 | 1;
-	openCapture: (list: ListId) => void;
+	/** Opens the "New to-do" palette for a list; for a project, optionally under one of its headings. */
+	openCapture: (list: ListId, heading?: LineRef | null) => void;
 	confirm: (title: string, message: string, cta: string, destructive?: boolean) => Promise<boolean>;
 	prompt: (title: string, placeholder: string, initial?: string, cta?: string) => Promise<string | null>;
 	/** Desktop: "Press N…" hint; null on mobile. */

@@ -4,7 +4,7 @@
 import { App, Notice, TFile } from 'obsidian';
 import { patchText } from './model/apply';
 import { parse } from './model/parse';
-import { addTask, PatchConflict } from './model/patch';
+import { addTask, PatchConflict, type LineRef } from './model/patch';
 import { resolveProjects } from './projects';
 import type { CaptureResult } from './ui/components/Capture';
 import type { PickerProject } from './ui/components/popovers';
@@ -16,6 +16,8 @@ export interface CaptureOptions {
 	weekStart: 0 | 1;
 	/** Project note path to preselect, or null for the Inbox. */
 	project: string | null;
+	/** A heading in that project's note to preselect. */
+	heading?: LineRef | null;
 	defaultDate: string | null;
 }
 
@@ -24,6 +26,8 @@ export interface CaptureSession {
 	projects: PickerProject[];
 	/** The preselected project, if it is still an open project. */
 	initialProject: string | null;
+	/** The preselected heading, if it is still in that project's note. */
+	initialHeading: LineRef | null;
 	/** Writes the to-do. Shows a notice and returns false on failure. */
 	save: (result: CaptureResult) => Promise<boolean>;
 }
@@ -57,10 +61,14 @@ export async function startCapture(app: App, options: CaptureOptions): Promise<C
 		}
 	};
 
+	const initialProject = options.project !== null && notes.has(options.project) ? options.project : null;
+	const wanted = options.heading;
+	const found = initialProject && wanted ? headings.get(initialProject)?.find((h) => h.text === wanted.text) : undefined;
 	return {
 		options,
 		projects: projects.map((p) => ({ name: p.name, path: p.path, headings: headings.get(p.path) })),
-		initialProject: options.project !== null && notes.has(options.project) ? options.project : null,
+		initialProject,
+		initialHeading: found ? { line: found.line, text: found.text } : null,
 		save,
 	};
 }

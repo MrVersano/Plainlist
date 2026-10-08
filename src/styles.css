@@ -573,6 +573,132 @@ body:not(.is-mobile) .workspace-leaf-content[data-type='plainlist'] > .view-head
 	letter-spacing: normal;
 }
 
+/* A section in a project: a heading in its note. Drag its header to move it; ••• opens its menu. */
+.pl-section-header {
+	align-items: center;
+	-webkit-touch-callout: none;
+	user-select: none;
+}
+
+.pl-root button.pl-section-more {
+	margin-left: auto;
+	padding: 0 6px;
+	border-radius: var(--pl-radius);
+	font-size: 13px;
+	font-weight: normal;
+	letter-spacing: 1px;
+	color: var(--pl-faint);
+	opacity: 0;
+}
+
+.pl-section-header:hover button.pl-section-more,
+.pl-root button.pl-section-more:focus-visible {
+	opacity: 1;
+}
+
+.pl-root button.pl-section-more:hover {
+	color: var(--text-normal);
+	background: var(--background-modifier-hover);
+}
+
+/* Touch screens have no hover: always show it, big enough to tap. */
+@media (hover: none) {
+	.pl-root button.pl-section-more {
+		opacity: 1;
+		min-height: 32px;
+		min-width: 40px;
+		justify-content: center;
+	}
+}
+
+/* A section's name, typed in place: looks like its header. */
+.pl-root .pl-section-input {
+	display: block;
+	width: 100%;
+	height: auto;
+	margin: 28px 0 0;
+	padding: 0 0 8px;
+	border: none;
+	border-bottom: 1px solid var(--interactive-accent);
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+	font-family: inherit;
+	font-size: 15px;
+	font-weight: 600;
+	color: var(--text-normal);
+}
+
+.pl-root .pl-section-input:focus {
+	box-shadow: none;
+	outline: none;
+}
+
+.pl-group:first-of-type .pl-section-input {
+	margin-top: 8px;
+}
+
+.pl-root button.pl-add-section {
+	display: block;
+	margin-top: 22px;
+	min-height: 32px;
+	font-size: 14px;
+	color: var(--pl-faint);
+}
+
+.pl-root button.pl-add-section:hover {
+	color: var(--text-normal);
+}
+
+.is-mobile .pl-root button.pl-add-section {
+	min-height: 44px;
+	font-size: 15px;
+}
+
+/* Dropping a to-do on a section's header moves it into that section. */
+.pl-section-header.is-drop-before,
+.pl-section-header.is-drop-after {
+	border-bottom-color: var(--pl-accent);
+	color: var(--text-normal);
+}
+
+/* Moving a section: every section folds, and a line shows where it would land. */
+.pl-content.is-reordering:has(.pl-section-header.is-dragging) .pl-rows {
+	display: none;
+}
+
+.pl-section-header.is-dragging {
+	opacity: 0.5;
+}
+
+.pl-content:has(.pl-section-header.is-dragging) .pl-section-header.is-drop-before,
+.pl-content:has(.pl-section-header.is-dragging) .pl-section-header.is-drop-after {
+	position: relative;
+	border-bottom-color: var(--pl-hairline);
+	color: var(--pl-muted);
+}
+
+.pl-content:has(.pl-section-header.is-dragging) .pl-section-header.is-drop-before::before,
+.pl-content:has(.pl-section-header.is-dragging) .pl-section-header.is-drop-after::after {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	height: 2px;
+	border-radius: 1px;
+	background: var(--interactive-accent);
+	pointer-events: none;
+}
+
+/* In the gap above the header, which its top margin makes. */
+.pl-content:has(.pl-section-header.is-dragging) .pl-section-header.is-drop-before::before {
+	top: -15px;
+}
+
+.pl-content:has(.pl-section-header.is-dragging) .pl-section-header.is-drop-after::after {
+	bottom: -15px;
+}
+
 .pl-group-sublabel {
 	font-size: 13px;
 	font-weight: normal;

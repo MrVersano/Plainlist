@@ -4,6 +4,7 @@ import type { ProjectInfo, Source } from './model/lists';
 import { parse } from './model/parse';
 import {
 	addArea,
+	addSection,
 	addProjectLink,
 	addTask,
 	addTasks,
@@ -20,6 +21,7 @@ import {
 	moveProjectLink,
 	moveProjectToArea,
 	moveArea,
+	moveSection,
 	moveTaskToHeading,
 	moveTasksToHeading,
 	PatchConflict,
@@ -27,6 +29,7 @@ import {
 	removeArea,
 	removeProjectLink,
 	renameArea,
+	renameSection,
 	replaceProjectLink,
 	type LineRef,
 	type NewTask,
@@ -34,7 +37,7 @@ import {
 	type Reopen,
 	type Repeated,
 } from './model/patch';
-import type { Area, Doc, LineEdit } from './model/types';
+import type { Area, Doc, Heading, LineEdit } from './model/types';
 import { notePath, projectNameError, resolveProjects } from './projects';
 import { UndoStack, type Change } from './undo';
 
@@ -390,6 +393,20 @@ export class Workspace {
 	/** Moves an area, with its projects, just before or after another. */
 	moveArea(area: Area, target: Area, place: Place): Promise<RunResult> {
 		return this.run(this.masterPath, (d) => moveArea(d, refOf(area), refOf(target), place));
+	}
+
+	/** Adds a section (a heading) at the end of a project note. */
+	addSection(projectPath: string, name: string): Promise<RunResult> {
+		return this.run(projectPath, (d) => addSection(d, name));
+	}
+
+	renameSection(projectPath: string, section: Heading, name: string): Promise<RunResult> {
+		return this.run(projectPath, (d) => renameSection(d, refOf(section), name));
+	}
+
+	/** Moves a section, with everything under it, just before or after another in the same note. */
+	moveSection(projectPath: string, section: Heading, target: Heading, place: Place): Promise<RunResult> {
+		return this.run(projectPath, (d) => moveSection(d, refOf(section), refOf(target), place));
 	}
 
 	removeArea(area: Area): Promise<RunResult> {

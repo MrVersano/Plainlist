@@ -145,6 +145,18 @@ describe('lists', () => {
 		expect(view.groups[0]!.items.every((i) => i.path === 'Office.md' && i.project?.name === 'Office')).toBe(true);
 	});
 
+	it('Project: every section in note order, empty ones too', () => {
+		const doc = parse('# Plan\n- [ ] loose\n## Empty\nprose\n## Done\n- [x] old\n## Next\n- [ ] a\n');
+		const p = project('Plan.md', 0);
+		const view = computeList([{ path: 'Plan.md', doc, project: p }], [p], { kind: 'project', path: 'Plan.md' }, TODAY);
+		expect(view.groups.map((g) => [g.label, g.heading?.line ?? null, g.items.map((i) => i.task.title)])).toEqual([
+			['', null, ['loose']],
+			['Empty', 2, []],
+			['Done', 4, []],
+			['Next', 6, ['a']],
+		]);
+	});
+
 	it('Project: sub-tasks are indented under their parent', () => {
 		const view = computeList(sources, projects, { kind: 'project', path: 'Office.md' }, TODAY);
 		expect(view.groups[0]!.items.map((i) => [i.task.title, i.depth])).toEqual([

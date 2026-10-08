@@ -2,6 +2,7 @@ import { App as ObsidianApp, FileView, Platform, TFile, ViewStateResult, Workspa
 import { h, render } from 'preact';
 import { NEW_TODO_COMMAND, VIEW_ICON, VIEW_TYPE } from '../constants';
 import type { ListId } from '../model/lists';
+import type { LineRef } from '../model/patch';
 import type PlainlistPlugin from '../main';
 import { Workspace, type TaskRef } from '../store';
 import { App } from './components/App';
@@ -123,9 +124,9 @@ export class PlainlistView extends FileView {
 		this.contentEl.querySelector<HTMLElement>('.pl-root')?.focus({ preventScroll: true });
 	}
 
-	openCapture(list: ListId = this.list): void {
+	openCapture(list: ListId = this.list, heading: LineRef | null = null): void {
 		if (!this.file) return;
-		this.plugin.openCapture(this.file, list);
+		this.plugin.openCapture(this.file, list, heading);
 	}
 
 	/** Shows a to-do: switches to a list that has it, scrolls to it and highlights it briefly. */
@@ -148,7 +149,7 @@ export class PlainlistView extends FileView {
 			clock: this.plugin.clock,
 			component: this,
 			weekStart: () => this.plugin.weekStart(),
-			openCapture: (list) => this.openCapture(list),
+			openCapture: (list, heading) => this.openCapture(list, heading),
 			confirm: (title, message, cta, destructive) => confirmModal(this.app, title, message, cta, destructive),
 			prompt: (title, placeholder, initial, cta) => promptModal(this.app, title, placeholder, initial, cta),
 			sidebar: {

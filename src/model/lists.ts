@@ -2,7 +2,7 @@
 // today's date. Nothing here is stored.
 
 import { completedGroup, upcomingGroup } from '../dates/format';
-import type { Area, Doc, Task } from './types';
+import type { Area, Doc, Heading, Task } from './types';
 
 export interface ProjectInfo {
 	/** Path of the project note, or the link target when the note is missing. */
@@ -52,6 +52,8 @@ export interface Group {
 	items: Item[];
 	/** Completed list only: projects completed on this group's day, shown before its to-dos. */
 	projects?: ProjectInfo[];
+	/** Project view only: the section (heading in the note) the group shows. */
+	heading?: Heading;
 }
 
 export interface ListView {
@@ -226,11 +228,14 @@ export function computeList(
 		}
 		case 'project': {
 			const own = items.filter((i) => i.project?.path === list.path).sort(byFile);
-			// Open to-dos in file order, under their headings; those before any heading come first, unlabelled.
-			const groups = grouped(
-				own.filter((i) => !i.task.done),
-				(i) => (i.task.heading ? { key: `heading:${i.task.heading.line}`, label: i.task.heading.name } : { key: 'all', label: '' }),
-			);
+			const open = own.filter((i) => !i.task.done);
+			// Open to-dos in file order: those before any heading first, unlabelled, then every
+			// section, empty ones too, so a new section shows and to-dos can go there.
+			const loose = open.filter((i) => !i.task.heading);
+			const groups: Group[] = loose.length ? [{ key: 'all', label: '', items: loose }] : [];
+			for (const h of sources.find((s) => s.path === list.path)?.doc.headings ?? []) {
+				groups.push({ key: `heading:${h.line}`, label: h.name, heading: h, items: open.filter((i) => i.task.heading?.line === h.line) });
+			}
 			return { groups: nestedGroups(groups), completed: own.filter((i) => i.task.done) };
 		}
 	}

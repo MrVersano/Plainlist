@@ -31,6 +31,10 @@ import {
 	removeArea,
 	moveProjectToArea,
 	moveArea,
+	addSection,
+	renameSection,
+	moveSection,
+	sectionSiblings,
 } from '../src/model/patch';
 import type { Doc, LineEdit } from '../src/model/types';
 import { changedLines, fixture, rng } from './helpers';
@@ -708,5 +712,69 @@ describe('reordering', () => {
 		expect(applyEdits(doc, moveProjectLink(doc, refOf(c!), refOf(a!), 'before'))).toBe('# Projects\n- [[C]]\n- [[A]]\n- [[B]]\n');
 		expect(applyEdits(doc, moveProjectLink(doc, refOf(a!), refOf(c!), 'after'))).toBe('# Projects\n- [[B]]\n- [[C]]\n- [[A]]\n');
 		expect(moveProjectLink(doc, refOf(a!), refOf(doc.projectLinks[1]!), 'before')).toEqual([]);
+	});
+});
+
+describe('sections', () => {
+	const sec = (d: Doc, name: string) => refOf(d.headings.find((h) => h.name === name)!);
+	const moveSec = (text: string, name: string, target: string, place: 'before' | 'after') =>
+		run(text, (d) => moveSection(d, sec(d, name), sec(d, target), place));
+
+	it('adds a section at the end of the note, at the level of its sections', () => {
+		expect(run('# Plan\n\n- [ ] a\n', (d) => addSection(d, 'Later'))).toBe('# Plan\n\n- [ ] a\n\n## Later\n');
+		expect(run('- [ ] a\n\n### One\n- [ ] b\n\n\n', (d) => addSection(d, ' Two '))).toBe('- [ ] a\n\n### One\n- [ ] b\n\n### Two\n\n\n');
+		expect(run('', (d) => addSection(d, 'First'))).toBe('## First\n');
+		expect(run('---\ntags: x\n---\n', (d) => addSection(d, 'First'))).toBe('---\ntags: x\n---\n\n## First\n');
+	});
+
+	it('refuses an empty or repeated section name', () => {
+		const doc = parse('## One\n');
+		expect(() => addSection(doc, '  ')).toThrow(PatchConflict);
+		expect(() => addSection(doc, 'one')).toThrow(PatchConflict);
+	});
+
+	it('a new section shows as a heading to-dos can go under', () => {
+		const out = run('- [ ] a\n', (d) => addSection(d, 'Later'));
+		const doc = parse(out);
+		expect(doc.headings.map((h) => h.name)).toEqual(['Later']);
+		expect(run(out, (d) => addTask(d, { title: 'b', date: null }, { heading: sec(d, 'Later') }))).toBe('- [ ] a\n\n## Later\n\n- [ ] b\n');
+	});
+
+	it('renames a section, keeping its level', () => {
+		const text = '### One\n- [ ] a\n## Two\n';
+		expect(run(text, (d) => renameSection(d, sec(d, 'One'), 'First'))).toBe('### First\n- [ ] a\n## Two\n');
+		expect(run(text, (d) => renameSection(d, sec(d, 'One'), 'one'))).toBe('### one\n- [ ] a\n## Two\n');
+		expect(() => renameSection(parse(text), sec(parse(text), 'One'), 'two')).toThrow(PatchConflict);
+	});
+
+	it('moves a section with everything under it, keeping the spacing', () => {
+		const text = '# Plan\n\n- [ ] loose\n\n## A\n- [ ] a\n\tnote\n\n## B\n- [ ] b\nprose\n\n## C\n- [ ] c\n';
+		expect(moveSec(text, 'C', 'A', 'before')).toBe('# Plan\n\n- [ ] loose\n\n## C\n- [ ] c\n\n## A\n- [ ] a\n\tnote\n\n## B\n- [ ] b\nprose\n');
+		expect(moveSec(text, 'A', 'C', 'after')).toBe('# Plan\n\n- [ ] loose\n\n## B\n- [ ] b\nprose\n\n## C\n- [ ] c\n\n## A\n- [ ] a\n\tnote\n');
+		expect(moveSec(text, 'A', 'B', 'after')).toBe('# Plan\n\n- [ ] loose\n\n## B\n- [ ] b\nprose\n\n## A\n- [ ] a\n\tnote\n\n## C\n- [ ] c\n');
+		expect(moveSection(parse(text), sec(parse(text), 'A'), sec(parse(text), 'B'), 'before')).toEqual([]);
+	});
+
+	it('moves a section with the deeper sections inside it', () => {
+		const text = '## A\n- [ ] a\n### A1\n- [ ] a1\n## B\n- [ ] b\n';
+		const out = moveSec(text, 'B', 'A', 'before');
+		expect(out).toBe('## B\n- [ ] b\n## A\n- [ ] a\n### A1\n- [ ] a1\n');
+		expect(parse(out).tasks.map((t) => `${t.title}:${t.heading?.name}`)).toEqual(['b:B', 'a:A', 'a1:A1']);
+	});
+
+	it('moves a section only among those at its level in the same section', () => {
+		const text = '## A\n### A1\n### A2\n## B\n### B1\n';
+		const doc = parse(text);
+		const names = (name: string) => sectionSiblings(doc, doc.headings.find((h) => h.name === name)!).map((h) => h.name);
+		expect(names('A1')).toEqual(['A1', 'A2']);
+		expect(names('B1')).toEqual(['B1']);
+		expect(names('B')).toEqual(['A', 'B']);
+		expect(moveSec(text, 'A2', 'A1', 'before')).toBe('## A\n### A2\n### A1\n## B\n### B1\n');
+		expect(() => moveSection(doc, sec(doc, 'B1'), sec(doc, 'A1'), 'after')).toThrow(PatchConflict);
+		expect(() => moveSection(doc, sec(doc, 'B'), sec(doc, 'A1'), 'after')).toThrow(PatchConflict);
+	});
+
+	it('moves the last section when the note has no trailing newline', () => {
+		expect(moveSec('## A\n- [ ] a\n\n## B\n- [ ] b', 'B', 'A', 'before')).toBe('## B\n- [ ] b\n\n## A\n- [ ] a');
 	});
 });

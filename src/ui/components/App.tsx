@@ -26,10 +26,12 @@ import {
 	deleteTasks,
 	indentTask,
 	moveTaskNextTo,
+	moveTaskToHeading,
 	outdentTask,
 	refOf,
 	restoreAll,
 	restoreLines,
+	sectionSiblings,
 	setTaskDate,
 	setTaskDone,
 	setTasksDate,
@@ -40,7 +42,7 @@ import {
 	type Removed,
 } from '../../model/patch';
 import { setDate } from '../../model/taskLine';
-import type { Area, Doc, Task, TaskDate } from '../../model/types';
+import type { Area, Doc, Heading, Task, TaskDate } from '../../model/types';
 import { locateLine, type RunResult, type TaskRef, type TrackBox } from '../../store';
 import { quoted, type UndoEntry } from '../../undo';
 import { useEnv, useToday, useWorkspace, type SelectionCommand, type ViewCommand } from '../env';
@@ -51,7 +53,7 @@ import { ProjectSuggestModal } from '../ProjectSuggestModal';
 import { useReorder } from '../reorder';
 import { Checkbox } from './bits';
 import { DatePopover, ProjectPicker } from './popovers';
-import { areaMenu, LISTS, listLabel, projectMenu, Sidebar, SidebarHandle, type ProjectActions } from './Sidebar';
+import { areaMenu, LISTS, listLabel, NameInput, projectMenu, Sidebar, SidebarHandle, type ProjectActions } from './Sidebar';
 import { TaskEditor, TaskRow, type RowActions } from './TaskRow';
 
 const NARROW = 600;
@@ -110,6 +112,47 @@ const isBoxed = (box: TrackBox | null, item: Item): boolean => isAt(box?.current
 const isNested = (list: ListId): boolean => ['inbox', 'project', 'nodate', 'someday'].includes(list.kind);
 
 const itemKey = (item: Item): string => `${item.path}:${item.task.line}:${item.task.text}`;
+
+/** A section's header in a project's list, which can be dragged too, or have a to-do dropped on it. */
+interface SectionRow {
+	section: Heading;
+}
+
+/** What the list can drag: a to-do's row or a section's header. */
+type Row = Item | SectionRow;
+
+const isSection = (r: Row): r is SectionRow => 'section' in r;
+
+const sectionKey = (h: Heading): string => `\u0000section:${h.line}:${h.text}`;
+
+/** A section's header: drag it to move the section, right-click (or hold, on touch) or use ••• for its menu. */
+function SectionHeader({
+	section,
+	drag,
+	onMenu,
+}: {
+	section: Heading;
+	drag: { props: Record<string, unknown>; cls: string };
+	onMenu: (pos: { x: number; y: number }) => void;
+}) {
+	return (
+		<h2 class={`pl-group-header pl-section-header${drag.cls}`} {...drag.props}>
+			<span class="pl-group-label">{section.name}</span>
+			<button
+				type="button"
+				class="pl-section-more"
+				aria-label={`Section actions: ${section.name}`}
+				aria-haspopup="menu"
+				onClick={(e) => {
+					const r = e.currentTarget.getBoundingClientRect();
+					onMenu({ x: r.left, y: r.bottom });
+				}}
+			>
+				•••
+			</button>
+		</h2>
+	);
+}
 
 /** Identifies a to-do across its completion, which rewrites its line's text but not its number. */
 const lingerKey = (path: string, line: number): string => `${path}:${line}`;
@@ -237,6 +280,10 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 	/** A just-added sub-task, open in the editor; it is removed if closed while still empty. */
 	const fresh = useRef<TrackBox | null>(null);
 	const [narrow, setNarrow] = useState(false);
+	/** The project view's "New section" field is open. */
+	const [addingSection, setAddingSection] = useState(false);
+	/** sectionKey of the section being renamed in place. */
+	const [renamingSection, setRenamingSection] = useState<string | null>(null);
 	const [sidebar, setSidebar] = useState(() => env.sidebar.load());
 	/** Re-renders after the saved Today order changes, here or in a list in a note. */
 	const [orderVersion, setOrderVersion] = useState(0);
@@ -255,6 +302,8 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		setExpanded(null);
 		setSelected(-1);
 		setShowCompleted(false);
+		setAddingSection(false);
+		setRenamingSection(null);
 		clearMarks();
 		clearLingering();
 		onListChange(next);
@@ -782,17 +831,67 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		relocate(item, (d) => moveTaskNextTo(d, refOf(item.task), refOf(target.task), place));
 	};
 
-	const reorder = useReorder<Item>({
-		entries: rows.map((item) => ({ key: itemKey(item), item })),
-		canDrag: (item) => !item.task.done && list.kind !== 'completed',
-		canDrop,
-		onDrop: reorderTo,
-		onMenu: rowMenu,
+	// Sections: headings in the project's note, shown as group headers.
+	const sections = view.groups.flatMap((g) => (g.heading ? [g.heading] : []));
+	/** The section in the note as it is now, and those it can trade places with. */
+	const siblingsOf = (h: Heading): Heading[] => {
+		const doc = project ? workspace.doc(project.path) : null;
+		const own = doc?.headings.find((x) => x.line === h.line && x.text === h.text);
+		return doc && own ? sectionSiblings(doc, own) : [];
+	};
+
+	const addSection = (name: string): void => {
+		if (project) void remember(`Added the section ${quoted(name)}`, workspace.addSection(project.path, name));
+	};
+	const renameSection = (h: Heading, name: string): void => {
+		if (project) void remember(`Renamed the section ${quoted(h.name)}`, workspace.renameSection(project.path, h, name));
+	};
+	const moveSection = (h: Heading, target: Heading, place: Place): void => {
+		if (project) void remember(`Moved the section ${quoted(h.name)}`, workspace.moveSection(project.path, h, target, place));
+	};
+	/** Moves a to-do, with its sub-tasks, to the end of a section in its note. */
+	const moveToSection = (item: Item, h: Heading): void => {
+		relocate(item, (d) => moveTaskToHeading(d, refOf(item.task), refOf(h)));
+	};
+
+	const sectionMenu = (h: Heading, pos: { x: number; y: number }): void => {
+		const siblings = siblingsOf(h);
+		const at = siblings.findIndex((x) => x.line === h.line);
+		const above = siblings[at - 1];
+		const below = siblings[at + 1];
+		const menu = new Menu()
+			.addItem((i) => i.setTitle('Add to-do').setIcon('plus').onClick(() => env.openCapture(list, refOf(h))))
+			.addItem((i) => i.setTitle('Rename').setIcon('pencil').onClick(() => setRenamingSection(sectionKey(h))));
+		if (above) menu.addItem((i) => i.setTitle('Move up').setIcon('arrow-up').onClick(() => moveSection(h, above, 'before')));
+		if (below) menu.addItem((i) => i.setTitle('Move down').setIcon('arrow-down').onClick(() => moveSection(h, below, 'after')));
+		menu.showAtPosition(pos);
+	};
+
+	const reorder = useReorder<Row>({
+		entries: [
+			...rows.map((item) => ({ key: itemKey(item), item })),
+			...sections.map((section) => ({ key: sectionKey(section), item: { section } })),
+		],
+		canDrag: (r) => (isSection(r) ? siblingsOf(r.section).length > 1 : !r.task.done && list.kind !== 'completed'),
+		// A section moves among its siblings; a to-do dropped on a section's header goes to the end of that section.
+		canDrop: (a, b) => {
+			if (isSection(a)) return isSection(b) && b.section.line !== a.section.line && siblingsOf(a.section).some((x) => x.line === b.section.line);
+			if (isSection(b)) return !!project && a.path === project.path && !a.task.done && (a.task.heading?.line ?? null) !== b.section.line;
+			return canDrop(a, b);
+		},
+		onDrop: (a, b, place) => {
+			if (isSection(a)) {
+				if (isSection(b)) moveSection(a.section, b.section, place);
+			} else if (isSection(b)) moveToSection(a, b.section);
+			else reorderTo(a, b, place);
+		},
+		onMenu: (r, pos) => (isSection(r) ? sectionMenu(r.section, pos) : rowMenu(r, pos)),
 		// Not while picking several to-dos, nor on the one being edited.
-		canSwipe: (item) => !marks.size && !isBoxed(expanded, item),
-		onSwipe: (item, dir, pos) => {
-			if (dir === 'right') return toggle(item);
-			scheduleMenu(app, { current: item.task.date, today, weekStart: env.weekStart(), onPick: (date) => void scheduleAll([item], date) }).showAtPosition(pos);
+		canSwipe: (r) => !isSection(r) && !marks.size && !isBoxed(expanded, r),
+		onSwipe: (r, dir, pos) => {
+			if (isSection(r)) return;
+			if (dir === 'right') return toggle(r);
+			scheduleMenu(app, { current: r.task.date, today, weekStart: env.weekStart(), onPick: (date) => void scheduleAll([r], date) }).showAtPosition(pos);
 		},
 	});
 
@@ -936,15 +1035,20 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		});
 	};
 
-	// Give the view keyboard focus back after a row collapses.
-	const collapse = (): void => {
-		setExpanded(null);
+	/** Gives the view keyboard focus back, unless it went somewhere in the view. */
+	const regainFocus = (): void => {
 		window.requestAnimationFrame(() => {
 			const doc = root.current?.ownerDocument;
 			if (doc && (!root.current?.contains(doc.activeElement) || doc.activeElement === doc.body)) {
 				root.current?.focus({ preventScroll: true });
 			}
 		});
+	};
+
+	// Give the view keyboard focus back after a row collapses.
+	const collapse = (): void => {
+		setExpanded(null);
+		regainFocus();
 	};
 
 	const renderRow = (item: Item) => {
@@ -1059,14 +1163,16 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 							aria-label="Project actions"
 							onClick={(e) => {
 								const p = project;
-								projectMenu(
+								const menu = projectMenu(
 									p,
 									projectActions,
 									() => {
 										void env.prompt('Rename project', 'Project name', p.name, 'Rename').then((name) => name && projectActions.rename(p, name));
 									},
 									workspace.areas.length > 0,
-								).showAtMouseEvent(e);
+								);
+								if (p.exists && !p.done) menu.addItem((i) => i.setTitle('New section').setIcon('heading').onClick(() => setAddingSection(true)));
+								menu.showAtMouseEvent(e);
 							}}
 						>
 							•••
@@ -1119,11 +1225,30 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 
 					{view.groups.map((g) => (
 						<section class="pl-group" key={g.key}>
-							{g.label && (
-								<h2 class="pl-group-header">
-									<span class="pl-group-label">{g.label}</span>
-									{g.sublabel && <span class="pl-group-sublabel">{g.sublabel}</span>}
-								</h2>
+							{g.heading && renamingSection === sectionKey(g.heading) ? (
+								<NameInput
+									cls="pl-section-input"
+									label="Section name"
+									initial={g.heading.name}
+									onDone={(name) => {
+										setRenamingSection(null);
+										if (g.heading && name && name !== g.heading.name) renameSection(g.heading, name);
+										regainFocus();
+									}}
+								/>
+							) : g.heading ? (
+								<SectionHeader
+									section={g.heading}
+									drag={{ props: reorder.rowProps(sectionKey(g.heading)), cls: reorder.rowClass(sectionKey(g.heading)) }}
+									onMenu={(pos) => g.heading && sectionMenu(g.heading, pos)}
+								/>
+							) : (
+								g.label && (
+									<h2 class="pl-group-header">
+										<span class="pl-group-label">{g.label}</span>
+										{g.sublabel && <span class="pl-group-sublabel">{g.sublabel}</span>}
+									</h2>
+								)
 							)}
 							<div class="pl-rows">
 								{g.projects?.map((p) => (
@@ -1139,6 +1264,27 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 							</div>
 						</section>
 					))}
+
+					{project?.exists &&
+						!project.done &&
+						(addingSection ? (
+							<section class="pl-group">
+								<NameInput
+									cls="pl-section-input"
+									label="Section name"
+									initial=""
+									onDone={(name) => {
+										setAddingSection(false);
+										if (name) addSection(name);
+										regainFocus();
+									}}
+								/>
+							</section>
+						) : (
+							<button type="button" class="pl-add-section" onClick={() => setAddingSection(true)}>
+								+ New section
+							</button>
+						))}
 
 					{view.completed.length > 0 && (
 						<div class="pl-completed">
