@@ -16,6 +16,8 @@ export interface PlainlistSettings {
 	quickEntryShortcut: string;
 	/** "Search to-dos" also finds completed to-dos. */
 	searchCompleted: boolean;
+	/** A new to-do whose title is just a URL gets the page's title, as `[title](url)`. */
+	fetchLinkTitles: boolean;
 	/** Today, in the view and in notes, shows a group per project instead of one list. */
 	groupTodayByProject: boolean;
 	/** Notes with any of these tags (comma- or space-separated) become projects. Empty turns it off. */
@@ -34,6 +36,7 @@ export const DEFAULT_SETTINGS: PlainlistSettings = {
 	quickEntryEnabled: false,
 	quickEntryShortcut: DEFAULT_SHORTCUT,
 	searchCompleted: false,
+	fetchLinkTitles: true,
 	groupTodayByProject: false,
 	projectTags: '',
 	todayOrder: [],
@@ -144,6 +147,11 @@ export class PlainlistSettingTab extends PluginSettingTab {
 				name: 'Search completed to-dos',
 				desc: 'Include completed to-dos in "Search to-dos" results.',
 				control: { type: 'toggle', key: 'searchCompleted', defaultValue: DEFAULT_SETTINGS.searchCompleted },
+			},
+			{
+				name: 'Fetch titles for links',
+				desc: 'When a new to-do is just a web address, look up the page and show its title as a link. This requests the page from its website, and for sites that block that, asks again as a link-preview crawler.',
+				control: { type: 'toggle', key: 'fetchLinkTitles', defaultValue: DEFAULT_SETTINGS.fetchLinkTitles },
 			},
 			// System-wide Quick Entry needs Electron, so these are hidden on mobile.
 			{

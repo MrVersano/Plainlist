@@ -149,6 +149,7 @@ export class PlainlistView extends FileView {
 			clock: this.plugin.clock,
 			component: this,
 			weekStart: () => this.plugin.weekStart(),
+			linkTitle: this.plugin.linkTitle,
 			openCapture: (list, heading, column) => this.openCapture(list, heading, column),
 			boards: this.plugin.boards,
 			isPhone: Platform.isPhone,

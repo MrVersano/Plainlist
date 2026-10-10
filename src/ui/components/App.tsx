@@ -18,6 +18,7 @@ import {
 	type Source,
 } from '../../model/lists';
 import { columnOf, unknownColumns, withNewColumns, type BoardMode, type GroupBy } from '../../model/board';
+import { linkedTitle } from '../../linkTitle';
 import { pastedTasks } from '../../model/paste';
 import {
 	addSubtask,
@@ -1135,10 +1136,13 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		if (!tasks) return;
 		e.preventDefault();
 		const date = list.kind === 'today' ? today : list.kind === 'someday' ? 'someday' : null;
-		const dated = tasks.map((t) => ({ ...t, date: t.date ?? date }));
-		void remember(`Pasted ${todos(dated.length)}`, workspace.addTasks(list.kind === 'project' ? list.path : null, dated)).then((res) => {
-			if (res.ok) new Notice(`Added ${dated.length} to-do${dated.length === 1 ? '' : 's'}`);
-		});
+		const project = list.kind === 'project' ? list.path : null;
+		// Bare URLs get their page titles first, so the paste stays a single change to undo.
+		void Promise.all(tasks.map(async (t) => ({ ...t, title: await linkedTitle(t.title, env.linkTitle), date: t.date ?? date }))).then((dated) =>
+			remember(`Pasted ${todos(dated.length)}`, workspace.addTasks(project, dated)).then((res) => {
+				if (res.ok) new Notice(`Added ${dated.length} to-do${dated.length === 1 ? '' : 's'}`);
+			}),
+		);
 	};
 
 	/** Gives the view keyboard focus back, unless it went somewhere in the view. */

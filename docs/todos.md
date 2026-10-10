@@ -20,6 +20,16 @@ Press **Done** or `Esc`, or `Enter` in the title, to close it.
 
 `#tags` and `[[links]]` work in both the title and the description. Typing `[[` suggests notes, as in the Obsidian editor. Click a link to open the note.
 
+Markdown links work in the title too: `[the docs](https://example.com)` shows as **the docs**, and clicking it opens the page in your browser. `[Plan](Plan.md)` links to a note, like `[[Plan]]`.
+
+### Adding a web address
+
+Add a to-do whose title is only a web address, such as `https://example.com/article`, and Plainlist looks up the page and turns the title into a link with the page's title: `[The article's title](https://example.com/article)`. This works from [quick capture](quick-capture.md), [`plainlist-add` links](adding-from-other-apps.md), [pasting a list](#pasting-a-list) and new sub-tasks.
+
+The to-do is saved with the address straight away, and its title changes once the page answers, usually within a second or two. If the page can't be reached within 10 seconds, or has no title, the to-do keeps the address. Pasted lists wait for the titles before they are added, so one `Mod+Z` still undoes the whole paste.
+
+To keep addresses as they are, turn off **Fetch titles for links** in [settings](settings.md).
+
 ## Completing a to-do
 
 Click the checkbox, or select the to-do and press `Space`. A completed to-do stays in its list, crossed off, for a few seconds, then moves to [Completed](lists.md#completed). Plainlist writes `[x]` and a `[done:: YYYY-MM-DD]` date to the line.

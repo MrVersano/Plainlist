@@ -1,5 +1,7 @@
 // The undo history: what each action changed, newest last. Pure, no Obsidian imports.
 
+import { linkLabels } from './links';
+
 /** A note's whole text before and after an action wrote to it. */
 export interface Change {
 	path: string;
@@ -66,6 +68,6 @@ export function mergeChanges(changes: Change[]): Change[] | null {
 
 /** A to-do's title for a label, shortened. */
 export function quoted(title: string, max = 40): string {
-	const t = title.trim();
+	const t = linkLabels(title).trim();
 	return `“${t.length > max ? `${t.slice(0, max - 1).trimEnd()}…` : t}”`;
 }

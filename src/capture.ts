@@ -6,6 +6,7 @@ import { patchText } from './model/apply';
 import { parse } from './model/parse';
 import { addTask, PatchConflict, type LineRef } from './model/patch';
 import { resolveProjects } from './projects';
+import { type LinkTitle, linkUrlTasksLater } from './linkTitle';
 import type { CaptureResult } from './ui/components/Capture';
 import type { PickerProject } from './ui/components/popovers';
 
@@ -14,6 +15,8 @@ export interface CaptureOptions {
 	file: TFile;
 	today: string;
 	weekStart: 0 | 1;
+	/** Looks up the page title for a to-do added as a bare URL. */
+	linkTitle: LinkTitle;
 	/** Project note path to preselect, or null for the Inbox. */
 	project: string | null;
 	/** A heading in that project's note to preselect. */
@@ -53,6 +56,7 @@ export async function startCapture(app: App, options: CaptureOptions): Promise<C
 		const dest = !note ? 'inbox' : result.heading ? { heading: result.heading } : 'note';
 		try {
 			await app.vault.process(file, (text) => patchText(text, (doc) => addTask(doc, task, dest)));
+			void linkUrlTasksLater(app, file, task.title, options.linkTitle);
 			return true;
 		} catch (e) {
 			new Notice(

@@ -17,6 +17,7 @@ import {
 	replaceProjectLink,
 	setProjectDone,
 	restoreLines,
+	retitleTasks,
 	setTaskDate,
 	setTaskDescription,
 	setTaskDone,
@@ -129,6 +130,13 @@ describe('editing a to-do', () => {
 		const out = run(note, (d) => setTaskTitle(d, refOf(task(d, 'Pick frame')), 'Pick a frame colour'));
 		expect(changedLines(note, out)).toHaveLength(1);
 		expect(out).toContain('\n    - [x] Pick a frame colour [done:: 2026-10-01]\n');
+	});
+
+	it('retitles every open to-do with exactly that title, keeping its fields', () => {
+		const text = '# Inbox\n- [ ] https://x.com [date:: 2026-10-09]\n\t- [ ] https://x.com\n- [x] https://x.com\n- [ ] Read https://x.com\n';
+		expect(run(text, (d) => retitleTasks(d, 'https://x.com', '[X](https://x.com)'))).toBe(
+			'# Inbox\n- [ ] [X](https://x.com) [date:: 2026-10-09]\n\t- [ ] [X](https://x.com)\n- [x] https://x.com\n- [ ] Read https://x.com\n',
+		);
 	});
 
 	it('sets, replaces and clears the date', () => {

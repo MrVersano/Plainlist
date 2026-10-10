@@ -2,6 +2,15 @@
 
 All notable changes to Plainlist, newest first. Each release is on [GitHub](https://github.com/MrVersano/Plainlist/releases).
 
+## 1.0.33
+
+*October 10, 2026*
+
+### New
+
+- Add a to-do that is just a web address, and Plainlist looks up the page and shows its title as a link. It works from quick capture, `plainlist-add` links, pasted lists and new sub-tasks. Turn it off with **Fetch titles for links** in settings.
+- Markdown links work in to-do titles: `[the docs](https://example.com)` shows as **the docs** and opens the page in your browser, and `[Plan](Plan.md)` opens the note.
+
 ## 1.0.32
 
 *October 8, 2026*

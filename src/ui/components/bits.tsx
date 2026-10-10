@@ -2,15 +2,15 @@ import { Component as ObsidianComponent, MarkdownRenderer } from 'obsidian';
 import type { JSX, RefObject, TextareaHTMLAttributes } from 'preact';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { useEnv } from '../env';
-import { findLinks } from '../../links';
+import { findLinks, linkLabels } from '../../links';
 import { handleRenderedClick, linkResolves, openLink, openTagSearch } from '../obsidian';
 import { type LinkSource, useSuggest } from './suggest';
 
 const TAG_RE = /(^|[\s(])(#[^\s#.,;:!?()[\]{}"'`]+)/gu;
 
 /**
- * Title text with `#tags` in the accent colour and `[[links]]` shown as links.
- * Clicking a tag opens Obsidian search; clicking a link opens its note.
+ * Title text with `#tags` in the accent colour and `[[links]]` and `[label](url)` shown as links.
+ * Clicking a tag opens Obsidian search; clicking a link opens its note or web page.
  */
 export function Title({ text, sourcePath }: { text: string; sourcePath: string }) {
 	const { app } = useEnv();
@@ -18,7 +18,20 @@ export function Title({ text, sourcePath }: { text: string; sourcePath: string }
 	const pieces: { start: number; end: number; el: JSX.Element }[] = links.map((l) => ({
 		start: l.index,
 		end: l.end,
-		el: (
+		el: l.external ? (
+			<a
+				class="pl-link external-link"
+				key={l.index}
+				href={l.target}
+				aria-label={l.target}
+				target="_blank"
+				rel="noopener"
+				draggable={false}
+				onClick={(evt) => evt.stopPropagation()}
+			>
+				{l.label}
+			</a>
+		) : (
 			<span
 				class={`pl-link${linkResolves(app, l.target, sourcePath) ? '' : ' is-unresolved'}`}
 				key={l.index}
@@ -70,7 +83,7 @@ export function Checkbox({ done, title, onToggle }: { done: boolean; title: stri
 			class={`pl-check${done ? ' is-done' : ''}`}
 			role="checkbox"
 			aria-checked={done}
-			aria-label={`${done ? 'Reopen' : 'Complete'}: ${title}`}
+			aria-label={`${done ? 'Reopen' : 'Complete'}: ${linkLabels(title)}`}
 			onClick={(evt) => {
 				evt.stopPropagation();
 				onToggle();

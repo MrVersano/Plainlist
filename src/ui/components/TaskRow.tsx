@@ -2,7 +2,9 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { addDays, longDate } from '../../dates/format';
 import { placeLabel, type Item, type ProjectInfo } from '../../model/lists';
 import { mentionTargets, stripRanges, targetName } from '../../mentions';
-import { findTask, setTaskDate, setTaskDescription, setTaskRepeat, setTaskTitle } from '../../model/patch';
+import { bareUrl } from '../../links';
+import { linkedTitle } from '../../linkTitle';
+import { findTask, retitleTasks, setTaskDate, setTaskDescription, setTaskRepeat, setTaskTitle } from '../../model/patch';
 import { phraseBefore, recogniseEdit, stillKept } from '../../recognise';
 import type { RunResult, TrackBox } from '../../store';
 import { mergeChanges, quoted } from '../../undo';
@@ -134,7 +136,7 @@ export function TaskEditor({
 	/** For a just-added sub-task: called when the editor closes with no title or description. */
 	onDiscard?: () => void;
 }) {
-	const { app, workspace, weekStart } = useEnv();
+	const { app, workspace, weekStart, linkTitle } = useEnv();
 	const { task } = item;
 	const [title, setTitle] = useState(task.title);
 	const [description, setDescription] = useState(task.description);
@@ -190,6 +192,12 @@ export function TaskEditor({
 		save.flush();
 		if (onDiscard && !latest.current.title.trim() && !latest.current.description.trim()) return onDiscard();
 		const typed = latest.current.title;
+		// A just-added sub-task that is only a URL gets the page's title, when it arrives.
+		const url = onDiscard ? bareUrl(typed) : null;
+		if (url) {
+			const path = box.current.path;
+			track(linkedTitle(url, linkTitle).then((linked) => (linked === url ? { ok: true } : workspace.run(path, (doc) => retitleTasks(doc, url, linked)))));
+		}
 		const found = recognised(typed);
 		const rest = stripRanges(typed, [found.match, found.mention, found.repeat].filter((r) => r !== null));
 		if (!rest || rest === typed.trim()) return;

@@ -18,6 +18,7 @@ import { PlainlistView } from './ui/PlainlistView';
 import type { ViewCommand } from './ui/env';
 import { TaskSearchModal } from './ui/TaskSearchModal';
 import { installViewSwitch } from './viewSwitch';
+import { fetchPageTitle, linkUrlTasksLater } from './linkTitle';
 import { withParams } from './xcallback';
 
 export default class PlainlistPlugin extends Plugin {
@@ -153,6 +154,10 @@ export default class PlainlistPlugin extends Plugin {
 		return firstDayOfWeek(this.settings.weekStart);
 	}
 
+	/** The title of the page at `url`, for a to-do added as a bare URL; null when that's turned off or it can't be found. */
+	linkTitle = (url: string): Promise<string | null> =>
+		this.settings.fetchLinkTitles ? fetchPageTitle(url) : Promise.resolve(null);
+
 	async openTasksFile(): Promise<void> {
 		try {
 			await this.showFile(await ensureTasksFile(this.app, this.settings.tasksFile));
@@ -256,6 +261,7 @@ export default class PlainlistPlugin extends Plugin {
 			file,
 			today,
 			weekStart: this.weekStart(),
+			linkTitle: this.linkTitle,
 			project: list.kind === 'project' ? list.path : null,
 			defaultDate: list.kind === 'today' ? today : list.kind === 'someday' ? 'someday' : null,
 		};
@@ -315,6 +321,7 @@ export default class PlainlistPlugin extends Plugin {
 			return;
 		}
 		new Notice(`Added to the Inbox: ${title}`);
+		void linkUrlTasksLater(this.app, file, title, this.linkTitle);
 		callback('x-success');
 	}
 

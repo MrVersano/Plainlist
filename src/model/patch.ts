@@ -221,6 +221,11 @@ export function setTaskTitle(doc: Doc, ref: LineRef, title: string): LineEdit[] 
 	return replaceLine(t.line, t.text, setTitle(t.text, title.replace(/[\r\n]+/g, ' ')));
 }
 
+/** Gives every open to-do titled exactly `from` the title `to`. */
+export function retitleTasks(doc: Doc, from: string, to: string): LineEdit[] {
+	return doc.tasks.filter((t) => !t.done && t.title === from).flatMap((t) => replaceLine(t.line, t.text, setTitle(t.text, to)));
+}
+
 export function setTaskDate(doc: Doc, ref: LineRef, date: TaskDate | null): LineEdit[] {
 	const t = findTask(doc, ref);
 	return replaceLine(t.line, t.text, setDate(t.text, date));

@@ -5,6 +5,7 @@ import type { Clock } from '../clock';
 import type { ListId } from '../model/lists';
 import type { LineRef } from '../model/patch';
 import type { Boards } from '../boards';
+import type { LinkTitle } from '../linkTitle';
 import type { TaskRef, Workspace } from '../store';
 
 /** The sidebar's width, and whether it is pulled closed. Kept per device. */
@@ -20,6 +21,8 @@ export interface Env {
 	/** Owner for rendered Markdown children. */
 	component: Component;
 	weekStart: () => 0 | 1;
+	/** Looks up the page title for a to-do added as a bare URL. */
+	linkTitle: LinkTitle;
 	/** Opens the "New to-do" palette for a list; for a project, optionally under one of its headings or in a board column. */
 	openCapture: (list: ListId, heading?: LineRef | null, column?: string | null) => void;
 	/** Each project's board settings. Absent in lists inside notes. */

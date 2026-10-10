@@ -11,7 +11,8 @@ Plainlist turns your notes into a clean, minimal task manager in Obsidian. A tas
   - **[Sections](docs/projects.md#adding-and-arranging-sections):** add sections to a project and drag them to reorder them; each is a heading in the note.
   - **[Areas](docs/projects.md#areas):** group projects in the sidebar under foldable areas such as Work and Home, and drag areas to reorder them.
   - **[Board](docs/board.md):** show a project as columns, such as To do, Doing and Done, or one per heading. Drag cards between columns or press `⌘←` / `⌘→`; moving a card into Done completes it.
-- **[To-dos](docs/todos.md):** a title, a description, a date and a project, with `#tags` and `[[links]]`. Click a to-do to edit it in place.
+- **[To-dos](docs/todos.md):** a title, a description, a date and a project, with `#tags`, `[[links]]` and `[web links](https://…)`. Click a to-do to edit it in place.
+  - **[Links from URLs](docs/todos.md#adding-a-web-address):** add a to-do that is just a web address and it shows the page's title as a link.
   - **[Repeating](docs/todos.md#repeating-to-dos):** "every 2 weeks", "every last sunday", or "every month when done" to count from the day you complete it.
   - **[Sub-tasks](docs/todos.md#sub-tasks):** indent a checkbox under another, or press `Tab` / `Shift+Tab`.
   - **[Reorder](docs/todos.md#reordering):** drag to-dos, or press `Alt+↑` / `Alt+↓`. Today keeps any order you like.
@@ -40,6 +41,10 @@ Quick capture recognises dates as you type and takes them out of the title:
 In Obsidian, open **Settings → Community plugins → Browse**, search for **Plainlist**, then install and enable it. Plainlist needs Obsidian 1.13 or later, and works on desktop and mobile.
 
 Run **Plainlist: Open** from the command palette (or click the ribbon icon) to get started. See [Getting started](docs/getting-started.md) for installing by hand and the hotkeys worth setting.
+
+## Network use
+
+Plainlist works offline and sends nothing about your notes anywhere. The one exception: when you add a to-do whose title is only a web address, it requests that page to read its title. If the site blocks the request, it asks once more as a link-preview crawler (`facebookexternalhit`). Turn this off with **Fetch titles for links** in [settings](docs/settings.md).
 
 ## Documentation
 

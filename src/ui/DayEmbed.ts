@@ -148,6 +148,7 @@ export class DayEmbed extends MarkdownRenderChild {
 			clock,
 			component: this,
 			weekStart: () => this.plugin.weekStart(),
+			linkTitle: this.plugin.linkTitle,
 			openCapture: (list) => this.plugin.openCapture(file, list),
 			confirm: (title, message, cta, destructive) => confirmModal(app, title, message, cta, destructive),
 			prompt: (title, placeholder, initial, cta) => promptModal(app, title, placeholder, initial, cta),

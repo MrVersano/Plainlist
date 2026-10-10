@@ -10,6 +10,7 @@ Open **Settings → Community plugins → Plainlist**.
 | **Project tags** | Notes with any of these tags (separated by commas) are added as [projects](projects.md#adding-projects-by-tag) automatically. When you add a tag here, notes that already have it are added when you close settings. Removing a tag doesn't remove projects; Plainlist asks first. | Empty (off) |
 | **Group Today by project** | Show [Today](lists.md#today)'s to-dos under a heading for each project, with Inbox to-dos first. [Lists in notes](lists-in-notes.md) are grouped too. | Off |
 | **Search completed to-dos** | Include completed to-dos in [Search to-dos](search-and-navigation.md#searching-to-dos) results. | Off |
+| **Fetch titles for links** | When a new to-do's title is only a web address, look up the page and show its title as a link. See [Adding a web address](todos.md#adding-a-web-address). Plainlist requests the page from its website, and when the site blocks that, asks once more as a link-preview crawler. | On |
 | **System-wide quick entry** | Desktop only. Add a to-do from any app with a global shortcut while Obsidian is running. See [System-wide quick entry](quick-capture.md#system-wide-quick-entry). | Off |
 | **Global shortcut** | Shown when system-wide quick entry is on. Click to record a new shortcut; it needs at least one of `Ctrl`, `Alt` or `⌘`. The reset button restores the default. | `Cmd+Option+N` / `Ctrl+Alt+N` |
 
