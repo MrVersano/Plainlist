@@ -26,10 +26,10 @@ A new project goes at the end of the projects that aren't in an [area](#areas).
 To make tagged notes projects, enter their tags in **Settings → Plainlist → Project tags**, for example `#project, #client`. As you type, Plainlist suggests tags from your vault, with the number of notes using each. Then:
 
 - When you close settings, every note that already has a newly entered tag is added.
-- A note is added as soon as it gets one of the tags, in its text or its `tags` property.
+- A note is added as soon as it gets one of the tags, in its text or its `tags` property, while it's open. A tagged note that arrives from another device through sync isn't added again: the device where it was tagged already added it.
 - Nested tags count: `#project/home` matches `#project`. Case doesn't matter.
 
-Notes that are already projects, open or completed, aren't added twice. If you remove a tagged project from Plainlist, it stays removed until its note loses the tag and gets it again.
+Notes that are already projects, open or completed, aren't added twice. If the same project link ends up in the task file more than once, for example when sync merges two copies of it, Plainlist removes the extra lines. If you remove a tagged project from Plainlist, it stays removed until its note loses the tag and gets it again.
 
 Removing a tag from the setting, or clearing it, never removes projects on its own. When you close settings, Plainlist lists the open projects whose notes have a removed tag and none of the remaining ones, and asks whether to remove them. **Keep** leaves them as they are; **Remove** takes them out of Plainlist, as **Remove from Plainlist** does. Completed projects are never offered.
 

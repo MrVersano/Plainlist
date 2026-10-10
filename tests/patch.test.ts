@@ -13,7 +13,7 @@ import {
 	completeOpenTasks,
 	removeProjectLink,
 	reopenTasks,
-	rollOverdueTasks,
+	removeDuplicateProjectLinks,
 	replaceProjectLink,
 	setProjectDone,
 	restoreLines,
@@ -477,28 +477,17 @@ describe('mapLine', () => {
 	});
 });
 
-describe('rollOverdueTasks', () => {
-	it('moves open past-dated to-dos to today and leaves the rest alone', () => {
+describe('removeDuplicateProjectLinks', () => {
+	it('removes exact repeats of a project link and keeps the first', () => {
 		const doc = parse(
-			[
-				'- [ ] Late [date:: 2026-10-01]',
-				'- [x] Done late [date:: 2026-10-01] [done:: 2026-10-02]',
-				'- [ ] Now [date:: 2026-10-04]',
-				'- [ ] Later [date:: 2026-10-09]',
-				'- [ ] Someday [date:: someday]',
-				'- [ ] Undated',
-				'  - [ ] Nested late [date:: 2026-09-30]',
-			].join('\n'),
+			['# Projects', '- [[Teams API]]', '- [[Teams API]]', '- [[Teams API]]', '', '## Work', '- [[Thales]]', '- [[Thales]]'].join('\n'),
 		);
-		const out = applyEdits(doc, rollOverdueTasks(doc, TODAY)).split('\n');
-		expect(out[0]).toBe('- [ ] Late [date:: 2026-10-04]');
-		expect(out[1]).toBe('- [x] Done late [date:: 2026-10-01] [done:: 2026-10-02]');
-		expect(out.slice(2, 6)).toEqual(doc.lines.slice(2, 6));
-		expect(out[6]).toBe('  - [ ] Nested late [date:: 2026-10-04]');
+		expect(applyEdits(doc, removeDuplicateProjectLinks(doc))).toBe(['# Projects', '- [[Teams API]]', '', '## Work', '- [[Thales]]'].join('\n'));
 	});
 
-	it('does nothing when no to-do is overdue', () => {
-		expect(rollOverdueTasks(parse('- [ ] Now [date:: 2026-10-04]'), TODAY)).toEqual([]);
+	it('keeps links to the same note that differ, such as a completed one', () => {
+		const doc = parse(['# Projects', '- [[Thales]]', '- [x] [[Thales]] [done:: 2026-10-01]', '- [[Other]]'].join('\n'));
+		expect(removeDuplicateProjectLinks(doc)).toEqual([]);
 	});
 });
 

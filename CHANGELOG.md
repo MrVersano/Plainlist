@@ -2,6 +2,19 @@
 
 All notable changes to Plainlist, newest first. Each release is on [GitHub](https://github.com/MrVersano/Plainlist/releases).
 
+## 1.0.34
+
+*October 10, 2026*
+
+### Improvements
+
+- Overdue to-dos keep their date in the note. They stay at the top of Today, marked with how overdue they are, until you complete them or give them another date.
+
+### No longer broken
+
+- With Obsidian Sync, a device that opened before it had caught up could undo to-dos completed on another device, give them today's completion date, or garble their `done` field.
+- A note tagged as a project on one device was added again by each device it synced to, leaving copies of its link in the task file. A note is now only added on the device where it's open, and extra copies of a project link are removed.
+
 ## 1.0.33
 
 *October 10, 2026*

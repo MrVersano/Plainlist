@@ -11,8 +11,8 @@ import {
 	addTasks,
 	completeOpenTasks,
 	completeRepeating,
+	removeDuplicateProjectLinks,
 	reopenTasks,
-	rollOverdueTasks,
 	spawnRepeats,
 	undoRepeat,
 	setProjectDone,
@@ -276,20 +276,22 @@ export class Workspace {
 	}
 
 	/**
-	 * Daily upkeep in every note: schedules the next one for repeating to-dos ticked by hand,
-	 * then moves overdue to-dos to today, so the date in the note matches where they show.
+	 * Daily upkeep in every note: schedules the next one for repeating to-dos ticked by hand, and
+	 * removes repeated project links from the task file. Overdue to-dos keep their date; they show
+	 * in Today without it being rewritten, so a device opening with notes that aren't synced yet
+	 * doesn't edit the same lines another device completed.
 	 */
 	tidy(today: string, weekStart: 0 | 1): void {
 		this.today = today;
 		this.weekStart = weekStart;
-		for (const s of this.sources()) this.tidyNote(s.path, s.doc, true);
+		for (const s of this.sources()) this.tidyNote(s.path, s.doc);
 	}
 
-	private tidyNote(path: string, doc: Doc, roll: boolean): void {
+	private tidyNote(path: string, doc: Doc): void {
 		const { today, weekStart } = this;
 		if (!today) return;
 		if (spawnRepeats(doc, today, weekStart).length) void this.run(path, (d) => spawnRepeats(d, today, weekStart));
-		if (roll && rollOverdueTasks(doc, today).length) void this.run(path, (d) => rollOverdueTasks(d, today));
+		if (path === this.masterPath && removeDuplicateProjectLinks(doc).length) void this.run(path, removeDuplicateProjectLinks);
 	}
 
 	/**
@@ -590,8 +592,8 @@ export class Workspace {
 		}
 		if (state === this.master) await this.resolve();
 		else this.notify();
-		// A repeating to-do ticked by hand gets its next one straight away.
-		this.tidyNote(f.path, state.doc, false);
+		// A repeating to-do ticked by hand gets its next one straight away; synced copies of a project link go.
+		this.tidyNote(f.path, state.doc);
 	}
 
 	private scheduleResolve(): void {

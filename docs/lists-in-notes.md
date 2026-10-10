@@ -37,5 +37,5 @@ Note Title
 Plainlist reads the note's name with the date format from the core **Daily notes** settings (or as `YYYY-MM-DD`), so the block can go in your daily note template:
 
 - **Today's note** shows the same as `Today`.
-- **An earlier day's note** shows the to-dos completed that day. Open to-dos from that day aren't shown: they [moved on](lists.md#today) to the next day at midnight. This makes old daily notes a log of what you got done.
+- **An earlier day's note** shows the to-dos completed that day. Open to-dos from that day aren't shown: they [stay in Today](lists.md#today) until they're done. This makes old daily notes a log of what you got done.
 - **A later day's note** shows the to-dos dated that day. **New to-do** dates new ones for that day.

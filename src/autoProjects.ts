@@ -1,4 +1,4 @@
-import { CachedMetadata, Component, getAllTags, Notice, TFile } from 'obsidian';
+import { CachedMetadata, Component, getAllTags, MarkdownView, Notice, TFile } from 'obsidian';
 import { patchText } from './model/apply';
 import { parse } from './model/parse';
 import { addProjectLink, removeProjectLink } from './model/patch';
@@ -12,6 +12,10 @@ import { confirmModal } from './ui/modals';
  * gains such a tag, and every tagged note when a tag is added to the setting. A project the user
  * removed stays removed until its note loses the tag and gets it again. Removing a tag from the
  * setting never removes projects by itself; it only offers to.
+ *
+ * A note only counts as gaining a tag when it is open here. A note synced from another device
+ * was added there already, but its task file may arrive later; adding it again here would leave
+ * a copy of the link once the two task files are merged.
  */
 export class AutoProjects extends Component {
 	/** Whether each note had a project tag when last seen; null until the metadata cache is ready. */
@@ -35,7 +39,7 @@ export class AutoProjects extends Component {
 				const now = this.isTagged(file, cache);
 				const before = this.matched.get(file.path) ?? false;
 				this.matched.set(file.path, now);
-				if (now && !before) this.add([file], false);
+				if (now && !before && this.isOpen(file)) this.add([file], false);
 			}),
 		);
 		this.registerEvent(
@@ -85,6 +89,11 @@ export class AutoProjects extends Component {
 	private scan(): Map<string, boolean> {
 		const { vault, metadataCache } = this.plugin.app;
 		return new Map(vault.getMarkdownFiles().map((f) => [f.path, this.isTagged(f, metadataCache.getFileCache(f))]));
+	}
+
+	/** Whether the note is open in an editor or reading view here, where the user could have tagged it. */
+	private isOpen(file: TFile): boolean {
+		return this.plugin.app.workspace.getLeavesOfType('markdown').some((l) => l.view instanceof MarkdownView && l.view.file === file);
 	}
 
 	/** Task files (the configured one, or any with `plainlist: true`) are never projects. */

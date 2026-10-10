@@ -773,12 +773,17 @@ export function completeOpenTasks(doc: Doc, today: string): { edits: LineEdit[];
 	return { edits, completed };
 }
 
-/** Moves every open to-do dated before today to today. */
-export function rollOverdueTasks(doc: Doc, today: string): LineEdit[] {
+/**
+ * Removes project link lines that repeat an earlier one exactly. Two devices that each add the
+ * same project before syncing leave such copies when the sync merges their task files.
+ */
+export function removeDuplicateProjectLinks(doc: Doc): LineEdit[] {
+	const seen = new Set<string>();
 	const edits: LineEdit[] = [];
-	for (const t of doc.tasks) {
-		if (t.done || !t.date || t.date === 'someday' || t.date >= today) continue;
-		edits.push({ at: t.line, delete: 1, insert: [setDate(t.text, today)] });
+	for (const p of doc.projectLinks) {
+		const key = p.text.trim();
+		if (seen.has(key)) edits.push({ at: p.line, delete: 1, insert: [] });
+		seen.add(key);
 	}
 	return edits;
 }
