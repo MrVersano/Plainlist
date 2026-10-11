@@ -3,11 +3,11 @@
 //
 // Only top-level to-dos are cards. A sub-task travels with its parent, so its own field is ignored.
 
-import { addDays } from '../dates/format';
+import { addDays, metaDate } from '../dates/format';
 import type { Item } from './lists';
 import { blockEnd, findTask, insertTaskLines, reindent, repeatBlock, type LineRef, type Place, type Relocation } from './patch';
-import { setCol, setDone } from './taskLine';
-import type { Doc, Heading, LineEdit, Task } from './types';
+import { setCol, setDate, setDone } from './taskLine';
+import type { Doc, Heading, LineEdit, Task, TaskDate } from './types';
 
 export interface ColumnDef {
 	name: string;
@@ -20,7 +20,7 @@ export interface ColumnDef {
 }
 
 export type BoardMode = 'list' | 'board';
-export type GroupBy = 'status' | 'heading';
+export type GroupBy = 'status' | 'heading' | 'date';
 
 /** A project's board, once it has been switched to Board. */
 export interface BoardProject {
@@ -37,6 +37,8 @@ export interface BoardSettings {
 	defaultColumns: ColumnDef[];
 	/** By project note path. */
 	projects: Record<string, BoardProject>;
+	/** How each project's list is grouped, by project note path; by heading when absent. */
+	lists: Record<string, GroupBy>;
 }
 
 export const DEFAULT_COLUMNS: ColumnDef[] = [
@@ -46,7 +48,7 @@ export const DEFAULT_COLUMNS: ColumnDef[] = [
 ];
 
 export function defaultBoard(): BoardSettings {
-	return { autoCreateColumns: true, doneDays: 7, defaultColumns: DEFAULT_COLUMNS.map((c) => ({ ...c })), projects: {} };
+	return { autoCreateColumns: true, doneDays: 7, defaultColumns: DEFAULT_COLUMNS.map((c) => ({ ...c })), projects: {}, lists: {} };
 }
 
 function cleanColumns(raw: unknown): ColumnDef[] | null {
@@ -79,11 +81,16 @@ export function normaliseBoard(raw: unknown): BoardSettings {
 			if (!e || typeof e !== 'object') continue;
 			const entry: BoardProject = {
 				view: e.view === 'board' ? 'board' : 'list',
-				groupBy: e.groupBy === 'heading' ? 'heading' : 'status',
+				groupBy: e.groupBy === 'heading' || e.groupBy === 'date' ? e.groupBy : 'status',
 			};
 			const columns = cleanColumns(e.columns);
 			if (columns) entry.columns = columns;
 			board.projects[path] = entry;
+		}
+	}
+	if (v.lists && typeof v.lists === 'object') {
+		for (const [path, g] of Object.entries(v.lists as Record<string, unknown>)) {
+			if (g === 'status' || g === 'date') board.lists[path] = g;
 		}
 	}
 	return board;
@@ -216,6 +223,8 @@ export type CardPlace = { target: LineRef; place: Place } | { heading: LineRef |
 export interface CardMove {
 	/** The new `col` field; leave it out to keep the field as it is. */
 	field?: string | null;
+	/** The new date; leave it out to keep the date as it is. */
+	date?: TaskDate | null;
 	/** Checks or unchecks it; a repeating to-do checked here gets its next one, which stays where it was. */
 	done?: boolean;
 	to: CardPlace;
@@ -224,8 +233,8 @@ export interface CardMove {
 }
 
 /**
- * Moves a card (its to-do and everything nested under it) in one set of edits: changes its field
- * and checkbox, and puts its lines next to another card or under a heading.
+ * Moves a card (its to-do and everything nested under it) in one set of edits: changes its field,
+ * date and checkbox, and puts its lines next to another card or under a heading.
  */
 export function moveCard(doc: Doc, ref: LineRef, move: CardMove): Relocation {
 	const t = findTask(doc, ref);
@@ -244,6 +253,7 @@ export function moveCard(doc: Doc, ref: LineRef, move: CardMove): Relocation {
 		}
 	}
 	if (move.field !== undefined) lines[0] = setCol(lines[0] ?? '', move.field);
+	if (move.date !== undefined) lines[0] = setDate(lines[0] ?? '', move.date);
 
 	// Where the lines go: `at` in the original note, re-indented to `indent`.
 	let at: number | null = null;
@@ -365,6 +375,8 @@ export interface BoardColumn {
 	index: number;
 	/** Heading board: the heading, or null for to-dos above the first one. */
 	heading?: Heading | null;
+	/** Date board: the date (or "someday"), or null for to-dos without one. */
+	date?: TaskDate | null;
 	/** Cards shown, in note order. */
 	cards: Item[];
 	/** Completed cards kept out of sight: by status, those older than the window, behind "Show N older"; by heading, all of them, behind "Show N completed". */
@@ -420,5 +432,22 @@ export function headingBoard(items: Item[], doc: Doc, today: string): BoardColum
 		const own = cards.filter((i) => i.task.heading?.line === h.line);
 		out.push(fill({ key: `heading:${h.line}:${h.text}`, name: h.name, heading: h, index: out.length, cards: [], older: [], open: 0 }, own, today, days));
 	}
+	return out;
+}
+
+/**
+ * A board with a column per date, earliest first, after one for to-dos without a date and
+ * before one for "someday". A date gets a column while it has open cards or recently completed
+ * ones; older completed cards go behind "Show N older" in their date's column, when it has one.
+ */
+export function dateBoard(items: Item[], today: string, days: number): BoardColumn[] {
+	const cards = cardsOf(items);
+	const shows = (i: Item): boolean => !i.task.done || isRecent(i.task, today, days);
+	const dates = [...new Set(cards.filter((i) => i.task.date && i.task.date !== 'someday' && shows(i)).map((i) => i.task.date!))].sort();
+	const column = (date: TaskDate | null, name: string, index: number): BoardColumn =>
+		fill({ key: `date:${date ?? 'none'}`, name, date, index, cards: [], older: [], open: 0 }, cards.filter((i) => i.task.date === date), today, days);
+	const out = [column(null, 'No date', 0)];
+	for (const d of dates) out.push(column(d, metaDate(d, today), out.length));
+	if (cards.some((i) => i.task.date === 'someday' && shows(i))) out.push(column('someday', 'Someday', out.length));
 	return out;
 }

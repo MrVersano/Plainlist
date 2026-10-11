@@ -10,6 +10,7 @@ import { DEFAULT_SETTINGS, firstDayOfWeek, PlainlistSettings, PlainlistSettingTa
 import { patchText } from './model/apply';
 import { normaliseBoard } from './model/board';
 import { addTask, refOf, type LineRef } from './model/patch';
+import type { TaskDate } from './model/types';
 import { Workspace } from './store';
 import { ensureTasksFile } from './tasksFile';
 import { CaptureModal } from './ui/CaptureModal';
@@ -251,8 +252,10 @@ export default class PlainlistPlugin extends Plugin {
 		if (options) new CaptureModal(this.app, options).open();
 	}
 
-	openCapture(file: TFile, list: ListId, heading: LineRef | null = null, column: string | null = null): void {
-		new CaptureModal(this.app, { ...this.captureOptions(file, list), heading, column }).open();
+	/** A `date` (from a board's date column) replaces the list's default date. */
+	openCapture(file: TFile, list: ListId, heading: LineRef | null = null, column: string | null = null, date: TaskDate | null = null): void {
+		const options = this.captureOptions(file, list);
+		new CaptureModal(this.app, { ...options, heading, column, defaultDate: date ?? options.defaultDate }).open();
 	}
 
 	captureOptions(file: TFile, list: ListId): CaptureOptions {

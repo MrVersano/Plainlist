@@ -4,7 +4,7 @@ A project is an ordinary note. Every checkbox in it, nested ones included, is on
 
 ![A project](../assets/project.png)
 
-Click **Open note ↗** under the title to open the note itself. **List | Board** at the right of the title shows the project as a [board](board.md) instead.
+Click **Open note ↗** under the title to open the note itself. **List | Board** at the right of the title shows the project as a [board](board.md) instead, and **Group** next to it [groups the list](#grouping-the-list) another way.
 
 In the sidebar, a small ring before each project's name fills up as its to-dos get done. A completed project's ring is full.
 
@@ -40,6 +40,16 @@ Headings in a project note group its to-dos. The project view shows each heading
 Every heading shows as a section, even one with no open to-dos yet.
 
 In the project picker and the `@` list in [quick capture](quick-capture.md#picking-a-project), each project lists its headings. Pick one to add or move a to-do under it. You can also type `@Project/Heading`.
+
+### Grouping the list
+
+The **Group** menu at the right of the title chooses how the project's list is grouped, the same choices as a board's [columns](board.md#columns). Each project remembers its choice, separately from its board's.
+
+- **Heading** (the default): one section per heading, as described above.
+- **Status**: one group per board column, such as **To do** and **Doing**, in the columns' order.
+- **Date**: **No date** first, then one group per date, earliest first, and **Someday** last.
+
+With **Status** and **Date**, only groups with open to-dos show, and a sub-task stays with its to-do. Drag a to-do into another group to give it that group's column or date; it keeps its place in the note unless you drop it next to a to-do under the same heading. **+ New section** shows only when grouped by heading.
 
 ### Adding and arranging sections
 

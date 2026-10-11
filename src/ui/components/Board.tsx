@@ -6,6 +6,7 @@ import {
 	cleanColumnName,
 	columnNameError,
 	columnOf,
+	dateBoard,
 	enterColumn,
 	headingBoard,
 	moveCard,
@@ -49,17 +50,18 @@ const same = (a: Item, b: Item): boolean => cardKey(a) === cardKey(b);
 const columnIndexOf = (columns: BoardColumn[], item: Item): number =>
 	columns.findIndex((c) => c.cards.some((i) => same(i, item)) || c.older.some((i) => same(i, item)));
 
-/** A board's columns, by status (from the project's column settings) or by heading. */
+/** A board's columns, by status (from the project's column settings), by heading or by date. */
 export function boardColumns(boards: Boards, path: string, groupBy: GroupBy, items: Item[], env: Env, today: string): BoardColumn[] {
 	const doc = env.workspace.doc(path);
 	const days = boards.settings.doneDays;
 	if (groupBy === 'heading') return doc ? headingBoard(items, doc, today) : [];
+	if (groupBy === 'date') return dateBoard(items, today, days);
 	return statusBoard(items, boards.columns(path), today, days);
 }
 
 /**
- * Moves a card one column left or right, keeping its place in the note when grouped by status,
- * or to the end of the next section when grouped by heading. Resolves to the column's name and
+ * Moves a card one column left or right, keeping its place in the note when grouped by status
+ * or date, or to the end of the next section when grouped by heading. Resolves to the column's name and
  * where the to-do ended up, or null when it was already in the first or last column.
  */
 export async function shiftCard(
@@ -98,6 +100,13 @@ async function moveTo(
 		const change = from === to.index ? {} : enterColumn(columns, from, to.index, item.task.done);
 		res = await workspace.run(item.path, (d) => {
 			const r = moveCard(d, refOf(item.task), { ...change, to: place, today, weekStart: env.weekStart() });
+			landed.at = { path: item.path, ref: r.landed };
+			return r.edits;
+		});
+	} else if (groupBy === 'date') {
+		const date = to.date ?? null;
+		res = await workspace.run(item.path, (d) => {
+			const r = moveCard(d, refOf(item.task), { ...(date === item.task.date ? {} : { date }), to: place, today, weekStart: env.weekStart() });
 			landed.at = { path: item.path, ref: r.landed };
 			return r.edits;
 		});
@@ -196,7 +205,7 @@ export function Board({
 		const target = before ?? rest[rest.length - 1] ?? null;
 		const place = before ? 'before' : 'after';
 		if (groupBy === 'heading') return target ? { target: refOf(target.task), place } : { heading: col.heading ? refOf(col.heading) : null };
-		// By status, a card keeps its section: it goes next to a card under the same heading, or stays.
+		// By status or date, a card keeps its section: it goes next to a card under the same heading, or stays.
 		if (!target || (target.task.heading?.line ?? null) !== (item.task.heading?.line ?? null)) return null;
 		return { target: refOf(target.task), place };
 	};
@@ -321,6 +330,7 @@ export function Board({
 	const addTo = (c: BoardColumn): void => {
 		const list = { kind: 'project' as const, path };
 		if (groupBy === 'heading') env.openCapture(list, c.heading ? refOf(c.heading) : null);
+		else if (groupBy === 'date') env.openCapture(list, null, null, c.date ?? null);
 		else env.openCapture(list, null, c.def && !c.def.checkOnEnter ? (c.index === 0 ? null : c.def.name) : null);
 	};
 	const canAdd = (c: BoardColumn): boolean => editable && !c.def?.checkOnEnter;
@@ -332,12 +342,12 @@ export function Board({
 		},
 		canDragColumn: (index) => {
 			const c = columns[index];
-			if (!editable || !c) return false;
+			if (!editable || !c || groupBy === 'date') return false;
 			return groupBy === 'status' ? columns.length > 1 : canSwap(c, columns[index - 1]) || canSwap(c, columns[index + 1]);
 		},
 		canDropColumn: (from, before) => {
 			const a = columns[from];
-			if (!a) return false;
+			if (!a || groupBy === 'date') return false;
 			if (groupBy === 'status') return true;
 			return canSwap(a, before > from ? columns[before - 1] : columns[before]);
 		},
@@ -409,8 +419,8 @@ export function Board({
 		const isSel = sel?.col === c.index && sel.row === row;
 		const dragging = drag.dragging?.kind === 'card' && drag.dragging.key === key;
 		const dropBefore = drag.dragging?.kind === 'card' && drag.cardDrop?.col === c.index && drag.cardDrop.before === key;
-		const date = task.date ? metaDate(task.date, today) : null;
-		const heading = groupBy === 'status' ? task.heading?.name : null;
+		const date = task.date && groupBy !== 'date' ? metaDate(task.date, today) : null;
+		const heading = groupBy !== 'heading' ? task.heading?.name : null;
 		return (
 			<Card
 				key={key}
@@ -456,7 +466,8 @@ export function Board({
 				const cards = shown(c);
 				const lifted = drag.dragging?.kind === 'column' && drag.dragging.index === c.index;
 				const dropEnd = drag.dragging?.kind === 'card' && drag.cardDrop?.col === c.index && drag.cardDrop.before === null;
-				const settings = groupBy === 'status' || !!c.heading;
+				// Date columns come from the to-dos' dates: there is nothing to rename, move or delete.
+				const settings = groupBy === 'status' || (groupBy === 'heading' && !!c.heading);
 				return (
 					<section
 						key={c.key}
@@ -561,6 +572,7 @@ export function Board({
 				);
 			})}
 			{editable &&
+				groupBy !== 'date' &&
 				(adding ? (
 					<div class="pl-col pl-col-new">
 						<NameInput cls="pl-col-name-input" label={groupBy === 'heading' ? 'Section name' : 'Column name'} initial="" onDone={addColumn} />

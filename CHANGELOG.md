@@ -2,6 +2,15 @@
 
 All notable changes to Plainlist, newest first. Each release is on [GitHub](https://github.com/MrVersano/Plainlist/releases).
 
+## 1.0.35
+
+*October 11, 2026*
+
+### New
+
+- Boards can have a column per date: **Columns → Date** shows a **No date** column, then each date, earliest first, and **Someday** last. Moving a card gives its to-do that column's date.
+- A project's list can be grouped by heading, board status or date, with **Group** at the right of the title. Heading stays the default, and each project remembers its choice. Drag a to-do into another group to change its column or date.
+
 ## 1.0.34
 
 *October 10, 2026*

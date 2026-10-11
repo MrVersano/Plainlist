@@ -4,6 +4,7 @@ import type { App, Component } from 'obsidian';
 import type { Clock } from '../clock';
 import type { ListId } from '../model/lists';
 import type { LineRef } from '../model/patch';
+import type { TaskDate } from '../model/types';
 import type { Boards } from '../boards';
 import type { LinkTitle } from '../linkTitle';
 import type { TaskRef, Workspace } from '../store';
@@ -24,7 +25,7 @@ export interface Env {
 	/** Looks up the page title for a to-do added as a bare URL. */
 	linkTitle: LinkTitle;
 	/** Opens the "New to-do" palette for a list; for a project, optionally under one of its headings or in a board column. */
-	openCapture: (list: ListId, heading?: LineRef | null, column?: string | null) => void;
+	openCapture: (list: ListId, heading?: LineRef | null, column?: string | null, date?: TaskDate | null) => void;
 	/** Each project's board settings. Absent in lists inside notes. */
 	boards?: Boards;
 	/** Phones show projects only as lists. */

@@ -3,6 +3,7 @@ import { h, render } from 'preact';
 import { NEW_TODO_COMMAND, VIEW_ICON, VIEW_TYPE } from '../constants';
 import type { ListId } from '../model/lists';
 import type { LineRef } from '../model/patch';
+import type { TaskDate } from '../model/types';
 import type PlainlistPlugin from '../main';
 import { Workspace, type TaskRef } from '../store';
 import { App } from './components/App';
@@ -124,9 +125,9 @@ export class PlainlistView extends FileView {
 		this.contentEl.querySelector<HTMLElement>('.pl-root')?.focus({ preventScroll: true });
 	}
 
-	openCapture(list: ListId = this.list, heading: LineRef | null = null, column: string | null = null): void {
+	openCapture(list: ListId = this.list, heading: LineRef | null = null, column: string | null = null, date: TaskDate | null = null): void {
 		if (!this.file) return;
-		this.plugin.openCapture(this.file, list, heading, column);
+		this.plugin.openCapture(this.file, list, heading, column, date);
 	}
 
 	/** Shows a to-do: switches to a list that has it, scrolls to it and highlights it briefly. */
@@ -150,7 +151,7 @@ export class PlainlistView extends FileView {
 			component: this,
 			weekStart: () => this.plugin.weekStart(),
 			linkTitle: this.plugin.linkTitle,
-			openCapture: (list, heading, column) => this.openCapture(list, heading, column),
+			openCapture: (list, heading, column, date) => this.openCapture(list, heading, column, date),
 			boards: this.plugin.boards,
 			isPhone: Platform.isPhone,
 			confirm: (title, message, cta, destructive) => confirmModal(this.app, title, message, cta, destructive),

@@ -3,6 +3,7 @@ import { applyEdits, patchText } from '../src/model/apply';
 import {
 	columnOf,
 	DEFAULT_COLUMNS,
+	dateBoard,
 	enterColumn,
 	fieldFor,
 	headingBoard,
@@ -261,5 +262,44 @@ describe('checking by hand', () => {
 		const b = parse('- [ ] A [col:: Doing]\n- [ ] B\n');
 		const a = parse('- [x] A [col:: Doing]\n- [x] B\n');
 		expect(applyEdits(a, reconcileColumns(b, a, DEFAULT_COLUMNS, TODAY))).toBe(`- [x] A [done:: ${TODAY}] [col:: Done]\n- [x] B [done:: ${TODAY}]\n`);
+	});
+});
+
+describe('the date board', () => {
+	const doc = parse(
+		[
+			'- [ ] A [date:: 2026-10-10]',
+			'- [ ] B',
+			'  - [ ] B1 [date:: 2026-10-20]',
+			'- [ ] C [date:: 2026-10-05]',
+			'- [ ] D [date:: someday]',
+			'- [x] E [date:: 2026-10-10] [done:: 2026-10-07]',
+			'- [x] F [date:: 2026-09-01] [done:: 2026-09-01]',
+			'- [x] G [done:: 2026-09-01]',
+			'- [ ] H [date:: 2026-10-10]',
+			'',
+		].join('\n'),
+	);
+	const items = allItems([{ path: 'P.md', doc, project: null }]);
+
+	it('has a column for no date, one per date in order, and one for someday', () => {
+		const board = dateBoard(items, TODAY, 7);
+		expect(board.map((c) => c.name)).toEqual(['No date', '5 Oct', '10 Oct', 'Someday']);
+		expect(board.map((c) => c.cards.map((i) => i.task.title))).toEqual([['B'], ['C'], ['A', 'E', 'H'], ['D']]);
+		expect(board.map((c) => c.older.map((i) => i.task.title))).toEqual([['G'], [], [], []]);
+		expect(board.map((c) => c.open)).toEqual([1, 1, 2, 1]);
+	});
+
+	it('always has the No date column', () => {
+		const only = allItems([{ path: 'P.md', doc: parse('- [ ] A [date:: 2026-10-09]\n'), project: null }]);
+		expect(dateBoard(only, TODAY, 7).map((c) => c.name)).toEqual(['No date', 'Tomorrow']);
+	});
+
+	it('moves a card to a date, or to no date', () => {
+		const text = '- [ ] A\n- [ ] B [date:: 2026-10-10]\n';
+		expect(patchText(text, (d) => moveCard(d, refOf(d.tasks[0]!), { date: '2026-10-12', to: null, today: TODAY, weekStart: 1 }).edits)).toBe(
+			'- [ ] A [date:: 2026-10-12]\n- [ ] B [date:: 2026-10-10]\n',
+		);
+		expect(patchText(text, (d) => moveCard(d, refOf(d.tasks[1]!), { date: null, to: null, today: TODAY, weekStart: 1 }).edits)).toBe('- [ ] A\n- [ ] B\n');
 	});
 });

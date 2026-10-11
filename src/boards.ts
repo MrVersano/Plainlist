@@ -1,6 +1,6 @@
 // Board settings per project, kept in plugin data, and who to tell when they change.
 
-import { DEFAULT_COLUMNS, type BoardProject, type BoardSettings, type ColumnDef } from './model/board';
+import { DEFAULT_COLUMNS, type BoardProject, type BoardSettings, type ColumnDef, type GroupBy } from './model/board';
 
 export class Boards {
 	private listeners = new Set<() => void>();
@@ -28,10 +28,21 @@ export class Boards {
 		return board.defaultColumns.length ? board.defaultColumns : DEFAULT_COLUMNS;
 	}
 
-	/** The columns whose auto-check rules apply to a note: a board project's, when grouped by status. */
+	/** The columns whose auto-check rules apply to a note: a project's, when its board or list is grouped by status. */
 	rules(path: string): ColumnDef[] | null {
-		const e = this.entry(path);
-		return e && e.groupBy === 'status' ? this.columns(path) : null;
+		return this.entry(path)?.groupBy === 'status' || this.listGroupBy(path) === 'status' ? this.columns(path) : null;
+	}
+
+	/** How a project's list is grouped. */
+	listGroupBy(path: string): GroupBy {
+		return this.read().lists[path] ?? 'heading';
+	}
+
+	setListGroupBy(path: string, groupBy: GroupBy): void {
+		const lists = this.read().lists;
+		if (groupBy === 'heading') delete lists[path];
+		else lists[path] = groupBy;
+		this.changed();
 	}
 
 	/** Changes a project's board, creating it first. */
@@ -49,9 +60,12 @@ export class Boards {
 	rename(oldPath: string, newPath: string): void {
 		const board = this.read();
 		const entry = board.projects[oldPath];
-		if (!entry || oldPath === newPath) return;
+		const list = board.lists[oldPath];
+		if ((!entry && !list) || oldPath === newPath) return;
 		delete board.projects[oldPath];
-		board.projects[newPath] = entry;
+		delete board.lists[oldPath];
+		if (entry) board.projects[newPath] = entry;
+		if (list) board.lists[newPath] = list;
 		this.changed();
 	}
 

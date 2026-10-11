@@ -324,3 +324,36 @@ describe('homeList', () => {
 		}
 	});
 });
+
+describe('a project grouped by date or status', () => {
+	const groups = (path: string, grouping: Parameters<typeof computeList>[6]) =>
+		computeList(sources, projects, { kind: 'project', path }, TODAY, [], false, grouping).groups.map((g) => [g.label, g.items.map((i) => i.task.title)]);
+
+	it('groups by date: no date first, then dates in order, then someday; sub-tasks stay with their to-do', () => {
+		expect(groups('Office.md', { by: 'date' })).toEqual([
+			['No date', ['Undated in project']],
+			['2 Oct', ['Overdue']],
+			['Today', ['Today in project']],
+			['Tomorrow', ['Tomorrow', 'Nested later this month']],
+		]);
+		expect(groups('Garden.md', { by: 'date' })).toEqual([
+			['No date', ['Garden undated']],
+			['10 Nov', ['Bulbs']],
+			['Someday', ['Garden someday']],
+		]);
+	});
+
+	it('groups by status, in column order, showing only columns with to-dos', () => {
+		const doc = parse(['- [ ] A [col:: Doing]', '- [ ] B', '\t- [ ] B1 [col:: Doing]', '- [x] C [col:: Done]'].join('\n'));
+		const p = project('Board.md', 13);
+		const all = computeList([{ path: 'Board.md', doc, project: p }], [p], { kind: 'project', path: 'Board.md' }, TODAY, [], false, {
+			by: 'status',
+			columns: [{ name: 'To do' }, { name: 'Doing' }, { name: 'Done', checkOnEnter: true }],
+		});
+		expect(all.groups.map((g) => [g.label, g.column, g.items.map((i) => i.task.title)])).toEqual([
+			['To do', 0, ['B', 'B1']],
+			['Doing', 1, ['A']],
+		]);
+		expect(all.completed.map((i) => i.task.title)).toEqual(['C']);
+	});
+});

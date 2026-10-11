@@ -14,10 +14,11 @@ import {
 	type Item,
 	type ListId,
 	type ListView,
+	type ProjectGrouping,
 	type ProjectInfo,
 	type Source,
 } from '../../model/lists';
-import { columnOf, unknownColumns, withNewColumns, type BoardMode, type GroupBy } from '../../model/board';
+import { columnOf, enterColumn, moveCard, unknownColumns, withNewColumns, type BoardMode, type GroupBy } from '../../model/board';
 import { linkedTitle } from '../../linkTitle';
 import { pastedTasks } from '../../model/paste';
 import {
@@ -111,6 +112,8 @@ const isAt = (at: TaskRef | null, item: Item): boolean =>
 	!!at && at.path === item.path && at.ref.line === item.task.line && at.ref.text === item.task.text;
 
 const isBoxed = (box: TrackBox | null, item: Item): boolean => isAt(box?.current ?? null, item);
+
+const GROUP_LABELS: Record<GroupBy, string> = { status: 'Status', heading: 'Heading', date: 'Date' };
 
 /** Lists that show to-dos in file order, with sub-tasks indented under their parents. */
 const isNested = (list: ListId): boolean => ['inbox', 'project', 'nodate', 'someday'].includes(list.kind);
@@ -311,6 +314,10 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 	const groupBy: GroupBy = boardEntry?.groupBy ?? 'status';
 	/** A board project's columns when grouped by status: the list shows each to-do's column too. */
 	const statusColumns = project && boards ? boards.rules(project.path) : null;
+	/** How the project's list is grouped: by section unless chosen otherwise. */
+	const listGroupBy: GroupBy = project && boards ? boards.listGroupBy(project.path) : 'heading';
+	const grouping: ProjectGrouping =
+		listGroupBy === 'status' && statusColumns ? { by: 'status', columns: statusColumns } : listGroupBy === 'date' ? { by: 'date' } : { by: 'heading' };
 	const projectItems = useMemo(() => (project ? allItems(sources).filter((i) => i.path === project.path) : []), [sources, project?.path]);
 	const boardHandle = useRef<BoardHandle | null>(null);
 
@@ -369,6 +376,11 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 
 	const setGroupBy = (next: GroupBy): void => {
 		if (project && boards && next !== groupBy) boards.update(project.path, (e) => ({ ...e, groupBy: next }));
+	};
+	const setListGroupBy = (next: GroupBy): void => {
+		if (!project || !boards || next === listGroupBy) return;
+		setSelected(-1);
+		boards.setListGroupBy(project.path, next);
 	};
 
 	useLayoutEffect(() => {
@@ -450,8 +462,8 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 	useEffect(() => clearLingering, []);
 
 	const view = useMemo(
-		() => withLingering(sources, lingering, (s) => computeList(s, projects, list, today, todayOrder, todayByProject)),
-		[sources, lingering, list, today, todayOrder, todayByProject, orderVersion],
+		() => withLingering(sources, lingering, (s) => computeList(s, projects, list, today, todayOrder, todayByProject, grouping)),
+		[sources, lingering, list, today, todayOrder, todayByProject, orderVersion, boardVersion],
 	);
 	const counts = useMemo(() => computeCounts(sources, projects, today), [sources, today]);
 
@@ -911,9 +923,13 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 	 * Today's order is free and saved by Plainlist, within each project when grouped. Elsewhere a to-do moves among its siblings
 	 * in its note, within its group (anywhere in a project).
 	 */
-	const groupOf = new Map(view.groups.flatMap((g) => g.items.map((i) => [i, g.key] as const)));
+	const groupOf = new Map(view.groups.flatMap((g) => g.items.map((i) => [i, g] as const)));
+	/** A project grouped by status or date: a to-do dropped in another group takes that group's column or date. */
+	const changesGroup = (a: Item, b: Item): boolean =>
+		list.kind === 'project' && grouping.by !== 'heading' && a.path === b.path && groupOf.get(a) !== groupOf.get(b);
 	const canDrop = (a: Item, b: Item): boolean => {
 		if (!groupOf.has(a) || !groupOf.has(b) || a.task.done || b.task.done || a === b) return false;
+		if (changesGroup(a, b)) return a.task.parent === null && b.task.parent === null;
 		if (list.kind === 'today') return !todayByProject || groupOf.get(a) === groupOf.get(b);
 		return (
 			list.kind !== 'completed' &&
@@ -931,7 +947,18 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 			setFollow({ path: item.path, ref: refOf(item.task) });
 			return;
 		}
+		if (changesGroup(item, target)) return moveToGroup(item, target, place);
 		relocate(item, (d) => moveTaskNextTo(d, refOf(item.task), refOf(target.task), place));
+	};
+
+	/** Gives a to-do the column or date of `target`'s group, next to it when under the same heading, or keeping its line. */
+	const moveToGroup = (item: Item, target: Item, place: Place): void => {
+		const g = groupOf.get(target);
+		const from = groupOf.get(item);
+		if (!g || !from) return;
+		const change = grouping.by === 'status' ? enterColumn(grouping.columns, from.column ?? 0, g.column ?? 0, item.task.done) : { date: g.date ?? null };
+		const next = (item.task.heading?.line ?? null) === (target.task.heading?.line ?? null) ? { target: refOf(target.task), place } : null;
+		relocate(item, (d) => moveCard(d, refOf(item.task), { ...change, to: next, today, weekStart: env.weekStart() }));
 	};
 
 	// Sections: headings in the project's note, shown as group headers.
@@ -1184,7 +1211,10 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 	/** A list row's meta: its date (or place), and in a board project, its column when not the first. */
 	const rowMeta = (item: Item): { text: string; cls?: string } => {
 		const m = meta(list, item, today, todayByProject);
-		if (list.kind !== 'project' || !statusColumns || item.task.done || item.task.parent !== null) return m;
+		if (list.kind !== 'project' || item.task.done || item.task.parent !== null) return m;
+		// The group header already says it.
+		if (listGroupBy === 'date') return { text: '' };
+		if (!statusColumns || listGroupBy === 'status') return m;
 		const at = columnOf(statusColumns, item.task).index;
 		const name = at > 0 ? statusColumns[at]?.name : null;
 		return name ? { ...m, text: m.text ? `${m.text} · ${name}` : name } : m;
@@ -1354,40 +1384,44 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 								project={project}
 								actions={projectActions}
 								extra={
-									canBoard && (
+									project.exists &&
+									boards && (
 										<div class="pl-view-controls">
-											<div class="pl-segmented" role="group" aria-label="Show as">
-												{(['list', 'board'] as const).map((v) => (
-													<button
-														type="button"
-														key={v}
-														class={(v === 'board') === boardOn ? 'is-active' : ''}
-														aria-pressed={(v === 'board') === boardOn}
-														onClick={() => setBoardView(v)}
-													>
-														{v === 'list' ? 'List' : 'Board'}
-													</button>
-												))}
-											</div>
-											{boardOn && (
-												<button
-													type="button"
-													class="pl-columns-button"
-													aria-haspopup="menu"
-													onClick={(e) => {
-														const menu = new Menu();
-														menu.addItem((i) => i.setTitle('Status').setChecked(groupBy === 'status').onClick(() => setGroupBy('status')));
-														menu.addItem((i) => i.setTitle('Heading').setChecked(groupBy === 'heading').onClick(() => setGroupBy('heading')));
-														const r = e.currentTarget.getBoundingClientRect();
-														menu.showAtPosition({ x: r.left, y: r.bottom + 4 });
-													}}
-												>
-													Columns: {groupBy === 'status' ? 'Status' : 'Heading'}
-													<svg viewBox="0 0 16 16" aria-hidden="true">
-														<path d="M4 6l4 4 4-4" />
-													</svg>
-												</button>
+											{canBoard && (
+												<div class="pl-segmented" role="group" aria-label="Show as">
+													{(['list', 'board'] as const).map((v) => (
+														<button
+															type="button"
+															key={v}
+															class={(v === 'board') === boardOn ? 'is-active' : ''}
+															aria-pressed={(v === 'board') === boardOn}
+															onClick={() => setBoardView(v)}
+														>
+															{v === 'list' ? 'List' : 'Board'}
+														</button>
+													))}
+												</div>
 											)}
+											<button
+												type="button"
+												class="pl-columns-button"
+												aria-haspopup="menu"
+												onClick={(e) => {
+													const current = boardOn ? groupBy : listGroupBy;
+													const pick = boardOn ? setGroupBy : setListGroupBy;
+													const menu = new Menu();
+													menu.addItem((i) => i.setTitle('Status').setChecked(current === 'status').onClick(() => pick('status')));
+													menu.addItem((i) => i.setTitle('Heading').setChecked(current === 'heading').onClick(() => pick('heading')));
+													menu.addItem((i) => i.setTitle('Date').setChecked(current === 'date').onClick(() => pick('date')));
+													const r = e.currentTarget.getBoundingClientRect();
+													menu.showAtPosition({ x: r.left, y: r.bottom + 4 });
+												}}
+											>
+												{boardOn ? 'Columns' : 'Group'}: {GROUP_LABELS[boardOn ? groupBy : listGroupBy]}
+												<svg viewBox="0 0 16 16" aria-hidden="true">
+													<path d="M4 6l4 4 4-4" />
+												</svg>
+											</button>
 										</div>
 									)
 								}
@@ -1469,6 +1503,7 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 					{project?.exists &&
 						!project.done &&
 						!boardOn &&
+						listGroupBy === 'heading' &&
 						(addingSection ? (
 							<section class="pl-group">
 								<NameInput

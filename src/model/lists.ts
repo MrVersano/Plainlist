@@ -1,7 +1,8 @@
 // Computes the lists shown in the view from the task file, the project notes and
 // today's date. Nothing here is stored.
 
-import { completedGroup, upcomingGroup } from '../dates/format';
+import { completedGroup, metaDate, upcomingGroup } from '../dates/format';
+import { columnOf, type ColumnDef } from './board';
 import type { Area, Doc, Heading, Task } from './types';
 
 export interface ProjectInfo {
@@ -54,6 +55,10 @@ export interface Group {
 	projects?: ProjectInfo[];
 	/** Project view only: the section (heading in the note) the group shows. */
 	heading?: Heading;
+	/** Project view grouped by status: the column's place in the project's columns. */
+	column?: number;
+	/** Project view grouped by date: the date (or "someday"), or null for to-dos without one. */
+	date?: string | null;
 }
 
 export interface ListView {
@@ -178,6 +183,8 @@ export function computeList(
 	todayOrder: string[] = [],
 	/** Today only: one group per project, in sidebar order, instead of a single list. */
 	todayByProject = false,
+	/** A project: how its to-dos are grouped. */
+	grouping: ProjectGrouping = { by: 'heading' },
 ): ListView {
 	const items = allItems(sources);
 	const rank = sourceOrder(projects);
@@ -229,6 +236,7 @@ export function computeList(
 		case 'project': {
 			const own = items.filter((i) => i.project?.path === list.path).sort(byFile);
 			const open = own.filter((i) => !i.task.done);
+			if (grouping.by !== 'heading') return { groups: nestedGroups(groupedBy(own, open, grouping, today)), completed: own.filter((i) => i.task.done) };
 			// Open to-dos in file order: those before any heading first, unlabelled, then every
 			// section, empty ones too, so a new section shows and to-dos can go there.
 			const loose = open.filter((i) => !i.task.heading);
@@ -239,6 +247,48 @@ export function computeList(
 			return { groups: nestedGroups(groups), completed: own.filter((i) => i.task.done) };
 		}
 	}
+}
+
+/** How a project's list is grouped: by section (heading), by board column (status), or by date. */
+export type ProjectGrouping = { by: 'heading' } | { by: 'status'; columns: ColumnDef[] } | { by: 'date' };
+
+/**
+ * A project's open to-dos grouped by status or date, in file order within each group. A sub-task
+ * is in its top-level to-do's group, as on the board. Groups follow the columns' order, or go
+ * No date, then dates earliest first, then Someday; only groups with to-dos show.
+ */
+function groupedBy(own: Item[], open: Item[], grouping: Exclude<ProjectGrouping, { by: 'heading' }>, today: string): Group[] {
+	// Each to-do's group key, from its top-level to-do; parents come before their sub-tasks.
+	const keys = new Map<number, string>();
+	const info = new Map<string, { order: string; group: Group }>();
+	for (const i of own) {
+		const t = i.task;
+		const up = t.parent === null ? undefined : keys.get(t.parent);
+		if (up !== undefined) {
+			keys.set(t.line, up);
+			continue;
+		}
+		let key: string;
+		if (grouping.by === 'status') {
+			const at = columnOf(grouping.columns, t).index;
+			key = `col:${at}`;
+			info.set(key, { order: String(at).padStart(4, '0'), group: { key, label: grouping.columns[at]?.name ?? '', column: at, items: [] } });
+		} else {
+			key = `date:${t.date ?? 'none'}`;
+			const label = !t.date ? 'No date' : t.date === 'someday' ? 'Someday' : metaDate(t.date, today);
+			info.set(key, { order: !t.date ? '0' : t.date === 'someday' ? '2' : `1${t.date}`, group: { key, label, date: t.date, items: [] } });
+		}
+		keys.set(t.line, key);
+	}
+	const groups = new Map<string, Group>();
+	for (const i of open) {
+		const key = keys.get(i.task.line) ?? '';
+		let g = groups.get(key);
+		if (!g) groups.set(key, (g = info.get(key)?.group ?? { key, label: '', items: [] }));
+		g.items.push(i);
+	}
+	const order = (g: Group): string => info.get(g.key)?.order ?? '';
+	return [...groups.values()].sort((a, b) => order(a).localeCompare(order(b)));
 }
 
 /**

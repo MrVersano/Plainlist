@@ -12,12 +12,13 @@ The **Columns** menu next to the switch chooses what the columns are:
 
 - **Status** (the default): columns you name yourself. A to-do's column is a `[col:: Doing]` field at the end of its line. A to-do without one is in the first column, or in Done when it's completed.
 - **Heading**: one column per heading in the note, plus one for to-dos above the first heading. Moving a card moves its to-do under that heading.
+- **Date**: a **No date** column first, then one column per date, earliest first, and **Someday** last. A date has a column while it has open to-dos or ones completed in the last 7 days. Moving a card gives its to-do that column's date, or removes the date in **No date**; the to-do keeps its place in the note.
 
-Each column shows how many open to-dos it has. With status columns, completed to-dos from the last 7 days show in their column, and older ones are behind **Show N older** at the bottom. With heading columns, completed to-dos are hidden: **Show N completed** at the bottom of a column shows them, in that column only. A to-do you complete on the board stays in sight for a moment first.
+Each column shows how many open to-dos it has. With status and date columns, completed to-dos from the last 7 days show in their column, and older ones are behind **Show N older** at the bottom. With heading columns, completed to-dos are hidden: **Show N completed** at the bottom of a column shows them, in that column only. A to-do you complete on the board stays in sight for a moment first.
 
 ## Cards
 
-A card shows the to-do's title and, below it, its date (in the accent colour for today), its heading when the columns are statuses, and **Repeats** for a [repeating to-do](todos.md#repeating-to-dos). Sub-tasks don't get cards of their own: they move with their to-do.
+A card shows the to-do's title and, below it, its date (in the accent colour for today), its heading when the columns are statuses or dates, and **Repeats** for a [repeating to-do](todos.md#repeating-to-dos). Sub-tasks don't get cards of their own: they move with their to-do.
 
 - Click a card's title to open it in place, as in a list.
 - Click its checkbox to complete it.
@@ -39,7 +40,7 @@ A column can check and uncheck to-dos. Its **Auto-check** badge says so. The def
 - **Uncheck tasks when moved out**: moving a card out to a column that doesn't check reopens it.
 - **Checking a task elsewhere moves it here**: completing a to-do anywhere, in a list, on the board or by ticking it in the note, moves it to this column. Reopening a to-do that's in a column that checks moves it to the first column.
 
-These rules apply to a project once you have switched it to Board, whichever view it shows. Other projects' notes never get `[col:: …]` fields.
+These rules apply to a project whose board has status columns, once you have switched it to Board, or whose [list is grouped by status](projects.md#grouping-the-list), whichever view it shows. Other projects' notes never get `[col:: …]` fields.
 
 ## Changing columns
 
@@ -50,6 +51,8 @@ Click **•••** in a column's header (it shows when you point at the header)
 - Typing `[col:: Waiting]` on a to-do by hand adds a **Waiting** column, before Done. Turn this off with **Auto-create columns from tasks** in [settings](settings.md#board).
 
 When the columns are headings, these act on the headings: renaming one renames the heading, moving one moves its section in the note, and deleting one removes the heading line, so its to-dos join the section above. **+** in a column's header adds a to-do to it.
+
+Date columns come from the to-dos' dates, so they can't be renamed, moved or deleted. **+** in a date column's header adds a to-do with that date.
 
 New projects start with the **Default columns** from [settings](settings.md#board).
 
