@@ -2,6 +2,14 @@
 
 All notable changes to Plainlist, newest first. Each release is on [GitHub](https://github.com/MrVersano/Plainlist/releases).
 
+## 1.0.37
+
+*October 12, 2026*
+
+### No longer broken
+
+- On a phone, picking a list or project in the sidebar took two taps: the first only highlighted it.
+
 ## 1.0.36
 
 *October 12, 2026*

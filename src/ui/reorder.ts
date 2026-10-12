@@ -9,9 +9,9 @@ import type { Place } from '../model/patch';
 /** Mouse movement before a press becomes a drag. */
 const DRAG_SLOP = 5;
 /** Touch movement that means the finger is scrolling, not holding. */
-const TOUCH_SLOP = 8;
+export const TOUCH_SLOP = 8;
 /** How long a touch must hold still before the row lifts. */
-const HOLD_MS = 450;
+export const HOLD_MS = 450;
 /** Distance from the scroller's top or bottom edge where dragging scrolls it. */
 const EDGE = 40;
 /** Share of the row's width a swipe must travel to act. */

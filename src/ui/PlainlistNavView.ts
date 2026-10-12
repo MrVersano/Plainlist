@@ -8,6 +8,7 @@ import type { UndoEntry } from '../undo';
 import { Nav, NavPlaceholder } from './components/Nav';
 import { EnvContext, type Env } from './env';
 import { confirmModal, promptModal } from './modals';
+import { HOLD_MS, TOUCH_SLOP } from './reorder';
 
 /**
  * The lists and projects, in Obsidian's left sidebar. It follows the Plainlist tab used
@@ -42,6 +43,7 @@ export class PlainlistNavView extends ItemView {
 		this.contentEl.addClass('pl-nav-view');
 		this.host = this.contentEl.createDiv({ cls: 'pl-host' });
 		this.register(this.plugin.onViewsChange(() => void this.refresh()));
+		this.tapOnTouchEnd();
 		// The tasks file may be created, renamed or deleted. Not before the layout is ready:
 		// every file in the vault is "created" while Obsidian starts.
 		this.app.workspace.onLayoutReady(() => {
@@ -57,6 +59,36 @@ export class PlainlistNavView extends ItemView {
 		if (this.host) render(null, this.host);
 		this.host = null;
 		this.letGo();
+	}
+
+	/**
+	 * Takes a tap on a button when the finger lifts, not from its click. In the mobile drawer
+	 * the first tap after picking a list (which makes the Plainlist tab the active pane) lost
+	 * its click, so a list or project took two taps.
+	 */
+	private tapOnTouchEnd(): void {
+		let start: { x: number; y: number; t: number } | null = null;
+		this.registerDomEvent(
+			this.contentEl,
+			'touchstart',
+			(e) => {
+				const t = e.touches[0];
+				start = e.touches.length === 1 && t ? { x: t.clientX, y: t.clientY, t: e.timeStamp } : null;
+			},
+			{ passive: true },
+		);
+		this.registerDomEvent(this.contentEl, 'touchend', (e) => {
+			const from = start;
+			start = null;
+			const t = e.changedTouches[0];
+			// A held touch opens the row's menu, and a moving one scrolls or drags.
+			if (!from || !t || e.timeStamp - from.t >= HOLD_MS || Math.hypot(t.clientX - from.x, t.clientY - from.y) > TOUCH_SLOP) return;
+			const button = (e.target as HTMLElement | null)?.closest('button');
+			if (!button || !this.contentEl.contains(button)) return;
+			// No click of its own follows, so it can't act twice.
+			e.preventDefault();
+			button.click();
+		});
 	}
 
 	private letGo(): void {
@@ -113,9 +145,9 @@ export class PlainlistNavView extends ItemView {
 	}
 
 	private select(list: ListId): void {
-		void (this.file ? this.plugin.showListIn(this.file, list) : this.plugin.showList(list));
-		// On a phone or tablet the sidebar covers the list; get it out of the way.
-		if (Platform.isMobile) this.app.workspace.leftSplit.collapse();
+		const shown = this.file ? this.plugin.showListIn(this.file, list) : this.plugin.showList(list);
+		// On a phone or tablet the sidebar covers the list; get it out of the way once the list is showing.
+		if (Platform.isMobile) void shown.then(() => this.app.workspace.leftSplit.collapse());
 	}
 
 	/** A notice offering to undo, as the list's own toast does. */
