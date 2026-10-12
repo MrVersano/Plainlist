@@ -3,7 +3,7 @@ import type { CaptureOptions } from './capture';
 import { AutoProjects } from './autoProjects';
 import { Boards } from './boards';
 import { Clock } from './clock';
-import { VIEW_ICON, VIEW_TYPE } from './constants';
+import { NAV_VIEW_TYPE, VIEW_ICON, VIEW_TYPE } from './constants';
 import type { QuickEntryService } from './desktop/QuickEntryService';
 import { allItems, type ListId } from './model/lists';
 import { DEFAULT_SETTINGS, firstDayOfWeek, PlainlistSettings, PlainlistSettingTab } from './settings';
@@ -12,15 +12,19 @@ import { normaliseBoard } from './model/board';
 import { addTask, refOf, type LineRef } from './model/patch';
 import type { TaskDate } from './model/types';
 import { Workspace } from './store';
-import { ensureTasksFile } from './tasksFile';
+import { ensureTasksFile, tasksFilePath } from './tasksFile';
 import { CaptureModal } from './ui/CaptureModal';
 import { BLOCK_LANGUAGE, DayEmbed, WorkspacePool } from './ui/DayEmbed';
+import { PlainlistNavView } from './ui/PlainlistNavView';
 import { PlainlistView } from './ui/PlainlistView';
 import type { ViewCommand } from './ui/env';
 import { TaskSearchModal } from './ui/TaskSearchModal';
 import { installViewSwitch } from './viewSwitch';
 import { fetchPageTitle, linkUrlTasksLater } from './linkTitle';
 import { withParams } from './xcallback';
+
+const AREAS_KEY = 'plainlist-areas-collapsed';
+const SIDEBAR_ADDED_KEY = 'plainlist-sidebar-added';
 
 export default class PlainlistPlugin extends Plugin {
 	settings!: PlainlistSettings;
@@ -36,18 +40,40 @@ export default class PlainlistPlugin extends Plugin {
 	);
 	/** Lists showing Today's order: the view and lists in notes. */
 	private todayOrderListeners = new Set<() => void>();
+	/** One loaded workspace per tasks file, shared by its tabs, the left sidebar and lists in notes. */
+	pool!: WorkspacePool;
+	/** The Plainlist tab used last, which the left sidebar follows. */
+	private lastView: PlainlistView | null = null;
+	/** The left sidebar, hearing about tabs opening, closing or changing list. */
+	private viewsListeners = new Set<() => void>();
+	/** Names of the areas folded closed in the sidebar. Kept per device. */
+	areaFolding = {
+		collapsed: (): string[] => {
+			const saved: unknown = this.app.loadLocalStorage(AREAS_KEY);
+			return Array.isArray(saved) ? saved.filter((n): n is string => typeof n === 'string') : [];
+		},
+		setCollapsed: (names: string[]): void => this.app.saveLocalStorage(AREAS_KEY, names),
+	};
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
 		this.addSettingTab(new PlainlistSettingTab(this.app, this));
 		this.clock.start(this);
 		this.autoProjects = this.addChild(new AutoProjects(this));
+		this.pool = new WorkspacePool(this.app, (path) => this.boards.rules(path));
 		this.registerView(VIEW_TYPE, (leaf) => new PlainlistView(leaf, this));
+		this.registerView(NAV_VIEW_TYPE, (leaf) => new PlainlistNavView(leaf, this));
 		installViewSwitch(this);
 		// ```plainlist blocks in notes: `Today`, or `Note Title` in a daily note.
-		const pool = new WorkspacePool(this.app, (path) => this.boards.rules(path));
 		this.registerMarkdownCodeBlockProcessor(BLOCK_LANGUAGE, (source, el, ctx) => {
-			ctx.addChild(new DayEmbed(this, pool, source, el, ctx));
+			ctx.addChild(new DayEmbed(this, this.pool, source, el, ctx));
+		});
+		// The first time Plainlist runs on a device, put its lists in the left sidebar. Closed after that,
+		// it stays closed. Kept per device, as the layout is: settings sync, so another device's run would count.
+		this.app.workspace.onLayoutReady(() => {
+			if (this.app.loadLocalStorage(SIDEBAR_ADDED_KEY)) return;
+			this.app.saveLocalStorage(SIDEBAR_ADDED_KEY, true);
+			if (!this.app.workspace.getLeavesOfType(NAV_VIEW_TYPE).length) void this.showSidebar();
 		});
 		// Keep a renamed project's to-dos in their place in Today.
 		this.registerEvent(
@@ -67,6 +93,12 @@ export default class PlainlistPlugin extends Plugin {
 		});
 
 		// No default hotkey (plugin guidelines); the README suggests Mod+Shift+N.
+		this.addCommand({
+			id: 'show-sidebar',
+			name: 'Show lists in the sidebar',
+			callback: () => void this.showSidebar(),
+		});
+
 		this.addCommand({
 			id: 'new-todo',
 			name: 'New to-do',
@@ -167,6 +199,45 @@ export default class PlainlistPlugin extends Plugin {
 		}
 	}
 
+	/** Brings up the lists in the left sidebar, adding them there if they were closed. */
+	async showSidebar(): Promise<void> {
+		const { workspace } = this.app;
+		const leaf = workspace.getLeavesOfType(NAV_VIEW_TYPE)[0] ?? workspace.getLeftLeaf(false);
+		if (!leaf) return;
+		if (leaf.view.getViewType() !== NAV_VIEW_TYPE) await leaf.setViewState({ type: NAV_VIEW_TYPE });
+		await workspace.revealLeaf(leaf);
+	}
+
+	/** The Plainlist tab the left sidebar follows: the one used last, or any one open. */
+	followedView(): PlainlistView | null {
+		const views = this.app.workspace
+			.getLeavesOfType(VIEW_TYPE)
+			.map((l) => l.view)
+			.filter((v): v is PlainlistView => v instanceof PlainlistView && !!v.file);
+		return views.find((v) => v === this.lastView) ?? views[0] ?? null;
+	}
+
+	/** The file whose lists the left sidebar shows: the followed tab's, or the tasks file if it exists. */
+	followedFile(): TFile | null {
+		return this.followedView()?.file ?? this.app.vault.getFileByPath(tasksFilePath(this.settings.tasksFile));
+	}
+
+	viewActivated(view: PlainlistView): void {
+		if (this.lastView === view) return;
+		this.lastView = view;
+		this.viewsChanged();
+	}
+
+	/** Tells the left sidebar that a Plainlist tab opened, closed or changed list. */
+	viewsChanged(): void {
+		for (const fn of this.viewsListeners) fn();
+	}
+
+	onViewsChange(fn: () => void): () => void {
+		this.viewsListeners.add(fn);
+		return () => this.viewsListeners.delete(fn);
+	}
+
 	private viewOf(file: TFile): PlainlistView | null {
 		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE)) {
 			if (leaf.view instanceof PlainlistView && leaf.view.file === file) return leaf.view;
@@ -186,17 +257,25 @@ export default class PlainlistPlugin extends Plugin {
 		return leaf.view instanceof PlainlistView ? leaf.view : null;
 	}
 
-	/** Shows `list` in the active Plainlist view, or in the tasks file's view. */
+	/** Shows `list` in the active Plainlist view, or the one the sidebar follows, or the tasks file's view. */
 	async showList(list: ListId): Promise<void> {
 		try {
-			const file = this.app.workspace.getActiveViewOfType(PlainlistView)?.file ?? (await ensureTasksFile(this.app, this.settings.tasksFile));
-			const view = await this.showFile(file);
-			if (!view) return;
-			this.app.workspace.setActiveLeaf(view.leaf, { focus: true });
-			view.showList(list);
+			const file =
+				this.app.workspace.getActiveViewOfType(PlainlistView)?.file ??
+				this.followedView()?.file ??
+				(await ensureTasksFile(this.app, this.settings.tasksFile));
+			await this.showListIn(file, list);
 		} catch (e) {
 			new Notice(`Plainlist: could not open the tasks file. ${e instanceof Error ? e.message : String(e)}`);
 		}
+	}
+
+	/** Shows `list` in the Plainlist tab showing `file`, opening one if needed, and focuses it. */
+	async showListIn(file: TFile, list: ListId): Promise<void> {
+		const view = await this.showFile(file);
+		if (!view) return;
+		this.app.workspace.setActiveLeaf(view.leaf, { focus: true });
+		view.showList(list);
 	}
 
 	/**
@@ -351,5 +430,7 @@ export default class PlainlistPlugin extends Plugin {
 
 	async saveSettings(): Promise<void> {
 		await this.saveData(this.settings);
+		// The tasks file may have changed.
+		this.viewsChanged();
 	}
 }

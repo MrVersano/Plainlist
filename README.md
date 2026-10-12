@@ -6,7 +6,7 @@ Plainlist turns your notes into a clean, minimal task manager in Obsidian. A tas
 
 ## Features
 
-- **[Lists](docs/lists.md):** Inbox, Today, Upcoming, No Date, Someday and Completed, plus one list per project. Open to-dos from past days move to today. Today can be grouped by project.
+- **[Lists](docs/lists.md):** Inbox, Today, Upcoming, No Date, Someday and Completed, plus one list per project, in [Obsidian's left sidebar](docs/lists.md#the-sidebar). Open to-dos from past days move to today. Today can be grouped by project.
 - **[Projects are notes](docs/projects.md):** create a new project note, turn an existing note into a project, or have [notes with a tag](docs/projects.md#adding-projects-by-tag) such as `#project` added automatically. Its checkboxes, nested ones included, become the project's to-dos, grouped by the note's headings. A ring in the sidebar shows how much of each project is done.
   - **[Sections](docs/projects.md#adding-and-arranging-sections):** add sections to a project and drag them to reorder them; each is a heading in the note.
   - **[Grouping](docs/projects.md#grouping-the-list):** group a project's list by heading, board status or date.

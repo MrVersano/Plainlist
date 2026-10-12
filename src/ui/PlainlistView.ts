@@ -1,28 +1,15 @@
-import { App as ObsidianApp, FileView, Platform, TFile, ViewStateResult, WorkspaceLeaf } from 'obsidian';
+import { FileView, Platform, TFile, ViewStateResult, WorkspaceLeaf } from 'obsidian';
 import { h, render } from 'preact';
 import { NEW_TODO_COMMAND, VIEW_ICON, VIEW_TYPE } from '../constants';
 import type { ListId } from '../model/lists';
 import type { LineRef } from '../model/patch';
 import type { TaskDate } from '../model/types';
 import type PlainlistPlugin from '../main';
-import { Workspace, type TaskRef } from '../store';
+import type { TaskRef, Workspace } from '../store';
 import { App } from './components/App';
-import { EnvContext, type Env, type SidebarLayout, type ViewCommand } from './env';
+import { EnvContext, type Env, type ViewCommand } from './env';
 import { confirmModal, promptModal } from './modals';
 import { hotkeyLabel } from './obsidian';
-
-const SIDEBAR_KEY = 'plainlist-sidebar';
-/** Wide enough on desktop for "+ New project" and "+ New area" side by side. */
-const SIDEBAR_WIDTH = Platform.isMobile ? 220 : 250;
-const AREAS_KEY = 'plainlist-areas-collapsed';
-
-function loadSidebar(app: ObsidianApp): SidebarLayout {
-	const saved = app.loadLocalStorage(SIDEBAR_KEY) as Partial<SidebarLayout> | null;
-	return {
-		width: typeof saved?.width === 'number' ? saved.width : SIDEBAR_WIDTH,
-		hidden: saved?.hidden === true,
-	};
-}
 
 const LIST_KINDS = new Set(['inbox', 'today', 'upcoming', 'nodate', 'someday', 'completed', 'project']);
 
@@ -36,6 +23,8 @@ export class PlainlistView extends FileView {
 	workspace: Workspace | null = null;
 	list: ListId = { kind: 'today' };
 	private root: HTMLElement | null = null;
+	/** Lets go of the shared workspace. */
+	private release: (() => void) | null = null;
 	/** A reveal made before the UI was mounted, handed to it when it subscribes. */
 	private pendingReveal: TaskRef | null = null;
 	private revealListener: ((target: TaskRef) => void) | null = null;
@@ -75,7 +64,10 @@ export class PlainlistView extends FileView {
 		// Take keyboard focus when this tab becomes active, so N and the arrow keys work.
 		this.registerEvent(
 			this.app.workspace.on('active-leaf-change', (leaf) => {
-				if (leaf === this.leaf && !this.contentEl.contains(document.activeElement)) {
+				if (leaf !== this.leaf) return;
+				// The left sidebar follows the Plainlist tab used last.
+				this.plugin.viewActivated(this);
+				if (!this.contentEl.contains(document.activeElement)) {
 					this.contentEl.querySelector<HTMLElement>('.pl-root')?.focus({ preventScroll: true });
 				}
 			}),
@@ -83,21 +75,29 @@ export class PlainlistView extends FileView {
 	}
 
 	async onLoadFile(file: TFile): Promise<void> {
-		this.workspace = new Workspace(this.app, file, (path) => this.plugin.boards.rules(path));
-		await this.workspace.load();
-		this.workspace.tidy(this.plugin.clock.today, this.plugin.weekStart());
-		this.mount(this.workspace);
+		// Shared with the left sidebar and lists in notes.
+		const { workspace, loaded, release } = this.plugin.pool.acquire(file);
+		this.release = release;
+		this.workspace = workspace;
+		await loaded;
+		workspace.tidy(this.plugin.clock.today, this.plugin.weekStart());
+		this.mount(workspace);
+		this.plugin.viewsChanged();
 	}
 
 	async onUnloadFile(): Promise<void> {
-		this.unmount();
-		this.workspace?.dispose();
-		this.workspace = null;
+		this.letGo();
 	}
 
 	async onClose(): Promise<void> {
+		this.letGo();
+		this.plugin.viewsChanged();
+	}
+
+	private letGo(): void {
 		this.unmount();
-		this.workspace?.dispose();
+		this.release?.();
+		this.release = null;
 		this.workspace = null;
 	}
 
@@ -111,6 +111,7 @@ export class PlainlistView extends FileView {
 			this.list = list;
 			// Re-mount so the UI starts on the restored list.
 			if (this.workspace) this.mount(this.workspace);
+			this.plugin.viewsChanged();
 		}
 		await super.setState(state, result);
 	}
@@ -121,6 +122,7 @@ export class PlainlistView extends FileView {
 			this.list = list;
 			if (this.workspace) this.mount(this.workspace);
 			this.app.workspace.requestSaveLayout();
+			this.plugin.viewsChanged();
 		}
 		this.contentEl.querySelector<HTMLElement>('.pl-root')?.focus({ preventScroll: true });
 	}
@@ -156,15 +158,7 @@ export class PlainlistView extends FileView {
 			isPhone: Platform.isPhone,
 			confirm: (title, message, cta, destructive) => confirmModal(this.app, title, message, cta, destructive),
 			prompt: (title, placeholder, initial, cta) => promptModal(this.app, title, placeholder, initial, cta),
-			sidebar: {
-				load: () => loadSidebar(this.app),
-				save: (layout) => this.app.saveLocalStorage(SIDEBAR_KEY, layout),
-				collapsed: () => {
-					const saved: unknown = this.app.loadLocalStorage(AREAS_KEY);
-					return Array.isArray(saved) ? saved.filter((n): n is string => typeof n === 'string') : [];
-				},
-				setCollapsed: (names) => this.app.saveLocalStorage(AREAS_KEY, names),
-			},
+			sidebar: this.plugin.areaFolding,
 			todayOrder: {
 				get: () => this.plugin.settings.todayOrder,
 				set: (keys) => this.plugin.setTodayOrder(keys),
@@ -197,6 +191,7 @@ export class PlainlistView extends FileView {
 					onListChange: (list: ListId) => {
 						this.list = list;
 						this.app.workspace.requestSaveLayout();
+						this.plugin.viewsChanged();
 					},
 				}),
 			}),

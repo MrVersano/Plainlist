@@ -5,7 +5,7 @@
 	overflow: hidden;
 }
 
-/* The view header sits above the sidebar and makes it look cut off. Desktop only: on
+/* The list names itself, so the view header would only repeat it. Desktop only: on
    mobile the header is the navigation bar. Its actions stay in the tab's context menu. */
 body:not(.is-mobile) .workspace-leaf-content[data-type='plainlist'] > .view-header {
 	display: none;
@@ -56,17 +56,29 @@ body:not(.is-mobile) .workspace-leaf-content[data-type='plainlist'] > .view-head
 
 /* Sidebar ---------------------------------------------------------------- */
 
+/* Lives in Obsidian's left sidebar, and takes its background. */
+.pl-nav-view {
+	padding: 0 !important;
+	overflow: hidden;
+}
+
+.pl-root.pl-nav-root {
+	background: none;
+}
+
 .pl-sidebar {
-	flex: 0 0 var(--pl-sidebar-width, 220px);
-	width: var(--pl-sidebar-width, 220px);
+	flex: 1;
 	min-width: 0;
-	padding: 22px 12px;
-	background: var(--background-secondary);
-	border-right: 1px solid var(--pl-hairline);
+	padding: 12px 8px 22px;
 	overflow-y: auto;
 	display: flex;
 	flex-direction: column;
 	gap: 1px;
+}
+
+/* "Undo" in the notice after completing a project from the sidebar. */
+.notice button.pl-notice-undo {
+	margin-left: 12px;
 }
 
 .pl-root button.pl-nav-item {
@@ -311,50 +323,6 @@ body:not(.is-mobile) .workspace-leaf-content[data-type='plainlist'] > .view-head
 	border-radius: var(--pl-radius);
 }
 
-/* The sidebar's edge: drag to resize, or all the way left to close. Closed, it sits at the view's left edge. */
-.pl-sidebar-handle {
-	position: absolute;
-	top: 0;
-	bottom: 0;
-	left: calc(var(--pl-sidebar-width, 220px) - 4px);
-	width: 8px;
-	z-index: 2;
-	cursor: col-resize;
-	touch-action: none;
-	outline: none;
-}
-
-.pl-sidebar-handle.is-closed {
-	left: 0;
-}
-
-.pl-sidebar-handle::after {
-	content: '';
-	position: absolute;
-	top: 0;
-	bottom: 0;
-	left: 3px;
-	width: 2px;
-	background: var(--interactive-accent);
-	opacity: 0;
-	transition: opacity 120ms ease;
-}
-
-.pl-sidebar-handle.is-closed::after {
-	left: 0;
-}
-
-.pl-sidebar-handle:hover::after,
-.pl-sidebar-handle:focus-visible::after,
-.pl-root.is-resizing .pl-sidebar-handle::after {
-	opacity: 1;
-}
-
-.pl-root.is-resizing {
-	cursor: col-resize;
-	user-select: none;
-}
-
 /* Drag to reorder ----------------------------------------------------------- */
 
 .pl-root .is-reordering,
@@ -398,12 +366,6 @@ body:not(.is-mobile) .workspace-leaf-content[data-type='plainlist'] > .view-head
 .pl-root .pl-row.is-drop-after::after,
 .pl-root button.pl-nav-item.is-drop-after::after {
 	bottom: -1.5px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.pl-sidebar-handle::after {
-		transition: none;
-	}
 }
 
 /* Narrow layout: list picker instead of the sidebar ------------------------ */

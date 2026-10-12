@@ -2,6 +2,15 @@
 
 All notable changes to Plainlist, newest first. Each release is on [GitHub](https://github.com/MrVersano/Plainlist/releases).
 
+## 1.0.36
+
+*October 12, 2026*
+
+### Improvements
+
+- Plainlist's lists and projects moved out of the Plainlist tab and into Obsidian's left sidebar, where you can resize, hide or move them like any other sidebar tab. Plainlist puts them there the first time it runs on each device; run **Show lists in the sidebar** to bring them back after closing them. On a phone or tablet they're in the left drawer.
+- The Plainlist tab, the sidebar and lists in notes now share one undo history.
+
 ## 1.0.35
 
 *October 11, 2026*

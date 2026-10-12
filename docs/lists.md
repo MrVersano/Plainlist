@@ -1,6 +1,6 @@
 # Lists
 
-The sidebar has six lists, plus one list per [project](projects.md). Every to-do shows up in the lists that match its date and project. You don't file it anywhere by hand.
+Plainlist's sidebar, in Obsidian's left sidebar, has six lists, plus one list per [project](projects.md). Every to-do shows up in the lists that match its date and project. You don't file it anywhere by hand.
 
 | List | Shows |
 |---|---|
@@ -47,6 +47,10 @@ When you complete a to-do, it stays in its list, crossed off, for a few seconds 
 
 [Completed projects](projects.md#completing-a-project) appear here too, on the day you finished them.
 
-## Resizing and hiding the sidebar
+## The sidebar
 
-Drag the sidebar's right edge to make it wider or narrower. Drag it all the way to the left to hide it. To bring it back, drag or click the view's left edge.
+Plainlist's lists and projects live in Obsidian's left sidebar, as one of its tabs. Plainlist puts them there the first time it runs on a device. Click a list or project to show it in the Plainlist tab; if no Plainlist tab is open, one opens. The sidebar highlights the list shown in the Plainlist tab you used last.
+
+Resize, hide or move it like any other Obsidian sidebar tab. If you close it, it stays closed. Run **Plainlist: Show lists in the sidebar** to bring it back.
+
+On a phone or tablet, the lists are a tab in the left drawer. Picking one closes the drawer. In a narrow Plainlist tab you can also tap the list's name at the top to switch lists.

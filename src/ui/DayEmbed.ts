@@ -153,7 +153,7 @@ export class DayEmbed extends MarkdownRenderChild {
 			confirm: (title, message, cta, destructive) => confirmModal(app, title, message, cta, destructive),
 			prompt: (title, placeholder, initial, cta) => promptModal(app, title, placeholder, initial, cta),
 			hint: () => null,
-			sidebar: { load: () => ({ width: 0, hidden: true }), save: () => {}, collapsed: () => [], setCollapsed: () => {} },
+			sidebar: { collapsed: () => [], setCollapsed: () => {} },
 			todayOrder: {
 				get: () => this.plugin.settings.todayOrder,
 				set: (keys) => this.plugin.setTodayOrder(keys),

@@ -9,12 +9,6 @@ import type { Boards } from '../boards';
 import type { LinkTitle } from '../linkTitle';
 import type { TaskRef, Workspace } from '../store';
 
-/** The sidebar's width, and whether it is pulled closed. Kept per device. */
-export interface SidebarLayout {
-	width: number;
-	hidden: boolean;
-}
-
 export interface Env {
 	app: App;
 	workspace: Workspace;
@@ -35,8 +29,6 @@ export interface Env {
 	/** Desktop: "Press N…" hint; null on mobile. */
 	hint: () => { hotkey: string | null } | null;
 	sidebar: {
-		load: () => SidebarLayout;
-		save: (layout: SidebarLayout) => void;
 		/** Names of the areas folded closed. Kept per device. */
 		collapsed: () => string[];
 		setCollapsed: (names: string[]) => void;

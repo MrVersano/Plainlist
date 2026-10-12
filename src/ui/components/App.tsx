@@ -3,7 +3,6 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/ho
 import { headerDate, metaDate, overdueLabel } from '../../dates/format';
 import {
 	allItems,
-	computeCounts,
 	computeList,
 	homeList,
 	isOverdue,
@@ -51,14 +50,14 @@ import { locateLine, type RunResult, type TaskRef, type TrackBox } from '../../s
 import { quoted, type UndoEntry } from '../../undo';
 import { useEnv, useToday, useWorkspace, type SelectionCommand, type ViewCommand } from '../env';
 import { themeCheckboxRadius } from '../obsidian';
-import { AreaSuggestModal } from '../AreaSuggestModal';
 import { scheduleMenu } from '../scheduleMenu';
 import { ProjectSuggestModal } from '../ProjectSuggestModal';
 import { useReorder } from '../reorder';
 import { Checkbox } from './bits';
 import { Board, boardColumns, shiftCard, type BoardHandle } from './Board';
 import { DatePopover, ProjectPicker } from './popovers';
-import { areaMenu, LISTS, listLabel, NameInput, projectMenu, Sidebar, SidebarHandle, type ProjectActions } from './Sidebar';
+import { areaMenu, LISTS, listLabel, NameInput, projectMenu, type ProjectActions } from './Sidebar';
+import { projectActions as makeProjectActions } from '../projectActions';
 import { TaskEditor, TaskRow, type RowActions } from './TaskRow';
 
 const NARROW = 600;
@@ -292,7 +291,6 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 	const [addingSection, setAddingSection] = useState(false);
 	/** sectionKey of the section being renamed in place. */
 	const [renamingSection, setRenamingSection] = useState<string | null>(null);
-	const [sidebar, setSidebar] = useState(() => env.sidebar.load());
 	/** Re-renders after the saved Today order changes, here or in a list in a note. */
 	const [orderVersion, setOrderVersion] = useState(0);
 	useEffect(() => env.todayOrder.subscribe(() => setOrderVersion((v) => v + 1)), []);
@@ -391,10 +389,6 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		return () => observer.disconnect();
 	}, []);
 
-	useLayoutEffect(() => {
-		root.current?.setCssProps({ '--pl-sidebar-width': `${sidebar.width}px` });
-	}, [sidebar.width]);
-
 	// Match the theme's checkbox shape (round, or square with its corner radius).
 	useEffect(() => {
 		const apply = (): void => {
@@ -465,7 +459,6 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		() => withLingering(sources, lingering, (s) => computeList(s, projects, list, today, todayOrder, todayByProject, grouping)),
 		[sources, lingering, list, today, todayOrder, todayByProject, orderVersion, boardVersion],
 	);
-	const counts = useMemo(() => computeCounts(sources, projects, today), [sources, today]);
 
 	// Keep the open row attached to its to-do when its note changes elsewhere.
 	if (expanded) {
@@ -1041,51 +1034,7 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 		}
 	};
 
-	const projectActions: ProjectActions = {
-		create: (name) => {
-			void workspace.createProject(name).then((p) => p && setList({ kind: 'project', path: p.path }));
-		},
-		import: (file) => {
-			void workspace.importProject(file).then((p) => p && setList({ kind: 'project', path: p.path }));
-		},
-		rename: (p, name) => {
-			projectLine.current = p.line;
-			void workspace.renameProject(p, name);
-		},
-		remove: (p) => {
-			void env
-				.confirm(`Remove “${p.name}” from Plainlist?`, 'The note and its checkboxes stay as they are; its to-dos just stop showing here.', 'Remove')
-				.then((ok) => {
-					if (!ok) return;
-					void workspace.removeProject(p).then((res) => {
-						if (res.ok && list.kind === 'project' && list.path === p.path) setList({ kind: 'inbox' });
-					});
-				});
-		},
-		open: (p) => void app.workspace.openLinkText(p.path, workspace.masterPath, 'tab'),
-		complete: (p) => {
-			const open = workspace.openTaskCount(p);
-			const go = (): void => {
-				void workspace.completeProject(p, today).then((undo) => undo && undoToast('Completed', keepUndo(`Completed ${quoted(p.name)}`, undo)));
-			};
-			if (!open) return go();
-			void env
-				.confirm(`Complete “${p.name}”?`, `Its ${open} open to-do${open === 1 ? '' : 's'} will be marked as done too.`, 'Complete', false)
-				.then((ok) => ok && go());
-		},
-		reopen: (p) => void workspace.reopenProject(p),
-		move: (p, target, place) => void remember(`Moved ${quoted(p.name)}`, workspace.moveProject(p, target, place)),
-		moveToArea: (p, area) => void remember(`Moved ${quoted(p.name)}`, workspace.moveProjectToArea(p, area)),
-		chooseArea: (p) => new AreaSuggestModal(app, workspace.areas, (area) => projectActions.moveToArea(p, area)).open(),
-		addArea: (name) => void remember(`Added the area ${quoted(name)}`, workspace.addArea(name)),
-		renameArea: (area, name) => void remember(`Renamed the area ${quoted(area.name)}`, workspace.renameArea(area, name)),
-		moveArea: (area, target, place) => void remember(`Moved the area ${quoted(area.name)}`, workspace.moveArea(area, target, place)),
-		removeArea: (area) => {
-			void env
-				.confirm(`Remove the area “${area.name}”?`, 'Its projects stay in Plainlist, and join the list above it.', 'Remove')
-				.then((ok) => ok && void remember(`Removed the area ${quoted(area.name)}`, workspace.removeArea(area)));
-		},
-	};
+	const projectActions: ProjectActions = makeProjectActions(env, { today, go: setList, current: () => list, undoToast });
 
 	const addProject = (): void => {
 		new ProjectSuggestModal(app, new Set([workspace.masterPath, ...projects.map((p) => p.path)]), (c) => {
@@ -1348,28 +1297,7 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 						</button>
 					)}
 				</div>
-			) : (
-				<>
-					{!sidebar.hidden && (
-						<Sidebar
-							list={list}
-							counts={counts}
-							projects={projects}
-							areas={workspace.areas}
-							masterPath={workspace.masterPath}
-							onSelect={setList}
-							actions={projectActions}
-						/>
-					)}
-					<SidebarHandle
-						layout={sidebar}
-						onChange={(layout, done) => {
-							setSidebar(layout);
-							if (done) env.sidebar.save(layout);
-						}}
-					/>
-				</>
-			)}
+			) : null}
 			<main
 				class="pl-main"
 				onMouseDown={(e) => {

@@ -4,7 +4,7 @@ import type { Counts, ListId, ProjectInfo } from '../../model/lists';
 import { sameList } from '../../model/lists';
 import type { Place } from '../../model/patch';
 import type { Area } from '../../model/types';
-import { useEnv, type SidebarLayout } from '../env';
+import { useEnv } from '../env';
 import { useReorder } from '../reorder';
 
 export const LISTS: { id: ListId; label: string }[] = [
@@ -353,7 +353,8 @@ export function Sidebar({
 	onSelect,
 	actions,
 }: {
-	list: ListId;
+	/** The list shown, or null when no Plainlist tab is open. */
+	list: ListId | null;
 	counts: Counts;
 	projects: ProjectInfo[];
 	areas: Area[];
@@ -367,7 +368,7 @@ export function Sidebar({
 	const done = projects.filter((p) => p.done);
 	const [showDone, setShowDone] = useState(false);
 	// Viewing a completed project: keep it visible in the sidebar.
-	const viewingDone = list.kind === 'project' && done.some((p) => p.path === list.path);
+	const viewingDone = list?.kind === 'project' && done.some((p) => p.path === list.path);
 	useEffect(() => {
 		if (viewingDone) setShowDone(true);
 	}, [viewingDone]);
@@ -417,7 +418,7 @@ export function Sidebar({
 			project={p}
 			count={p.done ? 0 : (counts.projects[p.path] ?? 0)}
 			doneCount={counts.projectsDone[p.path] ?? 0}
-			selected={list.kind === 'project' && list.path === p.path}
+			selected={list?.kind === 'project' && list.path === p.path}
 			renaming={renaming === p.path}
 			onSelect={() => onSelect({ kind: 'project', path: p.path })}
 			onRenamed={() => setRenaming(null)}
@@ -451,14 +452,14 @@ export function Sidebar({
 				/>
 			);
 		// A folded area still shows the project being viewed.
-		const shown = folded ? projectsIn.filter((p) => list.kind === 'project' && list.path === p.path) : projectsIn;
+		const shown = folded ? projectsIn.filter((p) => list?.kind === 'project' && list.path === p.path) : projectsIn;
 		return [header, ...shown.map(item)];
 	};
 
 	return (
 		<nav class="pl-sidebar" aria-label="Lists" {...reorder.scopeProps}>
 			{LISTS.map(({ id, label }) => {
-				const active = sameList(id, list);
+				const active = !!list && sameList(id, list);
 				const count = countOf(id);
 				return (
 					<button
@@ -508,88 +509,5 @@ export function Sidebar({
 			)}
 			{showDone && done.map(item)}
 		</nav>
-	);
-}
-
-/** The narrowest and widest the sidebar can be dragged. Below COLLAPSE_AT it closes. */
-const MIN_WIDTH = 160;
-const MAX_WIDTH = 480;
-const COLLAPSE_AT = 100;
-/** Room the to-do list keeps when the sidebar is dragged wide. */
-const MIN_CONTENT = 320;
-const KEY_STEP = 20;
-
-/**
- * The sidebar's right edge: drag it to resize the sidebar, or all the way left to close it.
- * Closed, it sits at the view's left edge, where dragging (or clicking) brings the sidebar back.
- * `onChange` is called while dragging, then once more with `done` when the drag ends.
- */
-export function SidebarHandle({ layout, onChange }: { layout: SidebarLayout; onChange: (layout: SidebarLayout, done: boolean) => void }) {
-	const maxWidth = (root: HTMLElement): number => Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, root.clientWidth - MIN_CONTENT));
-
-	const onPointerDown = (e: PointerEvent): void => {
-		if (e.button !== 0) return;
-		e.preventDefault();
-		const handle = e.currentTarget as HTMLElement;
-		const root = handle.closest<HTMLElement>('.pl-root');
-		if (!root) return;
-		const left = root.getBoundingClientRect().left;
-		const start = layout;
-		let current = layout;
-		let moved = false;
-		handle.setPointerCapture(e.pointerId);
-		root.addClass('is-resizing');
-		const move = (evt: PointerEvent): void => {
-			if (!moved && Math.abs(evt.clientX - e.clientX) < 3) return;
-			moved = true;
-			const width = evt.clientX - left;
-			current = width < COLLAPSE_AT ? { width: start.width, hidden: true } : { width: Math.round(Math.min(width, maxWidth(root))), hidden: false };
-			current.width = Math.max(MIN_WIDTH, current.width);
-			onChange(current, false);
-		};
-		const up = (): void => {
-			handle.removeEventListener('pointermove', move);
-			handle.removeEventListener('pointerup', up);
-			handle.removeEventListener('pointercancel', up);
-			root.removeClass('is-resizing');
-			// Clicking the closed sidebar's edge opens it again.
-			if (!moved && start.hidden) current = { ...start, hidden: false };
-			onChange(current, true);
-		};
-		handle.addEventListener('pointermove', move);
-		handle.addEventListener('pointerup', up);
-		handle.addEventListener('pointercancel', up);
-	};
-
-	const onKeyDown = (e: KeyboardEvent): void => {
-		const root = (e.currentTarget as HTMLElement).closest<HTMLElement>('.pl-root');
-		if (!root) return;
-		let next: SidebarLayout | null = null;
-		if (e.key === 'Enter' || e.key === ' ') next = { ...layout, hidden: !layout.hidden };
-		else if (e.key === 'ArrowRight') {
-			next = layout.hidden ? { ...layout, hidden: false } : { ...layout, width: Math.min(layout.width + KEY_STEP, maxWidth(root)) };
-		} else if (e.key === 'ArrowLeft' && !layout.hidden) {
-			next = layout.width - KEY_STEP < MIN_WIDTH ? { ...layout, hidden: true } : { ...layout, width: layout.width - KEY_STEP };
-		}
-		if (!next) return;
-		e.preventDefault();
-		e.stopPropagation();
-		onChange(next, true);
-	};
-
-	return (
-		<div
-			class={`pl-sidebar-handle${layout.hidden ? ' is-closed' : ''}`}
-			role="separator"
-			aria-orientation="vertical"
-			aria-label={layout.hidden ? 'Show sidebar' : 'Resize sidebar'}
-			aria-valuemin={0}
-			aria-valuemax={MAX_WIDTH}
-			aria-valuenow={layout.hidden ? 0 : layout.width}
-			title={layout.hidden ? 'Drag or click to show the sidebar' : 'Drag to resize, or all the way left to hide'}
-			tabIndex={0}
-			onPointerDown={onPointerDown}
-			onKeyDown={onKeyDown}
-		/>
 	);
 }
