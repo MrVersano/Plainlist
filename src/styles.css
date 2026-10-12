@@ -109,6 +109,30 @@ body:not(.is-mobile) .workspace-leaf-content[data-type='plainlist'] > .view-head
 	white-space: nowrap;
 }
 
+/* A list's or area's icon: quiet, so the names lead. */
+.pl-icon {
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.pl-nav-icon {
+	width: 16px;
+	height: 16px;
+	color: var(--pl-muted);
+}
+
+.pl-nav-icon svg {
+	width: 16px;
+	height: 16px;
+	stroke-width: 1.75px;
+}
+
+.pl-root button.pl-nav-item.is-active .pl-nav-icon {
+	color: var(--pl-accent);
+}
+
 .pl-nav-count {
 	font-size: 12px;
 	color: var(--pl-muted);
@@ -118,6 +142,8 @@ body:not(.is-mobile) .workspace-leaf-content[data-type='plainlist'] > .view-head
 
 .pl-ring {
 	flex: none;
+	/* Centred in the same 16px column as the lists' icons. */
+	margin: 0 1px;
 	overflow: visible;
 }
 
@@ -163,10 +189,10 @@ body:not(.is-mobile) .workspace-leaf-content[data-type='plainlist'] > .view-head
 .pl-root button.pl-nav-area {
 	display: flex;
 	align-items: center;
-	gap: 6px;
+	gap: 8px;
 	min-height: 28px;
 	margin-top: 12px;
-	padding: 0 10px 0 6px;
+	padding: 0 10px;
 	border-radius: var(--pl-radius);
 	font-size: 12px;
 	font-weight: var(--font-medium, 500);
@@ -225,14 +251,26 @@ body:not(.is-mobile) .workspace-leaf-content[data-type='plainlist'] > .view-head
 	bottom: -7px;
 }
 
+/* The fold chevron sits at the end, and only shows on hover or while folded. */
 .pl-nav-chevron {
 	flex: none;
-	width: 8px;
-	height: 8px;
+	width: 6px;
+	height: 6px;
+	margin: 0 2px 0 4px;
 	border-right: 1.5px solid currentColor;
 	border-bottom: 1.5px solid currentColor;
+	color: var(--pl-faint);
+	opacity: 0;
 	transform: translateY(-2px) rotate(45deg);
-	transition: transform 120ms ease;
+	transition:
+		transform 120ms ease,
+		opacity 120ms ease;
+}
+
+.pl-root button.pl-nav-area:hover .pl-nav-chevron,
+.pl-root button.pl-nav-area:focus-visible .pl-nav-chevron,
+.pl-nav-area.is-collapsed .pl-nav-chevron {
+	opacity: 1;
 }
 
 .pl-nav-area.is-collapsed .pl-nav-chevron {

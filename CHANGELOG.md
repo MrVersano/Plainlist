@@ -2,6 +2,16 @@
 
 All notable changes to Plainlist, newest first. Each release is on [GitHub](https://github.com/MrVersano/Plainlist/releases).
 
+## 1.0.39
+
+*October 12, 2026*
+
+### Improvements
+
+- The sidebar has small icons for Inbox, Today, Upcoming, No Date, Someday and Completed, and for each area. The selected list's icon takes the accent colour.
+- An area's fold arrow now sits at the end of its name and shows on hover, or while the area is folded.
+- **Today** in the schedule menu uses the same sun icon as the sidebar.
+
 ## 1.0.38
 
 *October 12, 2026*

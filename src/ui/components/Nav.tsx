@@ -3,6 +3,7 @@ import { computeCounts, type ListId } from '../../model/lists';
 import type { UndoEntry } from '../../undo';
 import { useEnv, useToday, useWorkspace } from '../env';
 import { projectActions } from '../projectActions';
+import { Icon } from './bits';
 import { LISTS, Sidebar } from './Sidebar';
 
 /**
@@ -45,8 +46,9 @@ export function NavPlaceholder({ onSelect }: { onSelect: (list: ListId) => void 
 	return (
 		<div class="pl-root pl-nav-root">
 			<nav class="pl-sidebar" aria-label="Lists">
-				{LISTS.map(({ id, label }) => (
+				{LISTS.map(({ id, label, icon }) => (
 					<button type="button" key={id.kind} class="pl-nav-item" onClick={() => onSelect(id)}>
+						<Icon name={icon} class="pl-nav-icon" />
 						<span class="pl-nav-label">{label}</span>
 					</button>
 				))}

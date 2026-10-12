@@ -1,4 +1,4 @@
-import { Component as ObsidianComponent, MarkdownRenderer } from 'obsidian';
+import { Component as ObsidianComponent, MarkdownRenderer, setIcon } from 'obsidian';
 import type { JSX, RefObject, TextareaHTMLAttributes } from 'preact';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { useEnv } from '../env';
@@ -94,6 +94,15 @@ export function Checkbox({ done, title, onToggle }: { done: boolean; title: stri
 			</svg>
 		</button>
 	);
+}
+
+/** One of Obsidian's Lucide icons, by name. */
+export function Icon({ name, class: cls }: { name: string; class?: string }) {
+	const el = useRef<HTMLSpanElement>(null);
+	useLayoutEffect(() => {
+		if (el.current) setIcon(el.current, name);
+	}, [name]);
+	return <span class={`pl-icon${cls ? ` ${cls}` : ''}`} ref={el} aria-hidden="true" />;
 }
 
 /** The repeat arrows, for a repeating to-do. */

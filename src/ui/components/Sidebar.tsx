@@ -6,14 +6,15 @@ import type { Place } from '../../model/patch';
 import type { Area } from '../../model/types';
 import { useEnv } from '../env';
 import { useReorder } from '../reorder';
+import { Icon } from './bits';
 
-export const LISTS: { id: ListId; label: string }[] = [
-	{ id: { kind: 'inbox' }, label: 'Inbox' },
-	{ id: { kind: 'today' }, label: 'Today' },
-	{ id: { kind: 'upcoming' }, label: 'Upcoming' },
-	{ id: { kind: 'nodate' }, label: 'No Date' },
-	{ id: { kind: 'someday' }, label: 'Someday' },
-	{ id: { kind: 'completed' }, label: 'Completed' },
+export const LISTS: { id: ListId; label: string; icon: string }[] = [
+	{ id: { kind: 'inbox' }, label: 'Inbox', icon: 'inbox' },
+	{ id: { kind: 'today' }, label: 'Today', icon: 'sun' },
+	{ id: { kind: 'upcoming' }, label: 'Upcoming', icon: 'calendar' },
+	{ id: { kind: 'nodate' }, label: 'No Date', icon: 'calendar-off' },
+	{ id: { kind: 'someday' }, label: 'Someday', icon: 'archive' },
+	{ id: { kind: 'completed' }, label: 'Completed', icon: 'circle-check' },
 ];
 
 export interface ProjectActions {
@@ -337,9 +338,10 @@ function AreaHeader({
 			onClick={onToggle}
 			{...drag.props}
 		>
-			<span class="pl-nav-chevron" aria-hidden="true" />
+			<Icon name="layers" class="pl-nav-icon" />
 			<span class="pl-nav-label">{area.name}</span>
 			{collapsed && count > 0 && <span class="pl-nav-count">{count}</span>}
+			<span class="pl-nav-chevron" aria-hidden="true" />
 		</button>
 	);
 }
@@ -458,7 +460,7 @@ export function Sidebar({
 
 	return (
 		<nav class="pl-sidebar" aria-label="Lists" {...reorder.scopeProps}>
-			{LISTS.map(({ id, label }) => {
+			{LISTS.map(({ id, label, icon }) => {
 				const active = !!list && sameList(id, list);
 				const count = countOf(id);
 				return (
@@ -469,6 +471,7 @@ export function Sidebar({
 						aria-current={active ? 'page' : undefined}
 						onClick={() => onSelect(id)}
 					>
+						<Icon name={icon} class="pl-nav-icon" />
 						<span class="pl-nav-label">{label}</span>
 						{count > 0 && <span class="pl-nav-count">{count}</span>}
 					</button>

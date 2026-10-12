@@ -15,7 +15,7 @@ export function scheduleMenu(
 	const menu = new Menu();
 	const phrase = (text: string): string => findDate(text, today, weekStart)?.date ?? today;
 	const choices: { title: string; icon: string; date: TaskDate }[] = [
-		{ title: 'Today', icon: 'star', date: today },
+		{ title: 'Today', icon: 'sun', date: today },
 		{ title: 'Tomorrow', icon: 'sunrise', date: addDays(today, 1) },
 		{ title: 'This weekend', icon: 'sofa', date: phrase('this weekend') },
 		{ title: 'Next week', icon: 'calendar', date: phrase('next week') },
