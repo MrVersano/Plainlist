@@ -155,6 +155,8 @@ export class PlainlistView extends FileView {
 			linkTitle: this.plugin.linkTitle,
 			openCapture: (list, heading, column, date) => this.openCapture(list, heading, column, date),
 			boards: this.plugin.boards,
+			openNote: (path) => void this.plugin.openNoteAsMarkdown(path),
+			openMarkdown: () => void this.plugin.openAsMarkdown(this.leaf),
 			isPhone: Platform.isPhone,
 			confirm: (title, message, cta, destructive) => confirmModal(this.app, title, message, cta, destructive),
 			prompt: (title, placeholder, initial, cta) => promptModal(this.app, title, placeholder, initial, cta),

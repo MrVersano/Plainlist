@@ -43,7 +43,7 @@ export function projectActions(env: Env, hooks: ProjectActionHooks): ProjectActi
 					});
 				});
 		},
-		open: (p) => void app.workspace.openLinkText(p.path, workspace.masterPath, 'tab'),
+		open: (p) => (env.openNote ? env.openNote(p.path) : void app.workspace.openLinkText(p.path, workspace.masterPath, 'tab')),
 		complete: (p) => {
 			const open = workspace.openTaskCount(p);
 			const go = (): void => {

@@ -20,6 +20,10 @@ export interface Env {
 	linkTitle: LinkTitle;
 	/** Opens the "New to-do" palette for a list; for a project, optionally under one of its headings or in a board column. */
 	openCapture: (list: ListId, heading?: LineRef | null, column?: string | null, date?: TaskDate | null) => void;
+	/** Opens a project's note as Markdown in a new tab. Absent in lists inside notes. */
+	openNote?: (path: string) => void;
+	/** Shows the tasks file as Markdown in this tab. Only in the Plainlist tab. */
+	openMarkdown?: () => void;
 	/** Each project's board settings. Absent in lists inside notes. */
 	boards?: Boards;
 	/** Phones show projects only as lists. */

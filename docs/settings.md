@@ -6,6 +6,7 @@ Open **Settings → Community plugins → Plainlist**.
 |---|---|---|
 | **Tasks file** | The note Plainlist reads and writes. **Plainlist: Open**, [quick capture](quick-capture.md), [`plainlist-add` links](adding-from-other-apps.md) and [lists in notes](lists-in-notes.md) use it. The **Open** command creates it if it is missing. | `Tasks.md` |
 | **Open this file in Plainlist view by default** | Notes with `plainlist: true` in their properties open as a task list instead of as Markdown. | On |
+| **Open project notes in Plainlist** | Opening a [project](projects.md)'s note, from a link, the file explorer or the quick switcher, shows the project in Plainlist instead of the note. **Open note ↗** still opens the note as Markdown, and the note's **Open in Plainlist** button goes back. | Off |
 | **Week starts on** | Used for "next week" and the [Upcoming](lists.md#upcoming) list: your locale's default, Sunday or Monday. | Locale default |
 | **Project tags** | Notes with any of these tags (separated by commas) are added as [projects](projects.md#adding-projects-by-tag) automatically. When you add a tag here, notes that already have it are added when you close settings. Removing a tag doesn't remove projects; Plainlist asks first. | Empty (off) |
 | **Group Today by project** | Show [Today](lists.md#today)'s to-dos under a heading for each project, with Inbox to-dos first. [Lists in notes](lists-in-notes.md) are grouped too. | Off |

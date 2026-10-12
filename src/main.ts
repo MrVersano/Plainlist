@@ -42,6 +42,8 @@ export default class PlainlistPlugin extends Plugin {
 	private todayOrderListeners = new Set<() => void>();
 	/** One loaded workspace per tasks file, shared by its tabs, the left sidebar and lists in notes. */
 	pool!: WorkspacePool;
+	/** The tasks file's workspace, kept loaded while project notes open in Plainlist, to tell which notes are projects. */
+	private projectsHeld: { path: string; workspace: Workspace; release: () => void } | null = null;
 	/** The Plainlist tab used last, which the left sidebar follows. */
 	private lastView: PlainlistView | null = null;
 	/** The left sidebar, hearing about tabs opening, closing or changing list. */
@@ -75,6 +77,13 @@ export default class PlainlistPlugin extends Plugin {
 			this.app.saveLocalStorage(SIDEBAR_ADDED_KEY, true);
 			if (!this.app.workspace.getLeavesOfType(NAV_VIEW_TYPE).length) void this.showSidebar();
 		});
+		this.app.workspace.onLayoutReady(() => {
+			this.holdProjects();
+			// The tasks file may be created or renamed later. Not before the layout is ready: every file is "created" then.
+			this.registerEvent(this.app.vault.on('create', () => this.holdProjects()));
+			this.registerEvent(this.app.vault.on('rename', () => this.holdProjects()));
+		});
+		this.register(() => this.projectsHeld?.release());
 		// Keep a renamed project's to-dos in their place in Today.
 		this.registerEvent(
 			this.app.vault.on('rename', (file, oldPath) => {
@@ -306,11 +315,41 @@ export default class PlainlistPlugin extends Plugin {
 		).open();
 	}
 
+	/** Keeps the tasks file loaded while "Open project notes in Plainlist" is on, and lets go of it when off. */
+	private holdProjects(): void {
+		const path = this.settings.openProjectsInPlainlist ? tasksFilePath(this.settings.tasksFile) : null;
+		const file = path ? this.app.vault.getFileByPath(path) : null;
+		if (this.projectsHeld && this.projectsHeld.path === file?.path) return;
+		this.projectsHeld?.release();
+		this.projectsHeld = null;
+		if (!file) return;
+		const { workspace, release } = this.pool.acquire(file);
+		this.projectsHeld = { path: file.path, workspace, release };
+	}
+
+	/** The tasks file and project list to show for `path`, when it is one of the tasks file's projects. */
+	projectView(path: string): { file: string; list: ListId } | null {
+		const held = this.projectsHeld;
+		if (!held || path === held.path) return null;
+		if (!held.workspace.projects.some((p) => p.exists && p.path === path)) return null;
+		return { file: held.path, list: { kind: 'project', path } };
+	}
+
 	async openInPlainlist(leaf: WorkspaceLeaf, file?: TFile): Promise<void> {
 		const target = file ?? (leaf.view as { file?: TFile | null }).file;
 		if (!target) return;
 		this.forceMarkdown.delete(leaf);
-		await leaf.setViewState({ type: VIEW_TYPE, state: { file: target.path }, active: true });
+		const project = this.projectView(target.path);
+		await leaf.setViewState({ type: VIEW_TYPE, state: project ?? { file: target.path }, active: true });
+	}
+
+	/** Opens a project's note as Markdown in a new tab, even when project notes open in Plainlist. */
+	async openNoteAsMarkdown(path: string): Promise<void> {
+		const file = this.app.vault.getFileByPath(path);
+		if (!file) return;
+		const leaf = this.app.workspace.getLeaf('tab');
+		this.forceMarkdown.set(leaf, path);
+		await leaf.openFile(file, { active: true });
 	}
 
 	async openAsMarkdown(leaf: WorkspaceLeaf): Promise<void> {
@@ -430,6 +469,7 @@ export default class PlainlistPlugin extends Plugin {
 
 	async saveSettings(): Promise<void> {
 		await this.saveData(this.settings);
+		this.holdProjects();
 		// The tasks file may have changed.
 		this.viewsChanged();
 	}

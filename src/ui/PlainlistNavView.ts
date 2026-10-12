@@ -178,6 +178,7 @@ export class PlainlistNavView extends ItemView {
 			linkTitle: plugin.linkTitle,
 			openCapture: (list) => plugin.openCapture(file, list),
 			boards: plugin.boards,
+			openNote: (path) => void plugin.openNoteAsMarkdown(path),
 			isPhone: Platform.isPhone,
 			confirm: (title, message, cta, destructive) => confirmModal(app, title, message, cta, destructive),
 			prompt: (title, placeholder, initial, cta) => promptModal(app, title, placeholder, initial, cta),

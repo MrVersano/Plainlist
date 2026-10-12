@@ -2,6 +2,18 @@
 
 All notable changes to Plainlist, newest first. Each release is on [GitHub](https://github.com/MrVersano/Plainlist/releases).
 
+## 1.0.38
+
+*October 12, 2026*
+
+### New
+
+- **Open project notes in Plainlist**, a new setting: opening a project's note, from a link, the file explorer or the quick switcher, shows the project in Plainlist instead. **Open note ↗** still opens the note as Markdown, and its **Open in Plainlist** button brings it back.
+
+### Improvements
+
+- Inbox, Today and the other lists have an **Open as Markdown** link under their title, to see the task file as Markdown. It used to be only in the tab's header, which Plainlist hides.
+
 ## 1.0.37
 
 *October 12, 2026*

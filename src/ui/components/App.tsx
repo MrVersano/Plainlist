@@ -1358,6 +1358,11 @@ export function App({ initialList, onListChange }: { initialList: ListId; onList
 							<>
 								<h1 class="pl-title">{listLabel(list, projects)}</h1>
 								{list.kind === 'today' && <span class="pl-header-date">{headerDate(today)}</span>}
+								{env.openMarkdown && (
+									<button type="button" class="pl-open-note" onClick={env.openMarkdown}>
+										Open as Markdown
+									</button>
+								)}
 							</>
 						)}
 					</header>

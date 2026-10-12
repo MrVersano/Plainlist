@@ -1,6 +1,7 @@
 // Opens notes marked `plainlist: true` in the Plainlist view, the way the Kanban plugin does:
 // by adjusting the view type in WorkspaceLeaf.setViewState. A per-leaf flag lets the user
-// keep a note in Markdown after choosing "Open as Markdown".
+// keep a note in Markdown after choosing "Open as Markdown". With "Open project notes in
+// Plainlist" on, projects' notes open as the tasks file's tab, showing the project.
 
 import { around } from 'monkey-around';
 import { MarkdownView, TFile, WorkspaceLeaf, type ViewState } from 'obsidian';
@@ -22,10 +23,14 @@ export function installViewSwitch(plugin: PlainlistPlugin): void {
 			setViewState(next) {
 				return function (this: WorkspaceLeaf, state: ViewState, ...rest: unknown[]) {
 					const path = typeof state.state?.file === 'string' ? state.state.file : null;
-					if (plugin.settings.openByDefault && state.type === 'markdown' && path && forceMarkdown.get(this) !== path) {
+					if (state.type === 'markdown' && path && forceMarkdown.get(this) !== path) {
 						const file = plugin.app.vault.getAbstractFileByPath(path);
-						if (file instanceof TFile && isPlainlistFile(plugin, file)) {
+						const project = plugin.projectView(path);
+						if (plugin.settings.openByDefault && file instanceof TFile && isPlainlistFile(plugin, file)) {
 							state = { ...state, type: VIEW_TYPE };
+						} else if (project) {
+							// A project's note: the tasks file's tab, showing the project.
+							state = { ...state, type: VIEW_TYPE, state: { ...state.state, ...project } };
 						}
 					}
 					return next.call(this, state, ...rest);
@@ -34,13 +39,18 @@ export function installViewSwitch(plugin: PlainlistPlugin): void {
 		}),
 	);
 
-	// "Open in Plainlist" on Markdown views of marked notes.
+	const opensInPlainlist = (file: TFile | null): boolean => {
+		const path = file?.path;
+		return isPlainlistFile(plugin, file) || (!!path && !!plugin.projectView(path));
+	};
+
+	// "Open in Plainlist" on Markdown views of marked notes, and of projects' notes.
 	const actions = new WeakMap<MarkdownView, HTMLElement>();
 	const refreshActions = (): void => {
 		plugin.app.workspace.iterateAllLeaves((leaf) => {
 			const view = leaf.view;
 			if (!(view instanceof MarkdownView)) return;
-			const wanted = isPlainlistFile(plugin, view.file);
+			const wanted = opensInPlainlist(view.file);
 			const existing = actions.get(view);
 			if (wanted && !existing) {
 				actions.set(view, view.addAction(VIEW_ICON, 'Open in Plainlist', () => void plugin.openInPlainlist(leaf)));
@@ -66,7 +76,7 @@ export function installViewSwitch(plugin: PlainlistPlugin): void {
 						.setSection('pane')
 						.onClick(() => void plugin.openAsMarkdown(leaf)),
 				);
-			} else if (isPlainlistFile(plugin, file)) {
+			} else if (opensInPlainlist(file)) {
 				menu.addItem((i) =>
 					i
 						.setTitle('Open in Plainlist')

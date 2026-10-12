@@ -9,6 +9,8 @@ export type WeekStart = 'locale' | 'sunday' | 'monday';
 export interface PlainlistSettings {
 	tasksFile: string;
 	openByDefault: boolean;
+	/** Opening a project's note shows the project in Plainlist instead of the note as Markdown. */
+	openProjectsInPlainlist: boolean;
 	weekStart: WeekStart;
 	/** Desktop only: open the palette from any app with a global shortcut. */
 	quickEntryEnabled: boolean;
@@ -31,6 +33,7 @@ export interface PlainlistSettings {
 export const DEFAULT_SETTINGS: PlainlistSettings = {
 	tasksFile: 'Tasks.md',
 	openByDefault: true,
+	openProjectsInPlainlist: false,
 	weekStart: 'locale',
 	// Off by default: a global shortcut reaches into every other app, so it should be opt-in.
 	quickEntryEnabled: false,
@@ -122,6 +125,11 @@ export class PlainlistSettingTab extends PluginSettingTab {
 				name: 'Open this file in Plainlist view by default',
 				desc: 'Notes with "plainlist: true" in their properties open as a task list instead of as Markdown.',
 				control: { type: 'toggle', key: 'openByDefault', defaultValue: DEFAULT_SETTINGS.openByDefault },
+			},
+			{
+				name: 'Open project notes in Plainlist',
+				desc: 'Opening a project\'s note shows the project in Plainlist instead of the note. "Open note" in Plainlist still opens it as Markdown.',
+				control: { type: 'toggle', key: 'openProjectsInPlainlist', defaultValue: DEFAULT_SETTINGS.openProjectsInPlainlist },
 			},
 			{
 				name: 'Week starts on',
